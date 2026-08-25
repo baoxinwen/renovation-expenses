@@ -1,11 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Alert, Button, Card, Checkbox, Col, DatePicker, Empty, Form, Input, InputNumber, Modal,
-  Popconfirm, Row, Select, Space, Table, Tag, Tooltip, Typography, Upload, type TableColumnsType,
+  Alert, Button, Card, Checkbox, Col, DatePicker, Dropdown, Empty, Form, Input, InputNumber,
+  Modal, Popconfirm, Row, Select, Skeleton, Space, Table, Tag, Tooltip, Typography, Upload,
+  type TableColumnsType,
 } from 'antd';
 import {
-  DownloadOutlined, DownOutlined, EditOutlined, HolderOutlined, PlusOutlined,
+  DownloadOutlined, DownOutlined, EditOutlined, HolderOutlined, MoreOutlined, PlusOutlined,
   RightOutlined, UploadOutlined,
 } from '@ant-design/icons';
 import { toast } from 'sonner';
@@ -416,7 +417,11 @@ export default function Plan() {
 
   if (!plan) {
     return loading ? (
-      <Card style={{ textAlign: 'center', padding: 80 }}>加载中…</Card>
+      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+        <Card><Skeleton active paragraph={{ rows: 1 }} /></Card>
+        <Card><Skeleton active paragraph={{ rows: 7 }} title /></Card>
+        <Card><Skeleton active paragraph={{ rows: 5 }} title /></Card>
+      </Space>
     ) : (
       <Card>
         <Alert
@@ -453,11 +458,13 @@ export default function Plan() {
 
   const itemColumns: TableColumnsType<Item> = [
     {
-      title: '', key: 'drag', width: 32, align: 'center' as const,
+      title: '', key: 'drag', width: 32, align: 'center' as const, fixed: 'left' as const,
+      className: 'no-print',
+      onHeaderCell: () => ({ className: 'no-print' }),
       render: () => (searching ? null : <DragHandle />),
     },
     {
-      title: '项目名称', dataIndex: 'name', width: 160,
+      title: '项目名称', dataIndex: 'name', width: 160, fixed: 'left' as const,
       render: (_, it: Item) => <EditableText value={it.name} onCommit={(v) => saveItem(it, { name: v })} placeholder="项目名" />,
     },
     {
@@ -500,7 +507,8 @@ export default function Plan() {
       render: (_, it: Item) => <EditableText value={it.note} onCommit={(v) => saveItem(it, { note: v })} placeholder="" />,
     },
     {
-      title: '操作', width: 96,
+      title: '操作', width: 96, className: 'no-print',
+      onHeaderCell: () => ({ className: 'no-print' }),
       render: (_, it: Item) => (
         <Space size={0}>
           {it.order_count > 0
@@ -560,7 +568,7 @@ export default function Plan() {
       </Row>
 
       {/* ===== 工具栏 ===== */}
-      <Card size="small">
+      <Card size="small" className="no-print">
         <Space wrap>
           <Input.Search
             style={{ width: 200 }}
@@ -598,7 +606,7 @@ export default function Plan() {
 
       {/* ===== 待付尾款 ===== */}
       {unpaid.length > 0 && (
-        <Card size="small" title={<span>待付尾款 <span style={{ color: 'var(--clay)', fontWeight: 600 }}>共 {fmtMoney(totalUnpaid)}</span></span>}>
+        <Card size="small" className="no-print" title={<span>待付尾款 <span style={{ color: 'var(--clay)', fontWeight: 600 }}>共 {fmtMoney(totalUnpaid)}</span></span>}>
           <Table<Order>
             rowKey="id"
             size="small"
@@ -672,8 +680,6 @@ export default function Plan() {
                       >
                         {sec.name}
                       </Typography.Text>
-                      <Tag className="tabular">预算 {fmtMoney(sec.budget_subtotal)}</Tag>
-                      <Tag color="green" className="tabular">实际 {fmtMoney(sec.actual_subtotal)}</Tag>
                     </Space>
                   }
                   extra={
@@ -681,13 +687,28 @@ export default function Plan() {
                       <Button type="primary" size="small" icon={<PlusOutlined />} onClick={() => setItemModal({ sectionId: sec.id })}>
                         添加项目
                       </Button>
-                      <Button type="text" size="small" danger onClick={() => deleteSection(sec)}>删除</Button>
+                      <Dropdown
+                        menu={{
+                          items: [
+                            { key: 'delete', label: '删除板块', danger: true },
+                          ],
+                          onClick: ({ key }) => { if (key === 'delete') deleteSection(sec); },
+                        }}
+                        trigger={['click']}
+                      >
+                        <Button type="text" size="small" icon={<MoreOutlined />} />
+                      </Dropdown>
                     </Space>
                   }
                 >
                   {!collapsed.has(sec.id) && (<>
-                  <div style={{ marginBottom: 10 }}>
-                    <WoodProgress value={sec.actual_subtotal ?? 0} budget={sec.budget_subtotal ?? 0} size="sm" />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                    <div style={{ flex: 1 }}>
+                      <WoodProgress value={sec.actual_subtotal ?? 0} budget={sec.budget_subtotal ?? 0} size="sm" />
+                    </div>
+                    <span className="label-caption tabular" style={{ whiteSpace: 'nowrap' }}>
+                      预算 {fmtMoney(sec.budget_subtotal ?? 0)} · 实际 {fmtMoney(sec.actual_subtotal ?? 0)}
+                    </span>
                   </div>
                   <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onItemDragEnd(sec)}>
                     <SortableContext items={(sec.items ?? []).map((i) => i.id)} strategy={verticalListSortingStrategy}>
@@ -695,6 +716,7 @@ export default function Plan() {
                         rowKey="id"
                         size="small"
                         dataSource={sec.items ?? []}
+                        rowClassName={(it) => (it.bought ? 'row-bought' : '')}
                         pagination={false}
                         scroll={{ x: 960 }}
                         components={{ body: { row: SortableRow } }}

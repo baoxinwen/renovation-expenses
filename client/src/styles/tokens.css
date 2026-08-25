@@ -171,6 +171,59 @@ body {
   color: var(--wood-600);
 }
 
+/* 已买行：鼠尾草左缘线 + 降饱和，扫视即可分辨"还剩什么没买" */
+.row-bought > td:first-child {
+  box-shadow: inset 3px 0 0 var(--sage);
+}
+.row-bought > td,
+.row-bought .ant-input,
+.row-bought .ant-input-number-input {
+  color: var(--ink-2);
+}
+.row-bought > td:nth-child(7) { /* 总价列保持对比 */
+  color: var(--ink-2);
+}
+
+/* ============ 打印样式：干净的全宽黑白清单 ============ */
+@media print {
+  .no-print,
+  .ant-layout-sider,
+  .ant-btn,
+  .ant-alert,
+  [data-sonner-toaster] {
+    display: none !important;
+  }
+  body,
+  .ant-layout,
+  .ant-layout-content {
+    background: #fff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
+  .ant-card {
+    box-shadow: none !important;
+    border: none !important;
+    break-inside: avoid;
+  }
+  .ant-table-thead > tr > th {
+    background: #f0f0f0 !important;
+    color: #000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .ant-table-tbody > tr > td {
+    border-color: #bbb !important;
+    color: #000 !important;
+  }
+  .ant-table-tbody > tr.row-bought > td:first-child {
+    box-shadow: inset 3px 0 0 #666 !important;
+  }
+  .ant-table {
+    font-size: 12px;
+  }
+}
+
 /* ============ AntD 定向覆盖（令牌够不着的少数细节） ============ */
 /* 卡片：暖色边线与柔和投影 */
 .ant-card {

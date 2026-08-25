@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Alert, Button, Card, Col, Empty, Row, Space, Table, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Col, Empty, Row, Skeleton, Space, Table, Tag, Typography } from 'antd';
 import ReactECharts from 'echarts-for-react';
 import { toast } from 'sonner';
 import { api } from '../api';
@@ -86,7 +86,15 @@ export default function Analysis() {
     ],
   }), [charts, colors]);
 
-  if (loading) return <Card style={{ textAlign: 'center', padding: 80 }}>加载中…</Card>;
+  if (loading) {
+    return (
+      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+        <Card><Skeleton active paragraph={{ rows: 1 }} /></Card>
+        <Card><Skeleton active paragraph={{ rows: 6 }} title /></Card>
+        <Card><Skeleton active paragraph={{ rows: 4 }} title /></Card>
+      </Space>
+    );
+  }
 
   const diff = summary ? summary.plan_total - summary.total_budget : 0;
 

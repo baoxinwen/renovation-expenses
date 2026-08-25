@@ -17,6 +17,8 @@ function register(dark: boolean) {
   const name = dark ? 'warmwood-dark' : 'warmwood-light';
   if (registered.has(name)) return name;
   registered.add(name);
+  // canvas 不支持 CSS 的 inherit 关键字，必须显式给字体栈
+  const FONT = '-apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif';
   echarts.registerTheme(name, {
     color: [
       dark ? '#c89b72' : '#8c5e3c',
@@ -27,26 +29,26 @@ function register(dark: boolean) {
       c.ink2,
     ],
     backgroundColor: 'transparent',
-    textStyle: { color: c.ink, fontFamily: 'inherit' },
-    title: { textStyle: { color: c.ink }, subtextStyle: { color: c.ink2 } },
-    legend: { textStyle: { color: c.ink2 } },
+    textStyle: { color: c.ink, fontFamily: FONT },
+    title: { textStyle: { color: c.ink, fontFamily: FONT }, subtextStyle: { color: c.ink2 } },
+    legend: { textStyle: { color: c.ink2, fontFamily: FONT } },
     axisPointer: { lineStyle: { color: c.line } },
     tooltip: {
       backgroundColor: c.surface,
       borderColor: c.line,
       borderWidth: 1,
-      textStyle: { color: c.ink, fontSize: 12 },
+      textStyle: { color: c.ink, fontSize: 12, fontFamily: FONT },
       extraCssText: 'box-shadow: 0 2px 8px rgba(43,38,34,0.08); border-radius: 8px;',
     },
     categoryAxis: {
       axisLine: { lineStyle: { color: c.line } },
       axisTick: { lineStyle: { color: c.line } },
-      axisLabel: { color: c.ink2 },
+      axisLabel: { color: c.ink2, fontFamily: FONT },
       splitLine: { show: false },
     },
     valueAxis: {
       axisLine: { show: false },
-      axisLabel: { color: c.ink2 },
+      axisLabel: { color: c.ink2, fontFamily: FONT },
       splitLine: { lineStyle: { color: c.line } },
     },
   });
