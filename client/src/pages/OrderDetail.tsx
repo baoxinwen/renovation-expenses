@@ -213,9 +213,7 @@ export default function OrderDetail() {
               <Button icon={<CheckOutlined />} onClick={closeOrder}>标记结清</Button>
             )}
             <Button icon={<EditOutlined />} onClick={() => setEditOpen(true)}>编辑</Button>
-            <Popconfirm title="删除该订单？" description="付款记录与票据将一并删除" okText="删除" okType="danger" onConfirm={deleteOrder}>
-              <Button danger>删除</Button>
-            </Popconfirm>
+            <Button danger onClick={deleteOrder}>删除</Button>
           </Space>
         }
       >
