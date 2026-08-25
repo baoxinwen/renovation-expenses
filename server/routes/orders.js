@@ -3,8 +3,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-const ALLOWED_EXT = ['jpg', 'jpeg', 'png', 'webp', 'heic'];
+// HEIC 不在支持列表：Windows Chrome/Edge 无法解码会裂图。iPhone 请改拍 JPG（设置-相机-格式-兼容性最佳）
+const ALLOWED_EXT = ['jpg', 'jpeg', 'png', 'webp'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// 真实日期校验（拦下 2026-99-99 / 0000-00-00）
+function validDate(s) {
+  if (!DATE_RE.test(s)) return false;
+  const [y, m, d] = s.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
+}
 
 const ORDER_SELECT = `
   SELECT o.*, i.name AS item_name, i.section_id AS section_id, s.name AS section_name,
@@ -121,15 +130,15 @@ export default async function (app) {
   // ===== 付款记录 =====
   app.post('/orders/:id/payments', async (req, reply) => {
     const orderId = Number(req.params.id);
-    const order = db.prepare('SELECT id, total_amount FROM orders WHERE id = ?').get(orderId);
-    if (!order) return reply.status(404).send({ message: '订单不存在' });
+    const order = db.prepare('SELECT id, total_amount, deleted FROM orders WHERE id = ?').get(orderId);
+    if (!order || order.deleted) return reply.status(404).send({ message: '订单不存在（或已删除）' });
     const b = req.body || {};
     const amount = Number(b.amount);
     if (!Number.isFinite(amount) || amount === 0) {
       return reply.status(400).send({ message: '金额必须是非零数字（付款为正，退款为负）' });
     }
     const payDate = String(b.pay_date ?? '');
-    if (!DATE_RE.test(payDate)) return reply.status(400).send({ message: '付款日期格式应为 YYYY-MM-DD' });
+    if (!validDate(payDate)) return reply.status(400).send({ message: '付款日期无效（应为真实日期，格式 YYYY-MM-DD）' });
     const info = db.prepare(`INSERT INTO payments (order_id, amount, pay_date, method, note)
       VALUES (?, ?, ?, ?, ?)`)
       .run(orderId, amount, payDate, String(b.method ?? ''), String(b.note ?? ''));
@@ -146,7 +155,7 @@ export default async function (app) {
       return reply.status(400).send({ message: '金额必须是非零数字（付款为正，退款为负）' });
     }
     const payDate = b.pay_date !== undefined ? String(b.pay_date) : payment.pay_date;
-    if (!DATE_RE.test(payDate)) return reply.status(400).send({ message: '付款日期格式应为 YYYY-MM-DD' });
+    if (!validDate(payDate)) return reply.status(400).send({ message: '付款日期无效（应为真实日期，格式 YYYY-MM-DD）' });
     db.prepare('UPDATE payments SET amount = ?, pay_date = ?, method = ?, note = ? WHERE id = ?')
       .run(amount, payDate,
            b.method !== undefined ? String(b.method) : payment.method,
@@ -167,28 +176,44 @@ export default async function (app) {
   // ===== 票据照片 =====
   app.post('/payments/:id/receipts', async (req, reply) => {
     const paymentId = Number(req.params.id);
-    const payment = db.prepare('SELECT id FROM payments WHERE id = ?').get(paymentId);
-    if (!payment) return reply.status(404).send({ message: '付款记录不存在' });
+    const payment = db.prepare(`
+      SELECT p.id FROM payments p JOIN orders o ON o.id = p.order_id
+      WHERE p.id = ? AND o.deleted = 0`).get(paymentId);
+    if (!payment) return reply.status(404).send({ message: '付款记录不存在（或订单已删除）' });
 
-    const saved = [];
+    // 两遍式：先全部读取并校验，任一失败直接 400，不落任何文件（避免半传残留）
+    const incoming = [];
     const files = req.files({ limits: { fileSize: 10 * 1024 * 1024 } });
     for await (const file of files) {
       if (file.fieldname !== 'files') continue;
       const ext = path.extname(file.filename).toLowerCase().slice(1);
       if (!ALLOWED_EXT.includes(ext)) {
-        return reply.status(400).send({ message: `不支持的图片格式：${file.filename}（支持 jpg/png/webp/heic）` });
+        return reply.status(400).send({ message: `不支持的图片格式：${file.filename}（支持 jpg/png/webp；HEIC 请转 JPG）` });
       }
       const buf = await file.toBuffer();
       if (file.truncated) {
         return reply.status(400).send({ message: `单张照片不能超过 10MB：${file.filename}` });
       }
-      const filename = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}.${ext}`;
-      fs.writeFileSync(path.join(UPLOAD_DIR, filename), buf);
-      const info = db.prepare('INSERT INTO receipts (payment_id, filename, original_name) VALUES (?, ?, ?)')
-        .run(paymentId, filename, file.filename);
-      saved.push({ id: Number(info.lastInsertRowid), payment_id: paymentId, filename, original_name: file.filename });
+      incoming.push({ ext, buf, originalName: file.filename });
     }
-    if (!saved.length) return reply.status(400).send({ message: '未收到任何文件' });
+    if (!incoming.length) return reply.status(400).send({ message: '未收到任何文件' });
+
+    const saved = [];
+    const insert = db.prepare('INSERT INTO receipts (payment_id, filename, original_name) VALUES (?, ?, ?)');
+    try {
+      db.transaction(() => {
+        incoming.forEach(({ ext, buf, originalName }) => {
+          const filename = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}.${ext}`;
+          fs.writeFileSync(path.join(UPLOAD_DIR, filename), buf);
+          const info = insert.run(paymentId, filename, originalName);
+          saved.push({ id: Number(info.lastInsertRowid), payment_id: paymentId, filename, original_name: originalName });
+        });
+      })();
+    } catch (e) {
+      // 落盘/插库中途失败：清掉已写文件，不留脏数据
+      removeFiles(saved.map((s) => s.filename));
+      throw e;
+    }
     return saved;
   });
 

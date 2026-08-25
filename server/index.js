@@ -18,6 +18,26 @@ const DIST_DIR = path.join(__dirname, '..', 'dist');
 
 const app = Fastify({ logger: false });
 
+// 只允许本机/局域网地址：拦截跨站表单（multipart 无预检）与 DNS rebinding（非法 Host）
+const ALLOWED_HOST = /^(localhost|127\.0\.0\.1|0\.0\.0\.0|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|\[::1\])(:\d+)?$/i;
+app.addHook('onRequest', async (req, reply) => {
+  const host = String(req.headers.host || '').toLowerCase();
+  if (!ALLOWED_HOST.test(host)) {
+    return reply.status(403).send({ message: '拒绝访问：请通过 localhost 或局域网 IP 访问' });
+  }
+  const origin = req.headers.origin;
+  if (origin) {
+    try {
+      const { host: originHost } = new URL(origin);
+      if (!ALLOWED_HOST.test(originHost.toLowerCase())) {
+        return reply.status(403).send({ message: '拒绝跨站请求' });
+      }
+    } catch {
+      return reply.status(403).send({ message: '拒绝非法 Origin' });
+    }
+  }
+});
+
 await app.register(fastifyMultipart, { limits: { fileSize: 10 * 1024 * 1024 } });
 
 // 票据照片静态服务：/uploads/<filename>

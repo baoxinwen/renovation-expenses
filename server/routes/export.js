@@ -17,7 +17,7 @@ export default async function (app) {
   app.get('/export/excel', async (_req, reply) => {
     const settingsRow = db.prepare("SELECT value FROM settings WHERE key = 'total_budget'").get();
     const totalBudget = Number(settingsRow?.value ?? 0);
-    const sections = db.prepare('SELECT * FROM sections ORDER BY sort_order, id').all();
+    const sections = db.prepare('SELECT * FROM sections WHERE deleted = 0 ORDER BY sort_order, id').all();
     const itemsBySection = db.prepare('SELECT * FROM items WHERE section_id = ? AND deleted = 0 ORDER BY sort_order, id');
     const payments = db.prepare(`
       SELECT p.pay_date, p.amount, p.method, p.note,
@@ -30,6 +30,17 @@ export default async function (app) {
       WHERE o.deleted = 0
       ORDER BY p.pay_date, p.id`).all();
     const totalSpent = payments.reduce((s, p) => s + p.amount, 0);
+    // 「实际已花」与应用首页口径对齐：已买项总价 + 有效订单(挂有效项目)付款；未关联付款单列
+    const boughtTotal = db.prepare('SELECT COALESCE(SUM(quantity * unit_price), 0) AS s FROM items WHERE deleted = 0 AND bought = 1').get().s;
+    const linkedPaid = db.prepare(`
+      SELECT COALESCE(SUM(p.amount), 0) AS s FROM payments p
+      JOIN orders o ON o.id = p.order_id
+      JOIN items i ON i.id = o.item_id
+      WHERE o.deleted = 0 AND i.deleted = 0`).get().s;
+    const actualLikeApp = boughtTotal + linkedPaid;
+    const unassignedPaid = db.prepare(`
+      SELECT COALESCE(SUM(p.amount), 0) AS s FROM payments p JOIN orders o ON o.id = p.order_id
+      WHERE o.item_id IS NULL AND o.deleted = 0`).get().s;
 
     const wb = new ExcelJS.Workbook();
     wb.creator = '装修账本';
@@ -88,8 +99,10 @@ export default async function (app) {
     ws.getCell(`B${targetRow + 2}`).value = '超支 / 结余（元）';
     ws.getCell(`D${targetRow + 2}`).value = { formula: `D${targetRow + 1}-D${targetRow}` };
     ws.getCell(`F${targetRow + 2}`).value = '正数=清单超目标，负数=未超';
-    ws.getCell(`B${targetRow + 3}`).value = '实际已付（元）';
-    ws.getCell(`D${targetRow + 3}`).value = totalSpent;
+    ws.getCell(`B${targetRow + 3}`).value = '实际已花（口径同应用：已买+挂单付款）';
+    ws.getCell(`D${targetRow + 3}`).value = actualLikeApp;
+    ws.getCell(`B${targetRow + 4}`).value = '未关联项目付款（不计入上方实际）';
+    ws.getCell(`D${targetRow + 4}`).value = unassignedPaid;
 
     // ===== Sheet2 付款明细 =====
     const wsp = wb.addWorksheet('付款明细');
@@ -125,7 +138,7 @@ export default async function (app) {
              (SELECT COUNT(*) FROM items i WHERE i.section_id = s.id AND i.deleted = 0) AS item_count,
              COALESCE((SELECT SUM(i.quantity * i.unit_price) FROM items i WHERE i.section_id = s.id AND i.deleted = 0), 0) AS budget,
              COALESCE((SELECT SUM(${ITEM_ACTUAL_SQL}) FROM items i WHERE i.section_id = s.id AND i.deleted = 0), 0) AS actual
-      FROM sections s ORDER BY s.sort_order, s.id`).all();
+      FROM sections s WHERE s.deleted = 0 ORDER BY s.sort_order, s.id`).all();
     sectionStats.forEach((s) => wss.addRow({ ...s, diff: s.actual - s.budget }));
 
     const date = new Date().toLocaleDateString('sv-SE');

@@ -4,7 +4,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const DATA_DIR = path.join(__dirname, '..', 'data');
+// RENO_DATA_DIR 供测试隔离使用（默认为项目内 data/）
+export const DATA_DIR = process.env.RENO_DATA_DIR
+  ? path.resolve(process.env.RENO_DATA_DIR)
+  : path.join(__dirname, '..', 'data');
 export const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
@@ -20,10 +23,12 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 
 -- 板块（大类）：硬装施工 / 全屋电器 / 全屋智能 / 家具软装 / 其他杂费 …
+-- deleted=1 为软删除（名称加 #已删{id} 后缀避免占用 UNIQUE）
 CREATE TABLE IF NOT EXISTS sections (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   name       TEXT NOT NULL UNIQUE,
-  sort_order INTEGER NOT NULL DEFAULT 0
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  deleted    INTEGER NOT NULL DEFAULT 0
 );
 
 -- 预算项目：清单里的每一"东西"
@@ -97,19 +102,24 @@ const orderCols = db.prepare('PRAGMA table_info(orders)').all().map((c) => c.nam
 if (!orderCols.includes('deleted')) {
   db.exec('ALTER TABLE orders ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0');
 }
+const sectionCols = db.prepare('PRAGMA table_info(sections)').all().map((c) => c.name);
+if (!sectionCols.includes('deleted')) {
+  db.exec('ALTER TABLE sections ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0');
+}
 
-// 首次运行：默认预算目标 + 预置板块（与用户的评估表一致）
+// 首次初始化：写入 seeded 标记 + 预置板块（之后清空板块/重导不会再触发预置）
 function seed() {
-  const hasSetting = db.prepare('SELECT COUNT(*) AS c FROM settings').get().c;
-  if (hasSetting === 0) {
-    db.prepare("INSERT INTO settings (key, value) VALUES ('total_budget', '0')").run();
-  }
+  const seeded = db.prepare("SELECT COUNT(*) AS c FROM settings WHERE key = 'seeded'").get().c;
+  if (seeded > 0) return;
+  const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
+  insertSetting.run('total_budget', '0');
   const hasSection = db.prepare('SELECT COUNT(*) AS c FROM sections').get().c;
   if (hasSection === 0) {
     const defaults = ['硬装施工类', '全屋电器类', '全屋智能类', '家具软装类', '其他杂费类'];
     const insert = db.prepare('INSERT INTO sections (name, sort_order) VALUES (?, ?)');
     defaults.forEach((name, i) => insert.run(name, i));
   }
+  insertSetting.run('seeded', '1');
 }
 seed();
 

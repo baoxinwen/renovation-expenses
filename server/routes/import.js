@@ -23,7 +23,9 @@ function cellNum(v) {
     else if (v.text !== undefined) v = v.text;
     else return null;
   }
-  const n = Number(String(v).replace(/[¥,，\s]/g, ''));
+  const str = String(v).trim();
+  if (str === '') return null; // 空文本单元格 → 未填，不是 0
+  const n = Number(str.replace(/[¥,，\s]/g, ''));
   return Number.isFinite(n) ? n : null;
 }
 
@@ -102,13 +104,15 @@ function parseWorkbook(wb) {
     if (!sections.length) sections.push({ name: '未分组', items: [] });
     // 「已买」可能出现在规格或备注里（如"米家冰箱pro（已买）"），勾选已买
     const bought = note.includes('已买') || spec.includes('已买');
+    // 数量/单价与非负校验对齐（plan.js 的 validNum 语义）：负数与异常值一律按 0 处理
+    const safeNum = (x, fallback) => (x == null ? fallback : (Number.isFinite(x) && x >= 0 ? x : 0));
     sections[sections.length - 1].items.push({
       seq,
       name,
       spec,
       unit,
-      quantity: quantityRaw == null ? 1 : quantityRaw,
-      unit_price: priceRaw == null ? 0 : priceRaw,
+      quantity: safeNum(quantityRaw, 1),
+      unit_price: safeNum(priceRaw, 0),
       note,
       bought: bought ? 1 : 0,
     });
@@ -132,6 +136,9 @@ export default async function (app) {
       return reply.status(400).send({ message: '只支持 .xlsx 文件' });
     }
     const buf = await file.toBuffer();
+    if (file.truncated) {
+      return reply.status(400).send({ message: '文件超过 20MB 限制，请检查是否传对了文件' });
+    }
     const wb = new ExcelJS.Workbook();
     try {
       await wb.xlsx.load(buf);

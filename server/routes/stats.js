@@ -17,7 +17,7 @@ export default async function (app) {
              COALESCE((SELECT SUM(${ITEM_ACTUAL_SQL}) FROM items i WHERE i.section_id = s.id AND i.deleted = 0), 0) AS actual_subtotal,
              (SELECT COUNT(*) FROM items i WHERE i.section_id = s.id AND i.deleted = 0) AS item_count,
              (SELECT COUNT(*) FROM items i WHERE i.section_id = s.id AND i.deleted = 0 AND i.bought = 1) AS bought_count
-      FROM sections s ORDER BY s.sort_order, s.id`).all();
+      FROM sections s WHERE s.deleted = 0 ORDER BY s.sort_order, s.id`).all();
     return {
       total_budget: totalBudget,
       plan_total: planTotal,
@@ -33,7 +33,7 @@ export default async function (app) {
              COALESCE((SELECT SUM(i.quantity * i.unit_price) FROM items i WHERE i.section_id = s.id AND i.deleted = 0), 0) AS budget,
              COALESCE((SELECT SUM(${ITEM_ACTUAL_SQL}) FROM items i WHERE i.section_id = s.id AND i.deleted = 0), 0) AS actual
       FROM sections s
-      WHERE EXISTS (SELECT 1 FROM items i WHERE i.section_id = s.id AND i.deleted = 0)
+      WHERE s.deleted = 0 AND EXISTS (SELECT 1 FROM items i WHERE i.section_id = s.id AND i.deleted = 0)
       ORDER BY s.sort_order, s.id`).all();
 
     const byMonth = db.prepare(`

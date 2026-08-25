@@ -4,9 +4,9 @@ const ITEM_SELECT = `
   SELECT i.*,
          (i.quantity * i.unit_price) AS budget_amount,
          (${ITEM_ACTUAL_SQL}) AS actual_amount,
-         (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id) AS order_count,
+         (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id AND o.deleted = 0) AS order_count,
          COALESCE((SELECT SUM(p.amount) FROM payments p JOIN orders o ON o.id = p.order_id
-                   WHERE o.item_id = i.id), 0) AS order_paid
+                   WHERE o.item_id = i.id AND o.deleted = 0), 0) AS order_paid
   FROM items i`;
 
 function uniqueError(e, reply, message) {
@@ -28,7 +28,7 @@ export default async function (app) {
   app.get('/plan', async () => {
     const settingsRow = db.prepare("SELECT value FROM settings WHERE key = 'total_budget'").get();
     const totalBudget = Number(settingsRow?.value ?? 0);
-    const sections = db.prepare('SELECT * FROM sections ORDER BY sort_order, id').all();
+    const sections = db.prepare('SELECT * FROM sections WHERE deleted = 0 ORDER BY sort_order, id').all();
     const itemsBySection = db.prepare(`${ITEM_SELECT} WHERE i.section_id = ? AND i.deleted = 0 ORDER BY i.sort_order, i.id`);
     const planTotal = db.prepare('SELECT COALESCE(SUM(quantity * unit_price), 0) AS s FROM items WHERE deleted = 0').get().s;
     const actualTotal = db.prepare(`SELECT COALESCE(SUM(${ITEM_ACTUAL_SQL.replace(/i\./g, 'items.')}), 0) AS s FROM items WHERE items.deleted = 0`).get().s;
@@ -54,7 +54,7 @@ export default async function (app) {
   });
 
   // ===== 板块 =====
-  app.get('/sections', async () => db.prepare('SELECT * FROM sections ORDER BY sort_order, id').all());
+  app.get('/sections', async () => db.prepare('SELECT * FROM sections WHERE deleted = 0 ORDER BY sort_order, id').all());
 
   app.post('/sections', async (req, reply) => {
     const name = String(req.body?.name ?? '').trim();
@@ -91,16 +91,36 @@ export default async function (app) {
   });
 
   app.delete('/sections/:id', async (req, reply) => {
-    // 级联删除项目；项目下订单的 item_id 置空（数据保留）
-    const info = db.prepare('DELETE FROM sections WHERE id = ?').run(Number(req.params.id));
-    if (info.changes === 0) return reply.status(404).send({ message: '板块不存在' });
-    return { ok: true };
+    // 软删除板块：名称加后缀避免占用 UNIQUE，其下项目一并软删（均可在 8 秒内撤销）
+    const id = Number(req.params.id);
+    const sec = db.prepare('SELECT * FROM sections WHERE id = ? AND deleted = 0').get(id);
+    if (!sec) return reply.status(404).send({ message: '板块不存在' });
+    const rename = db.transaction(() => {
+      db.prepare('UPDATE sections SET deleted = 1, name = ? WHERE id = ?').run(`${sec.name}#已删${id}`, id);
+      db.prepare('UPDATE items SET deleted = 1 WHERE section_id = ? AND deleted = 0').run(id);
+    });
+    rename();
+    return { ok: true, deleted: true };
+  });
+
+  app.post('/sections/:id/restore', async (req, reply) => {
+    const id = Number(req.params.id);
+    const sec = db.prepare('SELECT * FROM sections WHERE id = ? AND deleted = 1').get(id);
+    if (!sec) return reply.status(404).send({ message: '没有可恢复的板块' });
+    const originalName = sec.name.replace(`#已删${id}`, '');
+    const nameTaken = db.prepare('SELECT COUNT(*) AS c FROM sections WHERE name = ? AND id != ?').get(originalName, id).c > 0;
+    const restore = db.transaction(() => {
+      db.prepare('UPDATE sections SET deleted = 0, name = ? WHERE id = ?').run(nameTaken ? `${originalName}（恢复）` : originalName, id);
+      db.prepare('UPDATE items SET deleted = 0 WHERE section_id = ? AND deleted = 1').run(id);
+    });
+    restore();
+    return db.prepare('SELECT * FROM sections WHERE id = ?').get(id);
   });
 
   // ===== 预算项目 =====
   app.post('/sections/:id/items', async (req, reply) => {
     const sectionId = Number(req.params.id);
-    const sec = db.prepare('SELECT id FROM sections WHERE id = ?').get(sectionId);
+    const sec = db.prepare('SELECT id FROM sections WHERE id = ? AND deleted = 0').get(sectionId);
     if (!sec) return reply.status(404).send({ message: '板块不存在' });
     const b = req.body || {};
     const name = String(b.name ?? '').trim();
