@@ -4,7 +4,7 @@ import {
   Breadcrumb, Button, Card, Col, Descriptions, Form, Image, Input, InputNumber, Modal,
   Popconfirm, Row, Select, Space, DatePicker, Table, Tag, Upload,
 } from 'antd';
-import { ArrowLeftOutlined, CheckOutlined, EditOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, CheckOutlined, DownloadOutlined, EditOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { toast } from 'sonner';
 import { api } from '../api';
@@ -212,6 +212,9 @@ export default function OrderDetail() {
           <Space>
             {order.status === 'open' && paid >= order.total_amount && order.total_amount > 0 && (
               <Button icon={<CheckOutlined />} onClick={closeOrder}>标记结清</Button>
+            )}
+            {(order.payments ?? []).some((p) => (p.receipts ?? []).length > 0) && (
+              <Button icon={<DownloadOutlined />} href={`/api/export/receipts?order_id=${order.id}`}>下载票据</Button>
             )}
             <Button icon={<EditOutlined />} onClick={() => setEditOpen(true)}>编辑</Button>
             <Button danger onClick={deleteOrder}>删除</Button>

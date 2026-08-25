@@ -160,13 +160,32 @@ export default async function (app) {
     if (unitPrice === null) return reply.status(400).send({ message: '单价必须是非负数字' });
 
     const bought = b.bought !== undefined ? (b.bought ? 1 : 0) : item.bought;
+    let boughtDate = item.bought_date;
+    if ('bought_date' in b) {
+      if (b.bought_date == null || b.bought_date === '') boughtDate = null;
+      else {
+        const d = String(b.bought_date);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(d)
+          || Number(d.slice(5, 7)) < 1 || Number(d.slice(5, 7)) > 12
+          || Number(d.slice(8, 10)) < 1 || Number(d.slice(8, 10)) > 31) {
+          return reply.status(400).send({ message: '购买日期无效' });
+        }
+        boughtDate = d;
+      }
+    }
+
+    // 预算基线：首次改价前把原单价存档，保留“当初预算多少”
+    let initPrice = item.init_unit_price;
+    if (initPrice == null && unitPrice !== item.unit_price) {
+      initPrice = item.unit_price;
+    }
 
     db.prepare(`UPDATE items SET name = ?, spec = ?, unit = ?, quantity = ?, unit_price = ?,
-                bought = ?, note = ? WHERE id = ?`)
+                bought = ?, bought_date = ?, init_unit_price = ?, note = ? WHERE id = ?`)
       .run(name,
            b.spec !== undefined ? String(b.spec) : item.spec,
            b.unit !== undefined ? String(b.unit) : item.unit,
-           quantity, unitPrice, bought,
+           quantity, unitPrice, bought, boughtDate, initPrice,
            b.note !== undefined ? String(b.note) : item.note,
            id);
     return db.prepare(`${ITEM_SELECT} WHERE i.id = ?`).get(id);

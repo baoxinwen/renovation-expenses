@@ -188,10 +188,50 @@ try {
   r = await req('POST', '/orders', { title: 'x', total_amount: 100, paid_now: { amount: 50, pay_date: '2026-13-01' } });
   check('一次付清非法日期被拒绝', r.status === 400);
 
+  console.log('== 5c. 购买登记（基线/日期/漂移/月度含已买） ==');
+  // 改价前基线自动记录
+  const lamp2 = (await req('GET', '/plan')).json.sections.flatMap((s) => s.items).find((i) => i.name === '智能开关面板');
+  r = await req('PUT', `/items/${lamp2.id}`, { unit_price: 150 });  // 129 → 150
+  check('首次改价自动记录预算基线 129', r.json.init_unit_price === 129, JSON.stringify(r.json.init_unit_price));
+  r = await req('PUT', `/items/${lamp2.id}`, { unit_price: 160 });
+  check('再次改价基线保持 129 不变', r.json.init_unit_price === 129);
+  r = (await req('GET', '/stats/summary')).json;
+  check('漂移统计 = +620（20 个开关 ×(160-129)）', Math.abs((r.plan_total - r.init_plan_total) - 620) < 0.5, `=${r.plan_total - r.init_plan_total}`);
+  // 购买登记：勾已买带日期
+  r = await req('PUT', `/items/${lamp2.id}`, { bought: true, unit_price: 150, bought_date: '2026-08-26' });
+  check('购买登记成功（bought+日期）', r.json.bought === 1 && r.json.bought_date === '2026-08-26');
+  r = await req('PUT', `/items/${lamp2.id}`, { bought_date: '2026-13-01' });
+  check('非法购买日期被拒绝', r.status === 400);
+  // 月度趋势含已买：2026-08 应有已买支出（基线测试中硬装订单付款 30000 也在 08）
+  r = (await req('GET', '/stats/charts')).json;
+  const aug = r.by_month.find((m) => m.month === '2026-08');
+  // 此时 08 = 已买三件fixture(25849.79，无日期不计) + 开关 150*20=3000 + 一次付清抽油烟机(已软删) + 硬装 30000
+  check('月度趋势含已买支出（08 月 ≥ 33000）', aug && aug.amount >= 33000, JSON.stringify(aug));
+  r = await req('PUT', `/items/${lamp2.id}`, { bought: false });
+  check('取消已买', r.json.bought === 0 && r.json.actual_amount === 0);
+  await req('PUT', `/items/${lamp2.id}`, { unit_price: 129 }); // 还原
+
   console.log('== 6. 导出 ==');
   const ex = await fetch(`${BASE}/export/excel`);
   const buf = Buffer.from(await ex.arrayBuffer());
   check('导出 xlsx（PK 魔数）', ex.status === 200 && buf.slice(0, 2).toString() === 'PK');
+
+  // 票据 zip 导出
+  let zipRes = await fetch(`${BASE}/export/receipts`);
+  check('无票据时 zip 返回 404', zipRes.status === 404);
+  const od = await req('POST', '/orders', { title: '票据测试', total_amount: 100, paid_now: { amount: 100, pay_date: '2026-08-26' } });
+  const payId = od.json.payments[0].id;
+  const pngFd = new FormData();
+  pngFd.append('files', new Blob([Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64',
+  )], { type: 'image/png' }), 'p.png');
+  const upRes = await fetch(`${BASE}/payments/${payId}/receipts`, { method: 'POST', body: pngFd });
+  check('上传测试票据', upRes.status === 200);
+  zipRes = await fetch(`${BASE}/export/receipts?order_id=${od.json.id}`);
+  const zb = Buffer.from(await zipRes.arrayBuffer());
+  check('票据 zip 导出（PK 魔数）', zipRes.status === 200 && zb.slice(0, 2).toString() === 'PK', `status=${zipRes.status}`);
+  check('zip 含票据清单与图片条目', zb.length > 500);
+  await req('DELETE', `/orders/${od.json.id}`);
 
   console.log('== 7. 订单软删/恢复（含 #1 口径修复验证） ==');
   r = await req('DELETE', `/orders/${orderId}`);

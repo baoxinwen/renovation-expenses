@@ -103,6 +103,14 @@ export default function Analysis() {
           <Card size="small">
             <div className="label-caption">清单总计</div>
             <AnimatedMoney value={summary?.plan_total ?? 0} style={{ fontSize: 22, display: 'block', marginTop: 8 }} />
+            {summary && summary.init_plan_total > 0 && Math.abs(summary.plan_total - summary.init_plan_total) > 0.5 && (
+              <div className="label-caption" style={{ marginTop: 6 }}>
+                初始预算 {fmtMoney(summary.init_plan_total)}
+                <span style={{ color: summary.plan_total > summary.init_plan_total ? 'var(--clay)' : 'var(--sage)', marginLeft: 6 }}>
+                  漂移 {summary.plan_total > summary.init_plan_total ? '+' : ''}{fmtMoney(summary.plan_total - summary.init_plan_total)}
+                </span>
+              </div>
+            )}
           </Card>
         </Col>
         <Col xs={12} md={6}>
@@ -155,7 +163,7 @@ export default function Analysis() {
           </Card>
         </Col>
         <Col xs={24} lg={12}>
-          <Card title="月度付款趋势" size="small">
+          <Card title="月度付款趋势（含已买支出）" size="small">
             {charts?.by_month?.length
               ? <ReactECharts option={monthOption} theme={themeName} notMerge style={{ height: 260 }} />
               : <Empty description="还没有付款记录——到订单页记第一笔定金" style={{ padding: 32 }} />}

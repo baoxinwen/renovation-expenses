@@ -250,10 +250,13 @@ export default function Orders() {
           },
           {
             title: '操作',
-            width: 150,
+            width: 195,
             render: (_, o) => (
               <Space size={0} onClick={(e) => e.stopPropagation()}>
                 <Button type="link" size="small" onClick={() => nav(`/orders/${o.id}`)}>详情</Button>
+                {(o.receipt_count ?? 0) > 0 && (
+                  <Button type="link" size="small" href={`/api/export/receipts?order_id=${o.id}`}>票据</Button>
+                )}
                 {o.status === 'open' && (o.paid ?? 0) >= o.total_amount && o.total_amount > 0 && (
                   <Button type="link" size="small" onClick={() => closeOrder(o)}>结清</Button>
                 )}

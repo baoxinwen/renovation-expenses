@@ -43,6 +43,8 @@ CREATE TABLE IF NOT EXISTS items (
   quantity     REAL NOT NULL DEFAULT 1,
   unit_price   REAL NOT NULL DEFAULT 0,
   bought       INTEGER NOT NULL DEFAULT 0,
+  bought_date  TEXT,
+  init_unit_price REAL,  -- 预算基线：首次改价前的单价（回看“当初预算多少”）
   note         TEXT NOT NULL DEFAULT '',
   sort_order   INTEGER NOT NULL DEFAULT 0,
   deleted      INTEGER NOT NULL DEFAULT 0,
@@ -105,6 +107,13 @@ if (!orderCols.includes('deleted')) {
 const sectionCols = db.prepare('PRAGMA table_info(sections)').all().map((c) => c.name);
 if (!sectionCols.includes('deleted')) {
   db.exec('ALTER TABLE sections ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0');
+}
+// v2.4：购买登记（bought_date）与预算基线（init_unit_price）
+if (!itemCols.includes('bought_date')) {
+  db.exec('ALTER TABLE items ADD COLUMN bought_date TEXT');
+}
+if (!itemCols.includes('init_unit_price')) {
+  db.exec('ALTER TABLE items ADD COLUMN init_unit_price REAL');
 }
 
 // 首次初始化：写入 seeded 标记 + 预置板块（之后清空板块/重导不会再触发预置）

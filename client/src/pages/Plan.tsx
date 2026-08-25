@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Alert, Button, Card, Checkbox, Col, Empty, Form, Input, InputNumber, Modal, Popconfirm, Row,
-  Space, Table, Tag, Typography, Upload, type TableColumnsType,
+  Alert, Button, Card, Checkbox, Col, DatePicker, Empty, Form, Input, InputNumber, Modal,
+  Popconfirm, Row, Select, Space, Table, Tag, Tooltip, Typography, Upload, type TableColumnsType,
 } from 'antd';
 import {
   DownloadOutlined, DownOutlined, EditOutlined, HolderOutlined, PlusOutlined,
@@ -17,10 +17,12 @@ import {
   SortableContext, arrayMove, useSortable, verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import dayjs from 'dayjs';
 import { api } from '../api';
 import type { Item, Order, PlanData, Section } from '../api';
-import { fmtMoney } from '../format';
+import { fmtMoney, PAY_METHODS } from '../format';
 import ItemFormModal from '../components/ItemFormModal';
+import BuyModal from '../components/BuyModal';
 import WoodProgress from '../components/WoodProgress';
 import AnimatedMoney from '../components/AnimatedMoney';
 
@@ -158,6 +160,13 @@ export default function Plan() {
   const [itemModal, setItemModal] = useState<{ sectionId: number } | null>(null);
   const [savingItem, setSavingItem] = useState(false);
 
+  // 购买登记弹窗 / 待付尾款行内付款弹窗
+  const [buyTarget, setBuyTarget] = useState<Item | null>(null);
+  const [buySaving, setBuySaving] = useState(false);
+  const [payTarget, setPayTarget] = useState<Order | null>(null);
+  const [paySaving, setPaySaving] = useState(false);
+  const [payForm] = Form.useForm();
+
   // 清单搜索 / 板块折叠 / 待付尾款
   const [search, setSearch] = useState('');
   const [collapsed, setCollapsed] = useState<Set<number>>(() => {
@@ -246,26 +255,61 @@ export default function Plan() {
       },
     });
 
-  // 勾「已买」双算校验：已有订单付款时确认
-  const doBought = async (item: Item, bought: boolean) => {
-    const updated = await api.updateItem(item.id, { bought }).catch((err) => {
-      toast.error((err as Error).message);
-      return null;
-    });
-    if (updated) patchItem(updated);
+  // 勾「已买」→ 打开购买登记弹窗（确认成交价与日期；原价由后端存为预算基线）
+  const confirmBuy = async (itemId: number, price: number, date: string) => {
+    const item = buyTarget;
+    if (item && !item.bought && item.order_paid > 0) {
+      const proceed = await new Promise<boolean>((resolve) => {
+        Modal.confirm({
+          title: '该项目已有订单付款，可能重复计入',
+          content: `「${item.name}」下订单已付 ${fmtMoney(item.order_paid)}，再记为已买会把总价也计入实际。通常二选一即可，仍要记吗？`,
+          okText: '仍要记',
+          onOk: () => resolve(true),
+          onCancel: () => resolve(false),
+        });
+      });
+      if (!proceed) return;
+    }
+    setBuySaving(true);
+    try {
+      const updated = await api.updateItem(itemId, { bought: true, unit_price: price, bought_date: date });
+      patchItem(updated);
+      setBuyTarget(null);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBuySaving(false);
+    }
   };
 
-  const toggleBought = (item: Item, checked: boolean) => {
-    if (checked && item.order_paid > 0) {
-      Modal.confirm({
-        title: '该项目已有订单付款，可能重复计入',
-        content: `「${item.name}」下订单已付 ${fmtMoney(item.order_paid)}。勾「已买」会把总价（${fmtMoney(item.budget_amount)}）也计入实际，两者相加会重复。通常二选一即可，仍要勾选吗？`,
-        okText: '仍要勾选',
-        onOk: () => doBought(item, true),
-      });
-      return;
+  const unmarkBought = async (itemId: number) => {
+    setBuySaving(true);
+    try {
+      const updated = await api.updateItem(itemId, { bought: false });
+      patchItem(updated);
+      setBuyTarget(null);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBuySaving(false);
     }
-    doBought(item, checked);
+  };
+
+  // 待付尾款行内记付款
+  const quickPay = async (values: { amount: number; pay_date: unknown; method?: string; note?: string }) => {
+    if (!payTarget) return;
+    const date = (values.pay_date as dayjs.Dayjs).format('YYYY-MM-DD');
+    setPaySaving(true);
+    try {
+      await api.addPayment(payTarget.id, { amount: values.amount, pay_date: date, method: values.method, note: values.note });
+      toast.success('付款已记录');
+      setPayTarget(null);
+      load();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setPaySaving(false);
+    }
   };
 
   const toggleCollapse = (id: number) => {
@@ -438,13 +482,18 @@ export default function Plan() {
     },
     {
       title: '已买', dataIndex: 'bought', width: 56, align: 'center' as const,
-      render: (_, it: Item) => (
-        <Checkbox
-          checked={!!it.bought}
-          onClick={(e) => e.stopPropagation()}
-          onChange={(e) => toggleBought(it, e.target.checked)}
-        />
-      ),
+      render: (_, it: Item) =>
+        it.order_count > 0 ? (
+          <Tooltip title="该项目通过订单记录付款，无需勾选">
+            <Checkbox checked={!!it.bought} disabled />
+          </Tooltip>
+        ) : (
+          <Checkbox
+            checked={!!it.bought}
+            onClick={(e) => e.stopPropagation()}
+            onChange={() => setBuyTarget(it)}
+          />
+        ),
     },
     {
       title: '备注', dataIndex: 'note', width: 150, ellipsis: true,
@@ -574,8 +623,17 @@ export default function Plan() {
                 render: (_, o) => <span className="tabular" style={{ fontWeight: 600, color: 'var(--clay)' }}>{fmtMoney(o.total_amount - (o.paid ?? 0))}</span>,
               },
               {
-                title: '', width: 90,
-                render: (_, o) => <Button type="link" size="small" onClick={() => nav(`/orders/${o.id}`)}>去付款</Button>,
+                title: '', width: 140,
+                render: (_, o) => (
+                  <Space size={0} onClick={(e) => e.stopPropagation()}>
+                    <Button type="link" size="small" onClick={() => {
+                      payForm.resetFields();
+                      payForm.setFieldsValue({ amount: o.total_amount - (o.paid ?? 0), pay_date: dayjs(), method: '微信' });
+                      setPayTarget(o);
+                    }}>记一笔</Button>
+                    <Button type="link" size="small" onClick={() => nav(`/orders/${o.id}`)}>详情</Button>
+                  </Space>
+                ),
               },
             ]}
           />
@@ -711,6 +769,45 @@ export default function Plan() {
           }
         }}
       />
+
+      {/* 购买登记：勾「已买」时确认成交价与日期 */}
+      <BuyModal
+        item={buyTarget}
+        open={!!buyTarget}
+        onClose={() => setBuyTarget(null)}
+        onConfirm={confirmBuy}
+        onUnmark={unmarkBought}
+        confirmLoading={buySaving}
+      />
+
+      {/* 待付尾款行内记付款 */}
+      <Modal
+        title={`记付款 · ${payTarget?.title ?? ''}`}
+        open={!!payTarget}
+        onCancel={() => setPayTarget(null)}
+        onOk={() => payForm.submit()}
+        confirmLoading={paySaving}
+        destroyOnClose
+      >
+        <Form form={payForm} layout="vertical" onFinish={quickPay}>
+          <Form.Item
+            name="amount" label="金额（元）"
+            rules={[{ required: true, message: '请输入金额' }]}
+            extra={payTarget ? `未付 ${fmtMoney(payTarget.total_amount - (payTarget.paid ?? 0))}（已预填）` : undefined}
+          >
+            <InputNumber precision={2} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="pay_date" label="付款日期" rules={[{ required: true, message: '请选择日期' }]}>
+            <DatePicker style={{ width: '100%' }} allowClear={false} />
+          </Form.Item>
+          <Form.Item name="method" label="付款方式">
+            <Select allowClear options={PAY_METHODS.map((m) => ({ value: m, label: m }))} />
+          </Form.Item>
+          <Form.Item name="note" label="备注">
+            <Input placeholder="如：中期款、瓷砖尾款" maxLength={100} />
+          </Form.Item>
+        </Form>
+      </Modal>
     </Space>
   );
 }

@@ -16,6 +16,8 @@ export interface Item {
   quantity: number;
   unit_price: number;
   bought: number;
+  bought_date: string | null;
+  init_unit_price: number | null;
   note: string;
   sort_order: number;
   budget_amount: number;
@@ -72,6 +74,7 @@ export interface Order {
 export interface Summary {
   total_budget: number;
   plan_total: number;
+  init_plan_total: number;
   actual_total: number;
   unassigned_paid: number;
   sections: {
@@ -143,7 +146,7 @@ export const api = {
     req<Item>(`/api/sections/${sectionId}/items`, 'POST', body),
   updateItem: (id: number, patch: Partial<{
     name: string; spec: string; unit: string; quantity: number;
-    unit_price: number; bought: boolean; note: string;
+    unit_price: number; bought: boolean; bought_date: string | null; note: string;
   }>) => req<Item>(`/api/items/${id}`, 'PUT', patch),
   deleteItem: (id: number) => req<{ ok: boolean; deleted: boolean }>(`/api/items/${id}`, 'DELETE'),
   restoreItem: (id: number) => req<Item>(`/api/items/${id}/restore`, 'POST'),

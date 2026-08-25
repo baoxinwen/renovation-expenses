@@ -1,5 +1,7 @@
 import ExcelJS from 'exceljs';
-import db, { ITEM_ACTUAL_SQL } from '../db.js';
+import path from 'node:path';
+import { ZipArchive } from 'archiver';
+import db, { ITEM_ACTUAL_SQL, UPLOAD_DIR } from '../db.js';
 
 const MONEY = '#,##0.00';
 
@@ -146,5 +148,41 @@ export default async function (app) {
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', `attachment; filename*=UTF-8''${filename}`);
     return reply.send(Buffer.from(await wb.xlsx.writeBuffer()));
+  });
+
+  // ===== 票据照片打包 zip（按订单，维权/对账直接发人） =====
+  app.get('/export/receipts', async (req, reply) => {
+    const orderId = req.query.order_id ? Number(req.query.order_id) : null;
+    const params = orderId ? [orderId] : [];
+    const rows = db.prepare(`
+      SELECT o.id AS order_id, o.title, o.vendor, p.pay_date, p.amount, p.method, p.note AS pay_note,
+             r.filename, r.original_name
+      FROM orders o
+      JOIN payments p ON p.order_id = o.id
+      JOIN receipts r ON r.payment_id = p.id
+      WHERE o.deleted = 0 ${orderId ? 'AND o.id = ?' : ''}
+      ORDER BY o.id, p.pay_date, r.id`).all(...params);
+    if (!rows.length) return reply.status(404).send({ message: '没有可导出的票据照片' });
+
+    const safe = (s) => String(s).replace(/[\\/:*?"<>|]/g, '_');
+    const archive = new ZipArchive({ zlib: { level: 6 } });
+    const seen = new Set();
+    rows.forEach((r) => {
+      let entry = `${safe(r.title)}_${r.order_id}/${r.pay_date}_${r.amount}元/${safe(r.original_name)}`;
+      let n = 2;
+      while (seen.has(entry)) entry = `${safe(r.title)}_${r.order_id}/${r.pay_date}_${r.amount}元/${n++}_${safe(r.original_name)}`;
+      seen.add(entry);
+      archive.file(path.join(UPLOAD_DIR, r.filename), { name: entry });
+    });
+    const manifest = rows.map((r) =>
+      `${r.title}（${r.vendor || '商家未填'}）｜${r.pay_date}｜${r.amount} 元｜${r.method || '方式未填'}｜票据：${r.original_name}${r.pay_note ? `｜${r.pay_note}` : ''}`
+    ).join('\n');
+    archive.append(`票据清单（${rows.length} 张）\n生成时间：${new Date().toLocaleString('zh-CN')}\n\n${manifest}\n`, { name: '票据清单.txt' });
+    archive.finalize();
+
+    const label = orderId ? safe(rows[0].title) : '全部订单';
+    reply.header('Content-Type', 'application/zip');
+    reply.header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(`票据_${label}.zip`)}`);
+    return reply.send(archive);
   });
 }
