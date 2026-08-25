@@ -24,15 +24,16 @@ import ItemFormModal from '../components/ItemFormModal';
 import WoodProgress from '../components/WoodProgress';
 import AnimatedMoney from '../components/AnimatedMoney';
 
-// ---------- 行内编辑单元格：失焦提交，成功后背景闪光 ----------
+// ---------- 行内编辑单元格：失焦提交，成功闪光 / 失败回滚 ----------
 function EditableText({ value, onCommit, placeholder }: {
   value: string; onCommit: (v: string) => Promise<boolean>; placeholder?: string;
 }) {
   const [flash, setFlash] = useState(false);
+  const [resetKey, setResetKey] = useState(0); // 保存失败时强制回滚显示
   return (
     <div className={`editable-cell ${flash ? 'flash-saved' : ''}`}>
       <Input
-        key={value}
+        key={`${value}-${resetKey}`}
         size="small"
         variant="borderless"
         defaultValue={value}
@@ -44,6 +45,8 @@ function EditableText({ value, onCommit, placeholder }: {
           if (await onCommit(v)) {
             setFlash(true);
             setTimeout(() => setFlash(false), 650);
+          } else {
+            setResetKey((k) => k + 1);
           }
         }}
       />
@@ -51,14 +54,15 @@ function EditableText({ value, onCommit, placeholder }: {
   );
 }
 
-function EditableNum({ value, onCommit, nullable }: {
-  value: number | null; onCommit: (v: number | null) => Promise<boolean>; nullable?: boolean;
+function EditableNum({ value, onCommit }: {
+  value: number | null; onCommit: (v: number | null) => Promise<boolean>;
 }) {
   const [flash, setFlash] = useState(false);
+  const [resetKey, setResetKey] = useState(0);
   return (
     <div className={`editable-cell num ${flash ? 'flash-saved' : ''}`}>
       <InputNumber
-        key={String(value)}
+        key={`${String(value)}-${resetKey}`}
         size="small"
         variant="borderless"
         defaultValue={value ?? undefined}
@@ -68,7 +72,7 @@ function EditableNum({ value, onCommit, nullable }: {
         onBlur={async (e) => {
           const raw = e.target.value.trim().replace(/,/g, '');
           let next: number | null;
-          if (raw === '') next = nullable ? null : 0;
+          if (raw === '') next = 0;
           else {
             const n = Number(raw);
             if (!Number.isFinite(n)) return;
@@ -78,6 +82,8 @@ function EditableNum({ value, onCommit, nullable }: {
           if (await onCommit(next)) {
             setFlash(true);
             setTimeout(() => setFlash(false), 650);
+          } else {
+            setResetKey((k) => k + 1);
           }
         }}
       />
@@ -223,7 +229,12 @@ export default function Plan() {
       okType: 'danger',
       okText: '删除',
       onOk: async () => {
-        await api.deleteItem(item.id);
+        try {
+          await api.deleteItem(item.id);
+        } catch (e) {
+          toast.error((e as Error).message);
+          return;
+        }
         toast.success(`已删除「${item.name}」`, {
           duration: 8000,
           action: {
@@ -309,21 +320,35 @@ export default function Plan() {
   const deleteSection = (sec: Section) =>
     Modal.confirm({
       title: `删除板块「${sec.name}」？`,
-      content: `板块下 ${(sec.items ?? []).length} 个项目将一并删除；项目下订单的付款保留但不再计入清单统计。`,
+      content: `板块下 ${(sec.items ?? []).length} 个项目会一并移出清单（订单与付款保留但不再计入统计）。删除后 8 秒内可撤销。`,
       okType: 'danger',
       okText: '删除',
       onOk: async () => {
-        await api.deleteSection(sec.id);
-        toast.success('已删除板块');
-        load();
+        try {
+          await api.deleteSection(sec.id);
+          toast.success(`已删除板块「${sec.name}」`, {
+            duration: 8000,
+            action: {
+              label: '撤销',
+              onClick: () => api.restoreSection(sec.id).then(load).catch((e) => toast.error((e as Error).message)),
+            },
+          });
+          load();
+        } catch (e) {
+          toast.error((e as Error).message);
+        }
       },
     });
 
   const saveTarget = async (values: { total_budget: number }) => {
-    await api.saveSettings(values.total_budget);
-    toast.success('预算目标已保存');
-    setTargetOpen(false);
-    load();
+    try {
+      await api.saveSettings(values.total_budget);
+      toast.success('预算目标已保存');
+      setTargetOpen(false);
+      load();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
   };
 
   const doImport = async (file: File) => {
@@ -345,7 +370,21 @@ export default function Plan() {
     return false;
   };
 
-  if (loading && !plan) return <Card style={{ textAlign: 'center', padding: 80 }}>加载中…</Card>;
+  if (!plan) {
+    return loading ? (
+      <Card style={{ textAlign: 'center', padding: 80 }}>加载中…</Card>
+    ) : (
+      <Card>
+        <Alert
+          type="error"
+          showIcon
+          message="清单加载失败"
+          description="可能是账本服务没有启动。请先启动服务（双击 启动.bat），然后重试。数据不会丢失。"
+          action={<Button size="small" onClick={load}>重试</Button>}
+        />
+      </Card>
+    );
+  }
 
   const diff = plan!.plan_total - plan!.total_budget;
   const overBudget = plan!.total_budget > 0 && diff > 0;
@@ -584,9 +623,7 @@ export default function Plan() {
                       <Button type="primary" size="small" icon={<PlusOutlined />} onClick={() => setItemModal({ sectionId: sec.id })}>
                         添加项目
                       </Button>
-                      <Popconfirm title={`删除板块「${sec.name}」？`} description="板块下项目将一并删除" okText="删除" okType="danger" onConfirm={() => deleteSection(sec)}>
-                        <Button type="text" size="small" danger>删除</Button>
-                      </Popconfirm>
+                      <Button type="text" size="small" danger onClick={() => deleteSection(sec)}>删除</Button>
                     </Space>
                   }
                 >

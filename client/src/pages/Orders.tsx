@@ -78,34 +78,35 @@ export default function Orders() {
     }
   };
 
+  const doDeleteOrder = async (o: Order) => {
+    try {
+      await api.deleteOrder(o.id);
+    } catch (e) {
+      toast.error((e as Error).message);
+      return;
+    }
+    toast.success(`已删除「${o.title}」`, {
+      duration: 8000,
+      action: {
+        label: '撤销',
+        onClick: () => api.restoreOrder(o.id).then(load).catch((e) => toast.error((e as Error).message)),
+      },
+    });
+    load();
+  };
+
   const closeOrder = (o: Order) => {
     Modal.confirm({
       title: '确认结清',
       content: `将「${o.title}」标记为已结清？`,
       onOk: async () => {
-        await api.updateOrder(o.id, { status: 'closed' });
-        toast.success('已标记结清');
-        load();
-      },
-    });
-  };
-
-  const deleteOrder = (o: Order) => {
-    Modal.confirm({
-      title: '删除订单',
-      content: `「${o.title}」的付款记录与票据会一并隐藏（不再计入统计），删除后 8 秒内可撤销。`,
-      okType: 'danger',
-      okText: '删除',
-      onOk: async () => {
-        await api.deleteOrder(o.id);
-        toast.success(`已删除「${o.title}」`, {
-          duration: 8000,
-          action: {
-            label: '撤销',
-            onClick: () => api.restoreOrder(o.id).then(load).catch((e) => toast.error((e as Error).message)),
-          },
-        });
-        load();
+        try {
+          await api.updateOrder(o.id, { status: 'closed' });
+          toast.success('已标记结清');
+          load();
+        } catch (e) {
+          toast.error((e as Error).message);
+        }
       },
     });
   };
@@ -248,10 +249,10 @@ export default function Orders() {
                 )}
                 <Popconfirm
                   title="删除该订单？"
-                  description="付款记录与票据将一并删除"
+                  description="付款与票据会隐藏保留（8 秒内可撤销）"
                   okText="删除"
                   okType="danger"
-                  onConfirm={() => deleteOrder(o)}
+                  onConfirm={() => doDeleteOrder(o)}
                 >
                   <Button type="link" size="small" danger>删除</Button>
                 </Popconfirm>

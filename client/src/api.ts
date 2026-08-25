@@ -134,7 +134,8 @@ export const api = {
   getPlan: () => req<PlanData>('/api/plan', 'GET'),
   addSection: (name: string) => req<Section>('/api/sections', 'POST', { name }),
   updateSection: (id: number, patch: { name?: string }) => req(`/api/sections/${id}`, 'PUT', patch),
-  deleteSection: (id: number) => req(`/api/sections/${id}`, 'DELETE'),
+  deleteSection: (id: number) => req<{ ok: boolean; deleted: boolean }>(`/api/sections/${id}`, 'DELETE'),
+  restoreSection: (id: number) => req<Section>(`/api/sections/${id}/restore`, 'POST'),
   reorderSections: (ids: number[]) => req('/api/sections/reorder', 'PUT', { ids }),
   addItem: (sectionId: number, body: ItemFormValues) =>
     req<Item>(`/api/sections/${sectionId}/items`, 'POST', body),

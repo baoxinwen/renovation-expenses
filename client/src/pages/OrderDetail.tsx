@@ -96,9 +96,13 @@ export default function OrderDetail() {
       title: '确认结清',
       content: `将「${order.title}」标记为已结清？`,
       onOk: async () => {
-        await api.updateOrder(order.id, { status: 'closed' });
-        toast.success('已标记结清');
-        load();
+        try {
+          await api.updateOrder(order.id, { status: 'closed' });
+          toast.success('已标记结清');
+          load();
+        } catch (e) {
+          toast.error((e as Error).message);
+        }
       },
     });
 
@@ -109,7 +113,12 @@ export default function OrderDetail() {
       okType: 'danger',
       okText: '删除',
       onOk: async () => {
-        await api.deleteOrder(order.id);
+        try {
+          await api.deleteOrder(order.id);
+        } catch (e) {
+          toast.error((e as Error).message);
+          return;
+        }
         toast.success(`已删除「${order.title}」`, {
           duration: 8000,
           action: {
@@ -142,12 +151,13 @@ export default function OrderDetail() {
       method: values.method ?? '',
       note: values.note ?? '',
     };
-    // 付款超出未付余额时允许保存但给出提示（现实中存在补差价）
-    if (!editingPayment && body.amount > 0 && body.amount > unpaid) {
+    // 付款超出未付余额时允许保存但给出提示（现实中存在补差价）；编辑时按扣除原金额后的余额判断
+    const effectiveUnpaid = unpaid + (editingPayment ? editingPayment.amount : 0);
+    if (body.amount > 0 && body.amount > effectiveUnpaid) {
       const proceed = await new Promise<boolean>((resolve) => {
         Modal.confirm({
           title: '本笔付款将超出订单未付余额',
-          content: `未付余额 ${fmtMoney(unpaid)}，本笔 ${fmtMoney(body.amount)}。确定继续？`,
+          content: `未付余额 ${fmtMoney(effectiveUnpaid)}，本笔 ${fmtMoney(body.amount)}。确定继续？`,
           onOk: () => resolve(true),
           onCancel: () => resolve(false),
         });
@@ -169,14 +179,22 @@ export default function OrderDetail() {
   };
 
   const deletePayment = async (p: Payment) => {
-    await api.deletePayment(p.id);
-    toast.success('付款已删除');
-    load();
+    try {
+      await api.deletePayment(p.id);
+      toast.success('付款已删除');
+      load();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
   };
 
   const removeReceipt = async (r: Receipt) => {
-    await api.deleteReceipt(r.id);
-    load();
+    try {
+      await api.deleteReceipt(r.id);
+      load();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
   };
 
   const payments = order.payments ?? [];
@@ -290,7 +308,7 @@ export default function OrderDetail() {
                     </Button>
                   ))}
                   <Upload
-                    accept=".jpg,.jpeg,.png,.webp,.heic"
+                    accept=".jpg,.jpeg,.png,.webp"
                     showUploadList={false}
                     multiple
                     customRequest={async ({ file, onSuccess, onError }) => {

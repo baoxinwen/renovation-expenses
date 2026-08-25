@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, Col, Empty, Row, Space, Table, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Col, Empty, Row, Space, Table, Tag, Typography } from 'antd';
 import ReactECharts from 'echarts-for-react';
+import { toast } from 'sonner';
 import { api } from '../api';
 import type { Charts, Summary } from '../api';
 import { fmtMoney } from '../format';
@@ -15,13 +16,35 @@ export default function Analysis() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [charts, setCharts] = useState<Charts | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true);
+    setError(null);
     Promise.all([api.getSummary(), api.getCharts()])
       .then(([s, c]) => { setSummary(s); setCharts(c); })
-      .catch((e) => console.error(e))
+      .catch((e) => {
+        setError((e as Error).message || '加载失败');
+        toast.error('统计数据加载失败');
+      })
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (error) {
+    return (
+      <Card>
+        <Alert
+          type="error"
+          showIcon
+          message="统计数据加载失败"
+          description={`${error}。可能是账本服务没有启动——数据没有丢失，启动后重试即可。`}
+          action={<Button size="small" onClick={load}>重试</Button>}
+        />
+      </Card>
+    );
+  }
 
   const themeName = useMemo(() => chartThemeName(isDark), [isDark]);
   const colors = chartColors(isDark);
