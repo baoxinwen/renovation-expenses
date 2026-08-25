@@ -78,7 +78,7 @@ export default async function (app) {
 
   app.put('/sections/:id', async (req, reply) => {
     const id = Number(req.params.id);
-    const sec = db.prepare('SELECT * FROM sections WHERE id = ?').get(id);
+    const sec = db.prepare('SELECT * FROM sections WHERE id = ? AND deleted = 0').get(id);
     if (!sec) return reply.status(404).send({ message: '板块不存在' });
     const name = req.body?.name !== undefined ? String(req.body.name).trim() : sec.name;
     if (!name) return reply.status(400).send({ message: '板块名称不能为空' });

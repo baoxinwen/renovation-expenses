@@ -228,6 +228,24 @@ try {
     hr.end();
   });
   check('非法 Host 被拒', hostStatus === 403, `status=${hostStatus}`);
+  const v6Status = await new Promise((resolve) => {
+    const hr = http.request(
+      { host: '127.0.0.1', port: PORT, path: '/api/settings', method: 'GET', headers: { Host: '[fe80::1]:5199' } },
+      (res) => { res.resume(); resolve(res.statusCode); },
+    );
+    hr.on('error', () => resolve(-1));
+    hr.end();
+  });
+  check('IPv6 链路本地 Host 放行', v6Status === 200, `status=${v6Status}`);
+  const v6Bad = await new Promise((resolve) => {
+    const hr = http.request(
+      { host: '127.0.0.1', port: PORT, path: '/api/settings', method: 'GET', headers: { Host: '[2600::1]:5199' } },
+      (res) => { res.resume(); resolve(res.statusCode); },
+    );
+    hr.on('error', () => resolve(-1));
+    hr.end();
+  });
+  check('公网 IPv6 Host 仍被拒', v6Bad === 403, `status=${v6Bad}`);
 } catch (e) {
   failed++;
   console.error('测试执行异常:', e);

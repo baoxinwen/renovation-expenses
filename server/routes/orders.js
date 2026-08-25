@@ -205,8 +205,10 @@ export default async function (app) {
         incoming.forEach(({ ext, buf, originalName }) => {
           const filename = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}.${ext}`;
           fs.writeFileSync(path.join(UPLOAD_DIR, filename), buf);
+          // 先登记再插库：若 insert 失败，catch 也能清掉刚写入的这个文件（不留孤儿）
+          saved.push({ payment_id: paymentId, filename, original_name: originalName });
           const info = insert.run(paymentId, filename, originalName);
-          saved.push({ id: Number(info.lastInsertRowid), payment_id: paymentId, filename, original_name: originalName });
+          saved[saved.length - 1].id = Number(info.lastInsertRowid);
         });
       })();
     } catch (e) {
