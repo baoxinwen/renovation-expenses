@@ -66,11 +66,34 @@ export default async function (app) {
     const total = Number(b.total_amount);
     if (!Number.isFinite(total) || total <= 0) return reply.status(400).send({ message: '订单总额必须是正数' });
     const itemId = b.item_id ? Number(b.item_id) : null;
+
+    // 一次付清：创建订单的同时记首笔付款；付足自动结清（小件购买一步到位）
+    let paidNow = null;
+    if (b.paid_now != null) {
+      const amt = Number(b.paid_now.amount);
+      if (!Number.isFinite(amt) || amt <= 0) {
+        return reply.status(400).send({ message: '一次付清金额必须是正数' });
+      }
+      const payDate = String(b.paid_now.pay_date ?? '');
+      if (!validDate(payDate)) return reply.status(400).send({ message: '付款日期无效（应为真实日期，格式 YYYY-MM-DD）' });
+      paidNow = { amount: amt, payDate, method: String(b.paid_now.method ?? ''), note: String(b.paid_now.note ?? '') };
+    }
+
     try {
-      const info = db.prepare(`INSERT INTO orders (title, vendor, item_id, total_amount, note)
-        VALUES (?, ?, ?, ?, ?)`)
-        .run(title, String(b.vendor ?? ''), itemId, total, String(b.note ?? ''));
-      return getOrder(info.lastInsertRowid);
+      const status = paidNow && paidNow.amount >= total ? 'closed' : 'open';
+      const info = db.prepare(`INSERT INTO orders (title, vendor, item_id, total_amount, note, status)
+        VALUES (?, ?, ?, ?, ?, ?)`)
+        .run(title, String(b.vendor ?? ''), itemId, total, String(b.note ?? ''), status);
+      const orderId = Number(info.lastInsertRowid);
+      if (paidNow) {
+        db.prepare(`INSERT INTO payments (order_id, amount, pay_date, method, note) VALUES (?, ?, ?, ?, ?)`)
+          .run(orderId, paidNow.amount, paidNow.payDate, paidNow.method, paidNow.note || '一次付清');
+      }
+      const order = getOrder(orderId);
+      const payments = db.prepare('SELECT * FROM payments WHERE order_id = ? ORDER BY pay_date DESC, id DESC')
+        .all(orderId)
+        .map((p) => ({ ...p, receipts: db.prepare('SELECT * FROM receipts WHERE payment_id = ? ORDER BY id').all(p.id) }));
+      return { ...order, payments };
     } catch (e) {
       return fkError(e, reply);
     }

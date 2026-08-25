@@ -61,7 +61,8 @@ export default function OrderDetail() {
   const unpaid = Math.max(0, order.total_amount - paid);
   const overpaid = paid > order.total_amount;
 
-  const saveOrder = async (values: OrderFormValues) => {
+  // 编辑模式不提供「一次付清」（付款在详情页管理），files 恒为空
+  const saveOrder = async (values: OrderFormValues, _files: File[]) => {
     // 双算校验：挂到已勾「已买」的项目会重复计入实际
     const target = values.item_id
       ? sections.flatMap((s) => s.items ?? []).find((it) => it.id === values.item_id)

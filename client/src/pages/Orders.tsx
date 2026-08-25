@@ -20,7 +20,8 @@ export default function Orders() {
   const [filters, setFilters] = useState<{ section_id?: number; item_id?: number; status?: string; q: string }>(() => ({
     item_id: searchParams.get('item_id') ? Number(searchParams.get('item_id')) : undefined,
     section_id: searchParams.get('section_id') ? Number(searchParams.get('section_id')) : undefined,
-    status: searchParams.get('status') ?? undefined,
+    // 默认只看进行中的订单，隐藏已结清小件；从清单行带 item_id 进来时显示该项目的全部订单
+    status: searchParams.get('status') ?? (searchParams.get('item_id') ? undefined : 'open'),
     q: '',
   }));
 
@@ -50,7 +51,7 @@ export default function Orders() {
   const findItem = (id: number) =>
     sections.flatMap((s) => s.items ?? []).find((it) => it.id === id);
 
-  const createOrder = async (values: OrderFormValues) => {
+  const createOrder = async (values: OrderFormValues, files: File[]) => {
     // 双算校验：挂到已勾「已买」的项目会重复计入实际
     const target = values.item_id ? findItem(values.item_id) : null;
     if (target?.bought) {
@@ -68,7 +69,16 @@ export default function Orders() {
     setSaving(true);
     try {
       const order = await api.addOrder(values);
-      toast.success('订单已创建');
+      // 一次付清：把选好的票据直接传到首笔付款上
+      const pay = order.payments?.[0];
+      if (pay && files.length) {
+        let fail = 0;
+        for (const f of files) {
+          try { await api.uploadReceipt(pay.id, f); } catch { fail++; }
+        }
+        if (fail) toast.warning(`${fail} 张票据未上传成功，可在订单详情里补传`);
+      }
+      toast.success(values.paid_now ? '购买已记录（订单+付款+票据）' : '订单已创建');
       setModalOpen(false);
       nav(`/orders/${order.id}`);
     } catch (e) {

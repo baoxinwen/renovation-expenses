@@ -105,6 +105,8 @@ export interface OrderFormValues {
   item_id?: number | null;
   total_amount: number;
   note?: string;
+  /** 一次付清：创建订单的同时记首笔付款，付足自动结清 */
+  paid_now?: { amount: number; pay_date: string; method?: string; note?: string };
 }
 
 async function req<T = unknown>(url: string, method: string, body?: unknown): Promise<T> {
@@ -163,7 +165,7 @@ export const api = {
     return req<Order[]>(`/api/orders${s ? '?' + s : ''}`, 'GET');
   },
   getOrder: (id: number) => req<Order>(`/api/orders/${id}`, 'GET'),
-  addOrder: (body: OrderFormValues) => req<Order>('/api/orders', 'POST', body),
+  addOrder: (body: OrderFormValues) => req<Order & { payments?: Payment[] }>('/api/orders', 'POST', body),
   updateOrder: (id: number, patch: Partial<OrderFormValues & { status: 'open' | 'closed' }>) =>
     req<Order>(`/api/orders/${id}`, 'PUT', patch),
   deleteOrder: (id: number) => req<{ ok: boolean; deleted: boolean }>(`/api/orders/${id}`, 'DELETE'),

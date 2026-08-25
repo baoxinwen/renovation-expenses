@@ -164,6 +164,30 @@ try {
   check('月度趋势 2026-08 = 30000', r.by_month.some((m) => m.month === '2026-08' && m.amount === 30000));
   check('最近付款含项目名', r.recent_payments[0]?.item_name === '硬装施工总价');
 
+  console.log('== 5b. 一次付清（快速购买） ==');
+  const hood0 = (await req('GET', '/plan')).json.sections.flatMap((s) => s.items).find((i) => i.name === '抽油烟机');
+  r = await req('POST', '/orders', {
+    title: '买抽油烟机', item_id: hood0.id, total_amount: 2447.2,
+    paid_now: { amount: 2447.2, pay_date: '2026-08-26', method: '微信' },
+  });
+  check('一次付清创建成功且自动结清', r.status === 200 && r.json.status === 'closed' && Math.abs(r.json.paid - 2447.2) < 0.01, JSON.stringify(r.json?.status));
+  check('返回含首笔付款（前端据此传票据）', r.json.payments?.length === 1 && r.json.payments[0].method === '微信' && r.json.payments[0].note === '一次付清');
+  let r5 = (await req('GET', '/plan')).json;
+  check('项目实际已计入', Math.abs(r5.sections.flatMap((s) => s.items).find((i) => i.name === '抽油烟机').actual_amount - 2447.2) < 0.5);
+  await req('DELETE', `/orders/${r.json.id}`);
+
+  const sw = (await req('GET', '/plan')).json.sections.flatMap((s) => s.items).find((i) => i.name === '智能开关面板');
+  r = await req('POST', '/orders', {
+    title: '开关面板定金', item_id: sw.id, total_amount: 2580,
+    paid_now: { amount: 1000, pay_date: '2026-08-26' },
+  });
+  check('部分付款（金额<总额）保持进行中', r.status === 200 && r.json.status === 'open' && Math.abs(r.json.paid - 1000) < 0.01, JSON.stringify(r.json?.status));
+  await req('DELETE', `/orders/${r.json.id}`);
+  r = await req('POST', '/orders', { title: 'x', total_amount: 100, paid_now: { amount: 0, pay_date: '2026-08-26' } });
+  check('一次付清零金额被拒绝', r.status === 400);
+  r = await req('POST', '/orders', { title: 'x', total_amount: 100, paid_now: { amount: 50, pay_date: '2026-13-01' } });
+  check('一次付清非法日期被拒绝', r.status === 400);
+
   console.log('== 6. 导出 ==');
   const ex = await fetch(`${BASE}/export/excel`);
   const buf = Buffer.from(await ex.arrayBuffer());
