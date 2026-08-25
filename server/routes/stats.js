@@ -4,19 +4,19 @@ export default async function (app) {
   app.get('/stats/summary', async () => {
     const row = db.prepare("SELECT value FROM settings WHERE key = 'total_budget'").get();
     const totalBudget = Number(row?.value ?? 0);
-    const planTotal = db.prepare('SELECT COALESCE(SUM(quantity * unit_price), 0) AS s FROM items').get().s;
+    const planTotal = db.prepare('SELECT COALESCE(SUM(quantity * unit_price), 0) AS s FROM items WHERE deleted = 0').get().s;
     const actualTotal = db.prepare(
-      `SELECT COALESCE(SUM(${ITEM_ACTUAL_SQL.replace(/i\./g, 't.')}), 0) AS s FROM items t`
+      `SELECT COALESCE(SUM(${ITEM_ACTUAL_SQL.replace(/i\./g, 't.')}), 0) AS s FROM items t WHERE t.deleted = 0`
     ).get().s;
     const unassignedPaid = db.prepare(`
       SELECT COALESCE(SUM(p.amount), 0) AS s FROM payments p JOIN orders o ON o.id = p.order_id
-      WHERE o.item_id IS NULL`).get().s;
+      WHERE o.item_id IS NULL AND o.deleted = 0`).get().s;
     const sections = db.prepare(`
       SELECT s.id, s.name, s.sort_order,
-             COALESCE((SELECT SUM(i.quantity * i.unit_price) FROM items i WHERE i.section_id = s.id), 0) AS budget_subtotal,
-             COALESCE((SELECT SUM(${ITEM_ACTUAL_SQL}) FROM items i WHERE i.section_id = s.id), 0) AS actual_subtotal,
-             (SELECT COUNT(*) FROM items i WHERE i.section_id = s.id) AS item_count,
-             (SELECT COUNT(*) FROM items i WHERE i.section_id = s.id AND i.bought = 1) AS bought_count
+             COALESCE((SELECT SUM(i.quantity * i.unit_price) FROM items i WHERE i.section_id = s.id AND i.deleted = 0), 0) AS budget_subtotal,
+             COALESCE((SELECT SUM(${ITEM_ACTUAL_SQL}) FROM items i WHERE i.section_id = s.id AND i.deleted = 0), 0) AS actual_subtotal,
+             (SELECT COUNT(*) FROM items i WHERE i.section_id = s.id AND i.deleted = 0) AS item_count,
+             (SELECT COUNT(*) FROM items i WHERE i.section_id = s.id AND i.deleted = 0 AND i.bought = 1) AS bought_count
       FROM sections s ORDER BY s.sort_order, s.id`).all();
     return {
       total_budget: totalBudget,
@@ -30,20 +30,22 @@ export default async function (app) {
   app.get('/stats/charts', async () => {
     const bySection = db.prepare(`
       SELECT s.name AS name,
-             COALESCE((SELECT SUM(i.quantity * i.unit_price) FROM items i WHERE i.section_id = s.id), 0) AS budget,
-             COALESCE((SELECT SUM(${ITEM_ACTUAL_SQL}) FROM items i WHERE i.section_id = s.id), 0) AS actual
+             COALESCE((SELECT SUM(i.quantity * i.unit_price) FROM items i WHERE i.section_id = s.id AND i.deleted = 0), 0) AS budget,
+             COALESCE((SELECT SUM(${ITEM_ACTUAL_SQL}) FROM items i WHERE i.section_id = s.id AND i.deleted = 0), 0) AS actual
       FROM sections s
-      WHERE EXISTS (SELECT 1 FROM items i WHERE i.section_id = s.id)
+      WHERE EXISTS (SELECT 1 FROM items i WHERE i.section_id = s.id AND i.deleted = 0)
       ORDER BY s.sort_order, s.id`).all();
 
     const byMonth = db.prepare(`
-      SELECT substr(pay_date, 1, 7) AS month, ROUND(SUM(amount), 2) AS amount
-      FROM payments GROUP BY month ORDER BY month`).all();
+      SELECT substr(p.pay_date, 1, 7) AS month, ROUND(SUM(p.amount), 2) AS amount
+      FROM payments p JOIN orders o ON o.id = p.order_id
+      WHERE o.deleted = 0
+      GROUP BY month ORDER BY month`).all();
 
     const topItems = db.prepare(`
       SELECT i.id AS id, i.name AS name, (i.quantity * i.unit_price) AS budget,
              (${ITEM_ACTUAL_SQL}) AS actual
-      FROM items i ORDER BY budget DESC LIMIT 10`).all();
+      FROM items i WHERE i.deleted = 0 ORDER BY budget DESC LIMIT 10`).all();
 
     const recentPayments = db.prepare(`
       SELECT p.id, p.amount, p.pay_date, p.method, p.note,
@@ -53,6 +55,7 @@ export default async function (app) {
       JOIN orders o ON o.id = p.order_id
       LEFT JOIN items i ON i.id = o.item_id
       LEFT JOIN sections s ON s.id = i.section_id
+      WHERE o.deleted = 0
       ORDER BY p.pay_date DESC, p.id DESC LIMIT 10`).all();
 
     return { by_section: bySection, by_month: byMonth, top_items: topItems, recent_payments: recentPayments };

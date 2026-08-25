@@ -62,6 +62,22 @@ export default function OrderDetail() {
   const overpaid = paid > order.total_amount;
 
   const saveOrder = async (values: OrderFormValues) => {
+    // 双算校验：挂到已勾「已买」的项目会重复计入实际
+    const target = values.item_id
+      ? sections.flatMap((s) => s.items ?? []).find((it) => it.id === values.item_id)
+      : null;
+    if (target?.bought) {
+      const proceed = await new Promise<boolean>((resolve) => {
+        Modal.confirm({
+          title: '该项目已勾选「已买」',
+          content: `「${target.name}」的总价已计入实际，再把订单付款挂上去会重复计入。通常二选一即可，仍要关联吗？`,
+          okText: '仍要关联',
+          onOk: () => resolve(true),
+          onCancel: () => resolve(false),
+        });
+      });
+      if (!proceed) return;
+    }
     setSavingEdit(true);
     try {
       await api.updateOrder(order.id, values);
@@ -89,12 +105,18 @@ export default function OrderDetail() {
   const deleteOrder = () =>
     Modal.confirm({
       title: '删除订单',
-      content: `「${order.title}」及其全部付款记录、票据照片将一并删除，不可恢复。`,
+      content: `「${order.title}」的付款记录与票据会一并隐藏（不再计入统计），删除后 8 秒内可撤销。`,
       okType: 'danger',
       okText: '删除',
       onOk: async () => {
         await api.deleteOrder(order.id);
-        toast.success('已删除');
+        toast.success(`已删除「${order.title}」`, {
+          duration: 8000,
+          action: {
+            label: '撤销',
+            onClick: () => api.restoreOrder(order.id).then(load).catch((e) => toast.error((e as Error).message)),
+          },
+        });
         nav('/orders');
       },
     });

@@ -142,7 +142,8 @@ export const api = {
     name: string; spec: string; unit: string; quantity: number;
     unit_price: number; bought: boolean; note: string;
   }>) => req<Item>(`/api/items/${id}`, 'PUT', patch),
-  deleteItem: (id: number) => req(`/api/items/${id}`, 'DELETE'),
+  deleteItem: (id: number) => req<{ ok: boolean; deleted: boolean }>(`/api/items/${id}`, 'DELETE'),
+  restoreItem: (id: number) => req<Item>(`/api/items/${id}/restore`, 'POST'),
   reorderItems: (ids: number[]) => req('/api/items/reorder', 'PUT', { ids }),
   importPlan: (file: File, mode: 'replace' | 'append') => {
     const fd = new FormData();
@@ -164,7 +165,8 @@ export const api = {
   addOrder: (body: OrderFormValues) => req<Order>('/api/orders', 'POST', body),
   updateOrder: (id: number, patch: Partial<OrderFormValues & { status: 'open' | 'closed' }>) =>
     req<Order>(`/api/orders/${id}`, 'PUT', patch),
-  deleteOrder: (id: number) => req(`/api/orders/${id}`, 'DELETE'),
+  deleteOrder: (id: number) => req<{ ok: boolean; deleted: boolean }>(`/api/orders/${id}`, 'DELETE'),
+  restoreOrder: (id: number) => req<Order>(`/api/orders/${id}/restore`, 'POST'),
 
   // 付款
   addPayment: (orderId: number, body: { amount: number; pay_date: string; method?: string; note?: string }) =>

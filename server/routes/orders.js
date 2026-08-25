@@ -26,11 +26,6 @@ function fkError(e, reply) {
   throw e;
 }
 
-function receiptFilesOfOrder(orderId) {
-  return db.prepare(`SELECT r.filename FROM receipts r JOIN payments p ON p.id = r.payment_id
-                     WHERE p.order_id = ?`).all(orderId).map((r) => r.filename);
-}
-
 function receiptFilesOfPayment(paymentId) {
   return db.prepare('SELECT filename FROM receipts WHERE payment_id = ?').all(paymentId)
     .map((r) => r.filename);
@@ -43,7 +38,7 @@ function removeFiles(filenames) {
 export default async function (app) {
   app.get('/orders', async (req) => {
     const { item_id, section_id, status, q } = req.query;
-    const where = [];
+    const where = ['o.deleted = 0'];
     const params = {};
     if (item_id) { where.push('o.item_id = @item_id'); params.item_id = Number(item_id); }
     if (section_id) { where.push('i.section_id = @section_id'); params.section_id = Number(section_id); }
@@ -74,7 +69,7 @@ export default async function (app) {
 
   app.get('/orders/:id', async (req, reply) => {
     const order = getOrder(Number(req.params.id));
-    if (!order) return reply.status(404).send({ message: '订单不存在' });
+    if (!order || order.deleted) return reply.status(404).send({ message: '订单不存在' });
     const payments = db.prepare('SELECT * FROM payments WHERE order_id = ? ORDER BY pay_date DESC, id DESC')
       .all(order.id)
       .map((p) => ({
@@ -111,12 +106,16 @@ export default async function (app) {
   });
 
   app.delete('/orders/:id', async (req, reply) => {
-    const id = Number(req.params.id);
-    const files = receiptFilesOfOrder(id);
-    const info = db.prepare('DELETE FROM orders WHERE id = ?').run(id);
+    // 软删除：付款与票据全部保留，可撤销恢复
+    const info = db.prepare('UPDATE orders SET deleted = 1 WHERE id = ? AND deleted = 0').run(Number(req.params.id));
     if (info.changes === 0) return reply.status(404).send({ message: '订单不存在' });
-    removeFiles(files);
-    return { ok: true };
+    return { ok: true, deleted: true };
+  });
+
+  app.post('/orders/:id/restore', async (req, reply) => {
+    const info = db.prepare('UPDATE orders SET deleted = 0 WHERE id = ? AND deleted = 1').run(Number(req.params.id));
+    if (info.changes === 0) return reply.status(404).send({ message: '没有可恢复的订单' });
+    return getOrder(Number(req.params.id));
   });
 
   // ===== 付款记录 =====

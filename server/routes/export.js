@@ -18,7 +18,7 @@ export default async function (app) {
     const settingsRow = db.prepare("SELECT value FROM settings WHERE key = 'total_budget'").get();
     const totalBudget = Number(settingsRow?.value ?? 0);
     const sections = db.prepare('SELECT * FROM sections ORDER BY sort_order, id').all();
-    const itemsBySection = db.prepare('SELECT * FROM items WHERE section_id = ? ORDER BY sort_order, id');
+    const itemsBySection = db.prepare('SELECT * FROM items WHERE section_id = ? AND deleted = 0 ORDER BY sort_order, id');
     const payments = db.prepare(`
       SELECT p.pay_date, p.amount, p.method, p.note,
              o.title AS order_title, o.vendor,
@@ -27,6 +27,7 @@ export default async function (app) {
       JOIN orders o ON o.id = p.order_id
       LEFT JOIN items i ON i.id = o.item_id
       LEFT JOIN sections s ON s.id = i.section_id
+      WHERE o.deleted = 0
       ORDER BY p.pay_date, p.id`).all();
     const totalSpent = payments.reduce((s, p) => s + p.amount, 0);
 
@@ -121,9 +122,9 @@ export default async function (app) {
     styleHeader(wss);
     const sectionStats = db.prepare(`
       SELECT s.name,
-             (SELECT COUNT(*) FROM items i WHERE i.section_id = s.id) AS item_count,
-             COALESCE((SELECT SUM(i.quantity * i.unit_price) FROM items i WHERE i.section_id = s.id), 0) AS budget,
-             COALESCE((SELECT SUM(${ITEM_ACTUAL_SQL}) FROM items i WHERE i.section_id = s.id), 0) AS actual
+             (SELECT COUNT(*) FROM items i WHERE i.section_id = s.id AND i.deleted = 0) AS item_count,
+             COALESCE((SELECT SUM(i.quantity * i.unit_price) FROM items i WHERE i.section_id = s.id AND i.deleted = 0), 0) AS budget,
+             COALESCE((SELECT SUM(${ITEM_ACTUAL_SQL}) FROM items i WHERE i.section_id = s.id AND i.deleted = 0), 0) AS actual
       FROM sections s ORDER BY s.sort_order, s.id`).all();
     sectionStats.forEach((s) => wss.addRow({ ...s, diff: s.actual - s.budget }));
 

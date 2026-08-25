@@ -24,17 +24,17 @@ function validNum(v, { allowZero = true } = {}) {
 }
 
 export default async function (app) {
-  // ===== 整张清单（含板块/项目两级聚合） =====
+  // ===== 整张清单（含板块/项目两级聚合，不含软删项） =====
   app.get('/plan', async () => {
     const settingsRow = db.prepare("SELECT value FROM settings WHERE key = 'total_budget'").get();
     const totalBudget = Number(settingsRow?.value ?? 0);
     const sections = db.prepare('SELECT * FROM sections ORDER BY sort_order, id').all();
-    const itemsBySection = db.prepare(`${ITEM_SELECT} WHERE i.section_id = ? ORDER BY i.sort_order, i.id`);
-    const planTotal = db.prepare('SELECT COALESCE(SUM(quantity * unit_price), 0) AS s FROM items').get().s;
-    const actualTotal = db.prepare(`SELECT COALESCE(SUM(${ITEM_ACTUAL_SQL.replace(/i\./g, 'items.')}) , 0) AS s FROM items`).get().s;
+    const itemsBySection = db.prepare(`${ITEM_SELECT} WHERE i.section_id = ? AND i.deleted = 0 ORDER BY i.sort_order, i.id`);
+    const planTotal = db.prepare('SELECT COALESCE(SUM(quantity * unit_price), 0) AS s FROM items WHERE deleted = 0').get().s;
+    const actualTotal = db.prepare(`SELECT COALESCE(SUM(${ITEM_ACTUAL_SQL.replace(/i\./g, 'items.')}), 0) AS s FROM items WHERE items.deleted = 0`).get().s;
     const unassignedPaid = db.prepare(`
       SELECT COALESCE(SUM(p.amount), 0) AS s FROM payments p JOIN orders o ON o.id = p.order_id
-      WHERE o.item_id IS NULL`).get().s;
+      WHERE o.item_id IS NULL AND o.deleted = 0`).get().s;
 
     return {
       total_budget: totalBudget,
@@ -153,8 +153,15 @@ export default async function (app) {
   });
 
   app.delete('/items/:id', async (req, reply) => {
-    const info = db.prepare('DELETE FROM items WHERE id = ?').run(Number(req.params.id));
+    // 软删除：可撤销；其订单保留（付款不再计入清单实际，恢复后自动回来）
+    const info = db.prepare('UPDATE items SET deleted = 1 WHERE id = ? AND deleted = 0').run(Number(req.params.id));
     if (info.changes === 0) return reply.status(404).send({ message: '项目不存在' });
-    return { ok: true };
+    return { ok: true, deleted: true };
+  });
+
+  app.post('/items/:id/restore', async (req, reply) => {
+    const info = db.prepare('UPDATE items SET deleted = 0 WHERE id = ? AND deleted = 1').run(Number(req.params.id));
+    if (info.changes === 0) return reply.status(404).send({ message: '没有可恢复的项目' });
+    return db.prepare(`${ITEM_SELECT} WHERE i.id = ?`).get(Number(req.params.id));
   });
 }

@@ -1,11 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Alert, Button, Card, Checkbox, Col, Form, Input, InputNumber, Modal, Popconfirm, Row,
+  Alert, Button, Card, Checkbox, Col, Empty, Form, Input, InputNumber, Modal, Popconfirm, Row,
   Space, Table, Tag, Typography, Upload, type TableColumnsType,
 } from 'antd';
 import {
-  DownloadOutlined, EditOutlined, HolderOutlined, PlusOutlined, UploadOutlined,
+  DownloadOutlined, DownOutlined, EditOutlined, HolderOutlined, PlusOutlined,
+  RightOutlined, UploadOutlined,
 } from '@ant-design/icons';
 import { toast } from 'sonner';
 import {
@@ -17,7 +18,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { api } from '../api';
-import type { Item, PlanData, Section } from '../api';
+import type { Item, Order, PlanData, Section } from '../api';
 import { fmtMoney } from '../format';
 import ItemFormModal from '../components/ItemFormModal';
 import WoodProgress from '../components/WoodProgress';
@@ -151,6 +152,14 @@ export default function Plan() {
   const [itemModal, setItemModal] = useState<{ sectionId: number } | null>(null);
   const [savingItem, setSavingItem] = useState(false);
 
+  // 清单搜索 / 板块折叠 / 待付尾款
+  const [search, setSearch] = useState('');
+  const [collapsed, setCollapsed] = useState<Set<number>>(() => {
+    try { return new Set<number>(JSON.parse(localStorage.getItem('reno-collapsed') ?? '[]')); }
+    catch { return new Set(); }
+  });
+  const [unpaid, setUnpaid] = useState<Order[]>([]);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor),
@@ -159,7 +168,9 @@ export default function Plan() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setPlan(await api.getPlan());
+      const [p, orders] = await Promise.all([api.getPlan(), api.getOrders({ status: 'open' })]);
+      setPlan(p);
+      setUnpaid(orders.filter((o) => (o.paid ?? 0) < o.total_amount && o.total_amount > 0));
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -213,10 +224,48 @@ export default function Plan() {
       okText: '删除',
       onOk: async () => {
         await api.deleteItem(item.id);
-        toast.success('已删除');
+        toast.success(`已删除「${item.name}」`, {
+          duration: 8000,
+          action: {
+            label: '撤销',
+            onClick: () => api.restoreItem(item.id).then(load).catch((e) => toast.error((e as Error).message)),
+          },
+        });
         load();
       },
     });
+
+  // 勾「已买」双算校验：已有订单付款时确认
+  const doBought = async (item: Item, bought: boolean) => {
+    const updated = await api.updateItem(item.id, { bought }).catch((err) => {
+      toast.error((err as Error).message);
+      return null;
+    });
+    if (updated) patchItem(updated);
+  };
+
+  const toggleBought = (item: Item, checked: boolean) => {
+    if (checked && item.order_paid > 0) {
+      Modal.confirm({
+        title: '该项目已有订单付款，可能重复计入',
+        content: `「${item.name}」下订单已付 ${fmtMoney(item.order_paid)}。勾「已买」会把总价（${fmtMoney(item.budget_amount)}）也计入实际，两者相加会重复。通常二选一即可，仍要勾选吗？`,
+        okText: '仍要勾选',
+        onOk: () => doBought(item, true),
+      });
+      return;
+    }
+    doBought(item, checked);
+  };
+
+  const toggleCollapse = (id: number) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      localStorage.setItem('reno-collapsed', JSON.stringify([...next]));
+      return next;
+    });
+  };
 
   // 板块拖拽排序
   const onSectionDragEnd = async (event: DragEndEvent) => {
@@ -303,10 +352,26 @@ export default function Plan() {
   const allItems = plan!.sections.flatMap((s) => s.items ?? []);
   const bought = allItems.filter((i) => i.bought || i.actual_amount > 0).length;
 
+  // 搜索过滤（名称/规格/备注；命中的板块保留，空的隐藏）
+  const q = search.trim().toLowerCase();
+  const searching = q.length > 0;
+  const visibleSections = searching
+    ? plan!.sections
+        .map((sec) => ({
+          ...sec,
+          items: (sec.items ?? []).filter((it) =>
+            it.name.toLowerCase().includes(q) ||
+            it.spec.toLowerCase().includes(q) ||
+            it.note.toLowerCase().includes(q)),
+        }))
+        .filter((sec) => (sec.items ?? []).length > 0)
+    : plan!.sections;
+  const totalUnpaid = unpaid.reduce((s, o) => s + Math.max(0, o.total_amount - (o.paid ?? 0)), 0);
+
   const itemColumns: TableColumnsType<Item> = [
     {
       title: '', key: 'drag', width: 32, align: 'center' as const,
-      render: () => <DragHandle />,
+      render: () => (searching ? null : <DragHandle />),
     },
     {
       title: '项目名称', dataIndex: 'name', width: 160,
@@ -338,13 +403,7 @@ export default function Plan() {
         <Checkbox
           checked={!!it.bought}
           onClick={(e) => e.stopPropagation()}
-          onChange={async (e) => {
-            const updated = await api.updateItem(it.id, { bought: e.target.checked }).catch((err) => {
-              toast.error((err as Error).message);
-              return null;
-            });
-            if (updated) patchItem(updated);
-          }}
+          onChange={(e) => toggleBought(it, e.target.checked)}
         />
       ),
     },
@@ -417,6 +476,13 @@ export default function Plan() {
         <Space wrap>
           <Input.Search
             style={{ width: 200 }}
+            placeholder="搜项目 / 品牌 / 备注"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            allowClear
+          />
+          <Input.Search
+            style={{ width: 200 }}
             placeholder="新增板块名称"
             value={newSection}
             onChange={(e) => setNewSection(e.target.value)}
@@ -442,17 +508,58 @@ export default function Plan() {
         </Space>
       </Card>
 
+      {/* ===== 待付尾款 ===== */}
+      {unpaid.length > 0 && (
+        <Card size="small" title={<span>待付尾款 <span style={{ color: 'var(--clay)', fontWeight: 600 }}>共 {fmtMoney(totalUnpaid)}</span></span>}>
+          <Table<Order>
+            rowKey="id"
+            size="small"
+            dataSource={unpaid}
+            pagination={false}
+            onRow={(r) => ({ onClick: () => nav(`/orders/${r.id}`), style: { cursor: 'pointer' } })}
+            columns={[
+              {
+                title: '订单', dataIndex: 'title',
+                render: (_, o) => (
+                  <div>
+                    <span style={{ fontWeight: 500 }}>{o.title}</span>
+                    {o.vendor && <span style={{ color: 'var(--ink-2)', fontSize: 12, marginLeft: 6 }}>{o.vendor}</span>}
+                  </div>
+                ),
+              },
+              { title: '预算项目', dataIndex: 'item_name', width: 180, render: (v) => v || <span style={{ color: 'var(--ink-3)' }}>未关联</span> },
+              { title: '总额', dataIndex: 'total_amount', width: 110, align: 'right' as const, render: (v: number) => <span className="tabular">{fmtMoney(v)}</span> },
+              { title: '已付', dataIndex: 'paid', width: 110, align: 'right' as const, render: (v: number) => <span className="tabular">{fmtMoney(v ?? 0)}</span> },
+              {
+                title: '未付', width: 110, align: 'right' as const,
+                render: (_, o) => <span className="tabular" style={{ fontWeight: 600, color: 'var(--clay)' }}>{fmtMoney(o.total_amount - (o.paid ?? 0))}</span>,
+              },
+              {
+                title: '', width: 90,
+                render: (_, o) => <Button type="link" size="small" onClick={() => nav(`/orders/${o.id}`)}>去付款</Button>,
+              },
+            ]}
+          />
+        </Card>
+      )}
+
       {/* ===== 板块 → 项目清单（可拖拽） ===== */}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onSectionDragEnd}>
-        <SortableContext items={plan!.sections.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+        <SortableContext items={searching ? [] : plan!.sections.map((s) => s.id)} strategy={verticalListSortingStrategy}>
           <Space direction="vertical" size={16} style={{ width: '100%' }}>
-            {plan!.sections.map((sec, idx) => (
+            {visibleSections.map((sec, idx) => (
               <SortableSectionCard key={sec.id} section={sec} index={idx}>
                 <Card
                   size="small"
                   title={
-                    <Space size={10}>
-                      <SectionDragHandle />
+                    <Space size={8}>
+                      <Button
+                        type="text" size="small"
+                        icon={collapsed.has(sec.id) ? <RightOutlined /> : <DownOutlined />}
+                        onClick={() => toggleCollapse(sec.id)}
+                        style={{ marginLeft: -6 }}
+                      />
+                      {!searching && <SectionDragHandle />}
                       <Typography.Text
                         strong
                         editable={{
@@ -483,6 +590,7 @@ export default function Plan() {
                     </Space>
                   }
                 >
+                  {!collapsed.has(sec.id) && (<>
                   <div style={{ marginBottom: 10 }}>
                     <WoodProgress value={sec.actual_subtotal ?? 0} budget={sec.budget_subtotal ?? 0} size="sm" />
                   </div>
@@ -498,6 +606,7 @@ export default function Plan() {
                         locale={{ emptyText: '该板块还没有项目，点右上角「添加项目」开始' }}
                         columns={itemColumns}
                         summary={() => {
+                          if (searching) return null;
                           const items = sec.items ?? [];
                           if (!items.length) return null;
                           const secBought = items.filter((i) => i.bought || i.actual_amount > 0).length;
@@ -512,12 +621,17 @@ export default function Plan() {
                       />
                     </SortableContext>
                   </DndContext>
+                  </>)}
                 </Card>
               </SortableSectionCard>
             ))}
           </Space>
         </SortableContext>
       </DndContext>
+
+      {searching && visibleSections.length === 0 && (
+        <Card><Empty description={`没有找到与「${search}」匹配的项目`} style={{ padding: 32 }} /></Card>
+      )}
 
       {plan!.unassigned_paid > 0 && (
         <Alert

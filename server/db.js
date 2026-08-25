@@ -40,10 +40,12 @@ CREATE TABLE IF NOT EXISTS items (
   bought       INTEGER NOT NULL DEFAULT 0,
   note         TEXT NOT NULL DEFAULT '',
   sort_order   INTEGER NOT NULL DEFAULT 0,
+  deleted      INTEGER NOT NULL DEFAULT 0,
   created_at   TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
 -- 订单：定金→尾款等多次付款场景，可选挂在某个预算项目下
+-- deleted=1 为软删除（可在删除 toast 里撤销恢复）
 CREATE TABLE IF NOT EXISTS orders (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   title         TEXT NOT NULL,
@@ -52,6 +54,7 @@ CREATE TABLE IF NOT EXISTS orders (
   total_amount  REAL NOT NULL DEFAULT 0,
   note          TEXT NOT NULL DEFAULT '',
   status        TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
+  deleted       INTEGER NOT NULL DEFAULT 0,
   created_at    TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
@@ -80,10 +83,19 @@ CREATE INDEX IF NOT EXISTS idx_receipts_payment ON receipts(payment_id);
 `);
 
 // 存量库迁移：v2 的 actual_price（直填实际价）→ v2.1 的 bought（已买勾选）
-const itemCols = db.prepare('PRAGMA table_info(items)').all().map((c) => c.name);
+let itemCols = db.prepare('PRAGMA table_info(items)').all().map((c) => c.name);
 if (itemCols.includes('actual_price') && !itemCols.includes('bought')) {
   db.exec('ALTER TABLE items ADD COLUMN bought INTEGER NOT NULL DEFAULT 0');
   db.prepare('UPDATE items SET bought = 1 WHERE actual_price IS NOT NULL').run();
+  itemCols = db.prepare('PRAGMA table_info(items)').all().map((c) => c.name);
+}
+// v2.2：软删除标记（订单与项目删除后可撤销）
+if (!itemCols.includes('deleted')) {
+  db.exec('ALTER TABLE items ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0');
+}
+const orderCols = db.prepare('PRAGMA table_info(orders)').all().map((c) => c.name);
+if (!orderCols.includes('deleted')) {
+  db.exec('ALTER TABLE orders ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0');
 }
 
 // 首次运行：默认预算目标 + 预置板块（与用户的评估表一致）
@@ -101,10 +113,10 @@ function seed() {
 }
 seed();
 
-// ===== 通用聚合：项目实际支出 = 已买项总价 + 挂单付款 =====
+// ===== 通用聚合：项目实际支出 = 已买项总价 + 挂单付款（不含软删订单） =====
 export const ITEM_ACTUAL_SQL = `
   (CASE WHEN i.bought = 1 THEN i.quantity * i.unit_price ELSE 0 END
    + COALESCE((SELECT SUM(p.amount) FROM payments p JOIN orders o ON o.id = p.order_id
-               WHERE o.item_id = i.id), 0))`;
+               WHERE o.item_id = i.id AND o.deleted = 0), 0))`;
 
 export default db;

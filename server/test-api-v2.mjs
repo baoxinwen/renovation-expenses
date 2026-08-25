@@ -88,11 +88,29 @@ const ex = await fetch(`${BASE}/export/excel`);
 const buf = Buffer.from(await ex.arrayBuffer());
 check('导出 xlsx', ex.status === 200 && buf.slice(0, 2).toString() === 'PK');
 
-console.log('== 7. 清理测试订单（保留导入的清单与目标） ==');
-await req('DELETE', `/orders/${orderId}`);
+console.log('== 7. 软删除与撤销恢复 ==');
+r = await req('DELETE', `/orders/${orderId}`);
+check('软删订单', r.status === 200 && r.json.deleted === true, JSON.stringify(r.json));
+r = (await req('GET', '/orders')).json;
+check('订单列表不再显示', r.length === 0, `length=${r.length}`);
 r = (await req('GET', '/plan')).json;
-check('订单删除后实际恢复 25849.79', Math.abs(r.actual_total - 25849.79) < 0.5, `=${r.actual_total}`);
-check('清单与目标保留', Math.abs(r.plan_total - 177478) < 1 && r.total_budget === 160000);
+check('软删后实际恢复 25849.79（付款剔除）', Math.abs(r.actual_total - 25849.79) < 0.5, `=${r.actual_total}`);
+r = await req('POST', `/orders/${orderId}/restore`);
+check('恢复订单', r.status === 200 && r.json.paid === 30000);
+r = (await req('GET', '/plan')).json;
+check('恢复后实际回到 55849.79', Math.abs(r.actual_total - 55849.79) < 0.5, `=${r.actual_total}`);
+await req('DELETE', `/orders/${orderId}`); // 最终软删清理
+
+r = (await req('GET', '/plan')).json;
+const hood = r.sections.flatMap((s) => s.items).find((i) => i.name === '抽油烟机');
+r = await req('DELETE', `/items/${hood.id}`);
+check('软删项目', r.status === 200 && r.json.deleted === true);
+r = (await req('GET', '/plan')).json;
+check('清单总计减少 2447.2', Math.abs(r.plan_total - (177478 - 2447.2)) < 1, `=${r.plan_total}`);
+r = await req('POST', `/items/${hood.id}/restore`);
+check('恢复项目', r.status === 200 && r.json.name === '抽油烟机');
+r = (await req('GET', '/plan')).json;
+check('清单与目标保留', Math.abs(r.plan_total - 177478) < 1 && r.total_budget === 160000, `=${r.plan_total}/${r.total_budget}`);
 
 console.log(`\n结果: ${passed} 通过, ${failed} 失败`);
 process.exit(failed ? 1 : 0);
