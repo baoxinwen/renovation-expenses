@@ -1,12 +1,17 @@
 import { createContext, useContext } from 'react';
-import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { ConfigProvider, Layout, Menu } from 'antd';
+import { BrowserRouter, Link, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { Button, ConfigProvider, Layout, Menu } from 'antd';
 import { BarChartOutlined, FileTextOutlined, OrderedListOutlined, SettingOutlined } from '@ant-design/icons';
 import { Toaster } from 'sonner';
 import zhCN from 'antd/locale/zh_CN';
 import dayjs from 'dayjs';
 import { woodTheme } from './styles/theme';
 import { useThemeMode, type ThemeMode } from './hooks/useThemeMode';
+import { useIsMobile } from './hooks/useIsMobile';
+import MobileTabBar from './components/MobileTabBar';
+import MobileHome from './pages/mobile/MobileHome';
+import MobileItems from './pages/mobile/MobileItems';
+import MobileRecord from './pages/mobile/MobileRecord';
 import Plan from './pages/Plan';
 import Analysis from './pages/Analysis';
 import Orders from './pages/Orders';
@@ -50,13 +55,48 @@ function SideMenu() {
 
 export default function App() {
   const { mode, isDark, setMode } = useThemeMode();
+  const isMobile = useIsMobile();
 
   return (
     <ThemeModeContext.Provider value={{ mode, isDark, setMode }}>
       <ConfigProvider locale={zhCN} theme={woodTheme(isDark)}>
         <BrowserRouter>
+          {isMobile ? (
+            /* ============ 移动布局：顶部标题栏 + 内容 + 底部 TabBar ============ */
+            <div style={{ minHeight: '100vh', background: 'var(--bg-linen)' }}>
+              <header
+                className="no-print"
+                style={{
+                  position: 'sticky', top: 0, zIndex: 90,
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '10px 16px',
+                  paddingTop: 'calc(10px + env(safe-area-inset-top, 0px))',
+                  background: 'var(--bg-linen)',
+                  borderBottom: '1px solid var(--line)',
+                }}
+              >
+                <span style={{ fontSize: 16, fontWeight: 650, letterSpacing: '0.05em' }}>🏠 装修账本</span>
+                <Link to="/settings" aria-label="设置">
+                  <Button type="text" size="small" icon={<SettingOutlined />} />
+                </Link>
+              </header>
+              <main style={{ padding: 12, paddingBottom: 'calc(72px + env(safe-area-inset-bottom, 0px))' }}>
+                <Routes>
+                  <Route path="/" element={<MobileHome />} />
+                  <Route path="/items" element={<MobileItems />} />
+                  <Route path="/record" element={<MobileRecord />} />
+                  <Route path="/orders" element={<Orders />} />
+                  <Route path="/orders/:id" element={<OrderDetail />} />
+                  <Route path="/settings" element={<Settings />} />
+                  <Route path="/analysis" element={<Analysis />} />
+                  <Route path="*" element={<MobileHome />} />
+                </Routes>
+              </main>
+              <MobileTabBar />
+            </div>
+          ) : (
+          /* ============ 桌面布局：亚麻侧栏（sticky） ============ */
           <Layout style={{ minHeight: '100vh', background: 'var(--bg-linen)' }}>
-            {/* 亚麻浅色侧栏，sticky 固定不随内容滚动 */}
             <Sider
               breakpoint="lg"
               collapsedWidth="0"
@@ -104,6 +144,7 @@ export default function App() {
               </Content>
             </Layout>
           </Layout>
+          )}
         </BrowserRouter>
         <Toaster
           position="top-center"

@@ -24,6 +24,7 @@ import type { Item, Order, PlanData, Section } from '../api';
 import { fmtMoney, PAY_METHODS } from '../format';
 import ItemFormModal from '../components/ItemFormModal';
 import BuyModal from '../components/BuyModal';
+import QuickPayModal from '../components/QuickPayModal';
 import WoodProgress from '../components/WoodProgress';
 import AnimatedMoney from '../components/AnimatedMoney';
 
@@ -165,8 +166,6 @@ export default function Plan() {
   const [buyTarget, setBuyTarget] = useState<Item | null>(null);
   const [buySaving, setBuySaving] = useState(false);
   const [payTarget, setPayTarget] = useState<Order | null>(null);
-  const [paySaving, setPaySaving] = useState(false);
-  const [payForm] = Form.useForm();
 
   // 清单搜索 / 板块折叠 / 待付尾款
   const [search, setSearch] = useState('');
@@ -293,23 +292,6 @@ export default function Plan() {
       toast.error((e as Error).message);
     } finally {
       setBuySaving(false);
-    }
-  };
-
-  // 待付尾款行内记付款
-  const quickPay = async (values: { amount: number; pay_date: unknown; method?: string; note?: string }) => {
-    if (!payTarget) return;
-    const date = (values.pay_date as dayjs.Dayjs).format('YYYY-MM-DD');
-    setPaySaving(true);
-    try {
-      await api.addPayment(payTarget.id, { amount: values.amount, pay_date: date, method: values.method, note: values.note });
-      toast.success('付款已记录');
-      setPayTarget(null);
-      load();
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setPaySaving(false);
     }
   };
 
@@ -634,11 +616,7 @@ export default function Plan() {
                 title: '', width: 140,
                 render: (_, o) => (
                   <Space size={0} onClick={(e) => e.stopPropagation()}>
-                    <Button type="link" size="small" onClick={() => {
-                      payForm.resetFields();
-                      payForm.setFieldsValue({ amount: o.total_amount - (o.paid ?? 0), pay_date: dayjs(), method: '微信' });
-                      setPayTarget(o);
-                    }}>记一笔</Button>
+                    <Button type="link" size="small" onClick={() => setPayTarget(o)}>记一笔</Button>
                     <Button type="link" size="small" onClick={() => nav(`/orders/${o.id}`)}>详情</Button>
                   </Space>
                 ),
@@ -802,34 +780,7 @@ export default function Plan() {
         confirmLoading={buySaving}
       />
 
-      {/* 待付尾款行内记付款 */}
-      <Modal
-        title={`记付款 · ${payTarget?.title ?? ''}`}
-        open={!!payTarget}
-        onCancel={() => setPayTarget(null)}
-        onOk={() => payForm.submit()}
-        confirmLoading={paySaving}
-        destroyOnClose
-      >
-        <Form form={payForm} layout="vertical" onFinish={quickPay}>
-          <Form.Item
-            name="amount" label="金额（元）"
-            rules={[{ required: true, message: '请输入金额' }]}
-            extra={payTarget ? `未付 ${fmtMoney(payTarget.total_amount - (payTarget.paid ?? 0))}（已预填）` : undefined}
-          >
-            <InputNumber precision={2} style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item name="pay_date" label="付款日期" rules={[{ required: true, message: '请选择日期' }]}>
-            <DatePicker style={{ width: '100%' }} allowClear={false} />
-          </Form.Item>
-          <Form.Item name="method" label="付款方式">
-            <Select allowClear options={PAY_METHODS.map((m) => ({ value: m, label: m }))} />
-          </Form.Item>
-          <Form.Item name="note" label="备注">
-            <Input placeholder="如：中期款、瓷砖尾款" maxLength={100} />
-          </Form.Item>
-        </Form>
-      </Modal>
+      <QuickPayModal order={payTarget} onClose={() => setPayTarget(null)} onDone={load} />
     </Space>
   );
 }
