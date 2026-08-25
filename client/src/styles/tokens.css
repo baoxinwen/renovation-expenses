@@ -1,0 +1,237 @@
+/* ============================================================
+   居家暖木 · 设计令牌
+   亮色 = 亚麻日间 / 暗色 = 暖木夜间（html.dark）
+   ============================================================ */
+:root {
+  /* 色板（亮） */
+  --bg-linen: #faf7f2;
+  --surface: #ffffff;
+  --surface-2: #f5f0e9;
+  --ink: #2b2622;
+  --ink-2: #6b6259;
+  --ink-3: #a2978a;
+  --wood-600: #8c5e3c;
+  --wood-700: #744a2e;
+  --wood-300: #c9ad93;
+  --wood-100: #f0e7dd;
+  --wood-50: #f7f1ea;
+  --clay: #b5542d;
+  --clay-100: #f7e6de;
+  --sage: #7a8b6f;
+  --sage-100: #e9eee5;
+  --amber: #c08a3e;
+  --line: #e8e1d8;
+  --shadow-card: 0 1px 2px rgba(43, 38, 34, 0.04), 0 2px 8px rgba(43, 38, 34, 0.04);
+
+  /* 动效（emil 规范：反馈类、<300ms、禁 ease-in） */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --dur-press: 120ms;
+  --dur-hover: 120ms;
+  --dur-dropdown: 180ms;
+  --dur-modal: 240ms;
+}
+
+html.dark {
+  --bg-linen: #201c19;
+  --surface: #2a2521;
+  --surface-2: #332d28;
+  --ink: #ede7df;
+  --ink-2: #a79c90;
+  --ink-3: #746a5f;
+  --wood-600: #c89b72;
+  --wood-700: #d8b28c;
+  --wood-300: #6e523a;
+  --wood-100: #3a3129;
+  --wood-50: #322b25;
+  --clay: #d97b55;
+  --clay-100: #45312a;
+  --sage: #9bac8e;
+  --sage-100: #33392f;
+  --amber: #d9a55c;
+  --line: #3a342e;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+
+/* ============ 全局基础 ============ */
+html {
+  background: var(--bg-linen);
+}
+
+body {
+  font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 金额与数据：等宽数字，改动不跳动 */
+.tabular,
+.ant-table td,
+.ant-statistic-content,
+.ant-input-number {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 大数字：紧字距（apple-design：字距随字号变化） */
+.num-display {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 小标签：微加字距提升辨识 */
+.label-caption {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--ink-2);
+}
+
+/* 按压反馈（仅精确指针设备；emil: scale .97, 120ms） */
+@media (hover: hover) and (pointer: fine) {
+  .ant-btn:active {
+    transform: scale(0.97);
+  }
+  .pressable {
+    transition: transform var(--dur-press) var(--ease-out);
+  }
+  .pressable:active {
+    transform: scale(0.97);
+  }
+}
+
+/* 键盘焦点可见性 */
+:focus-visible {
+  outline: 2px solid var(--wood-600);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* 暖色细滚动条 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ink-3) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-3);
+}
+
+/* ============ 工具类 ============ */
+/* 保存成功反馈：单元格背景闪一下鼠尾草绿 */
+@keyframes flash-saved {
+  0% { background-color: var(--sage-100); }
+  100% { background-color: transparent; }
+}
+.flash-saved {
+  animation: flash-saved 600ms var(--ease-out);
+}
+
+/* 板块卡片入场：轻微上移淡入，错落 40ms */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.rise-in {
+  opacity: 0;
+  animation: rise-in 280ms var(--ease-out) forwards;
+}
+
+/* 可编辑单元格：hover 浅木底提示可编辑 */
+.editable-cell .ant-input,
+.editable-cell .ant-input-number,
+.editable-cell .ant-input-number .ant-input-number-input {
+  transition: background-color var(--dur-hover) var(--ease-out);
+}
+.editable-cell:hover .ant-input,
+.editable-cell:hover .ant-input-number {
+  background: var(--wood-50);
+}
+
+/* 拖拽手柄 */
+.drag-handle {
+  cursor: grab;
+  color: var(--ink-3);
+  transition: color var(--dur-hover) var(--ease-out);
+  touch-action: none;
+}
+.drag-handle:hover {
+  color: var(--wood-600);
+}
+
+/* ============ AntD 定向覆盖（令牌够不着的少数细节） ============ */
+/* 卡片：暖色边线与柔和投影 */
+.ant-card {
+  box-shadow: var(--shadow-card);
+  border-color: var(--line);
+}
+
+/* 表格：暖色表头、行 hover、表头单行不换行（避免行高被长标题撑爆） */
+.ant-table-thead > tr > th {
+  background: var(--surface-2) !important;
+  color: var(--ink-2);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  padding-top: 7px !important;
+  padding-bottom: 7px !important;
+}
+.ant-table-tbody > tr:hover > td {
+  background: var(--wood-50) !important;
+}
+.ant-table-tbody > tr > td {
+  border-color: var(--line);
+}
+
+/* 数字列：可编辑输入框内部文字右对齐，与只读数字一致 */
+.editable-cell.num .ant-input-number-input {
+  text-align: right;
+}
+
+/* 无边框输入（行内编辑）对齐暖色 */
+.ant-input-borderless,
+.ant-input-number-borderless {
+  color: var(--ink);
+}
+
+/* 侧栏菜单：浅色亚麻材质 */
+.ant-layout-sider .ant-menu {
+  background: transparent;
+}
+
+/* Toast（Sonner）走令牌 */
+[data-sonner-toast] {
+  font-family: inherit;
+}
+
+/* ============ 降级：偏好减弱动效 ============ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .rise-in {
+    opacity: 1;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .ant-btn:active,
+    .pressable:active {
+      transform: none;
+    }
+  }
+}
