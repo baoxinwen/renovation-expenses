@@ -69,29 +69,39 @@ function parseWorkbook(wb) {
   let seq = 0;
   ws.eachRow({ includeEmpty: true }, (row, rn) => {
     if (rn <= headerRow) return;
-    const first = cellText(row.getCell(1).value).trim();
+    // 前 3 列内扫描标记文本：板块行在 A 列（与评估表/本系统导出一致），标签行兼容 A/B 列
+    const heads = [1, 2, 3].map((c) => cellText(row.getCell(c).value).trim()).filter(Boolean);
+    const first = heads[0] ?? '';
     if (!first) return;
 
-    if (first.startsWith('【')) {
-      // 【板块一】硬装施工类（装修公司整包报价） → 硬装施工类
-      let name = first.replace(/^【[^】]*】/, '');
+    const sectionMark = heads.find((t) => t.startsWith('【'));
+    if (sectionMark) {
+      // 两种格式：`【板块一】硬装施工类（注释）`（用户表）与 `【硬装施工类】`（本系统导出）
+      let name = sectionMark.replace(/^【[^】]*】/, '').trim();
+      if (!name) name = (sectionMark.match(/^【([^】]+)】/) || [])[1] ?? '';
       name = name.replace(/（[^）]*）$/, '').replace(/\([^)]*\)$/, '').trim();
-      if (name) sections.push({ name, items: [] });
+      if (name) {
+        // 文件内同名板块（含导出文件重复结构）合并到已有板块，避免 UNIQUE 冲突
+        const existing = sections.find((s) => s.name === name);
+        if (existing) return;
+        sections.push({ name, items: [] });
+      }
       return;
     }
-    if (first.includes('预算目标') || first.includes('总预算')) {
+    const targetMark = heads.find((t) => t.includes('预算目标') || t.includes('总预算'));
+    if (targetMark) {
       // 取该行第一个非空数字
       row.eachCell({ includeEmpty: false }, (c, cn) => {
-        if (target == null && cn > 1) {
+        if (target == null && cn > 3) {
           const n = cellNum(c.value);
-          if (n != null) target = n;
+          if (n != null && n >= 0) target = n;
         }
       });
       return;
     }
     const name = cellText(row.getCell(col.name).value).trim();
     if (!name || name === '序号') return;
-    if (/^(板块小计|全案|合计|总计|实际总价|超支|预算对比)/.test(first)) return;
+    if (/^(板块小计|全案|合计|总计|实际总价|超支|预算对比|清单总计|未关联)/.test(first)) return;
     const seqNum = Number(first);
     if (!Number.isFinite(seqNum)) return;
 
@@ -146,6 +156,9 @@ export default async function (app) {
       return reply.status(400).send({ message: 'Excel 文件解析失败，请确认是有效的 .xlsx' });
     }
 
+    if (wb.worksheets[0] && wb.worksheets[0].rowCount > 3000) {
+      return reply.status(400).send({ message: '工作表行数超过 3000，请检查是否传对了文件' });
+    }
     let parsed;
     try {
       parsed = parseWorkbook(wb);
@@ -158,31 +171,38 @@ export default async function (app) {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     let itemCount = 0;
 
-    db.transaction(() => {
-      if (mode === 'replace') {
-        // 清空清单；项目下订单的 item_id 由外键置空，付款/票据保留
-        db.prepare('DELETE FROM sections').run();
-      }
-      const baseOrder = db.prepare('SELECT COALESCE(MAX(sort_order), -1) AS m FROM sections').get().m + 1;
-      parsed.sections.forEach((sec, si) => {
-        // 追加模式下避免重名
-        let name = sec.name;
-        if (mode === 'append') {
-          let n = 1;
-          const exists = db.prepare('SELECT COUNT(*) AS c FROM sections WHERE name = ?');
-          while (exists.get(name).c > 0) name = `${sec.name}(${++n})`;
+    try {
+      db.transaction(() => {
+        if (mode === 'replace') {
+          // 清空清单；项目下订单的 item_id 由外键置空，付款/票据保留
+          db.prepare('DELETE FROM sections').run();
         }
-        const info = insertSection.run(name, baseOrder + si);
-        sec.items.forEach((it, ii) => {
-          insertItem.run(info.lastInsertRowid, it.name, it.spec, it.unit, it.quantity, it.unit_price, it.bought, it.note, ii);
-          itemCount++;
+        const baseOrder = db.prepare('SELECT COALESCE(MAX(sort_order), -1) AS m FROM sections').get().m + 1;
+        parsed.sections.forEach((sec, si) => {
+          // 追加模式下避免重名
+          let name = sec.name;
+          if (mode === 'append') {
+            let n = 1;
+            const exists = db.prepare('SELECT COUNT(*) AS c FROM sections WHERE name = ?');
+            while (exists.get(name).c > 0) name = `${sec.name}(${++n})`;
+          }
+          const info = insertSection.run(name, baseOrder + si);
+          sec.items.forEach((it, ii) => {
+            insertItem.run(info.lastInsertRowid, it.name, it.spec, it.unit, it.quantity, it.unit_price, it.bought, it.note, ii);
+            itemCount++;
+          });
         });
-      });
-      if (parsed.target != null) {
-        db.prepare(`INSERT INTO settings (key, value) VALUES ('total_budget', ?)
-                    ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(String(parsed.target));
+        if (parsed.target != null) {
+          db.prepare(`INSERT INTO settings (key, value) VALUES ('total_budget', ?)
+                      ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(String(parsed.target));
+        }
+      })();
+    } catch (e) {
+      if (String(e?.message || '').includes('UNIQUE constraint failed')) {
+        return reply.status(400).send({ message: '文件中存在重复的板块名，请检查后重试' });
       }
-    })();
+      throw e;
+    }
 
     return {
       ok: true,

@@ -41,7 +41,9 @@ function receiptFilesOfPayment(paymentId) {
 }
 
 function removeFiles(filenames) {
-  filenames.forEach((f) => fs.unlink(path.join(UPLOAD_DIR, f), () => {}));
+  filenames.forEach((f) => fs.unlink(path.join(UPLOAD_DIR, f), (err) => {
+    if (err) console.warn('清理文件失败（可能已不存在）:', f, err.message);
+  }));
 }
 
 export default async function (app) {
@@ -66,6 +68,10 @@ export default async function (app) {
     const total = Number(b.total_amount);
     if (!Number.isFinite(total) || total <= 0) return reply.status(400).send({ message: '订单总额必须是正数' });
     const itemId = b.item_id ? Number(b.item_id) : null;
+    if (itemId != null) {
+      const targetItem = db.prepare('SELECT id FROM items WHERE id = ? AND deleted = 0').get(itemId);
+      if (!targetItem) return reply.status(400).send({ message: '关联的预算项目不存在（或已删除）' });
+    }
 
     // 一次付清：创建订单的同时记首笔付款；付足自动结清（小件购买一步到位）
     let paidNow = null;
@@ -86,8 +92,10 @@ export default async function (app) {
         .run(title, String(b.vendor ?? ''), itemId, total, String(b.note ?? ''), status);
       const orderId = Number(info.lastInsertRowid);
       if (paidNow) {
-        db.prepare(`INSERT INTO payments (order_id, amount, pay_date, method, note) VALUES (?, ?, ?, ?, ?)`)
-          .run(orderId, paidNow.amount, paidNow.payDate, paidNow.method, paidNow.note || '一次付清');
+        db.transaction(() => {
+          db.prepare(`INSERT INTO payments (order_id, amount, pay_date, method, note) VALUES (?, ?, ?, ?, ?)`)
+            .run(orderId, paidNow.amount, paidNow.payDate, paidNow.method, paidNow.note || '一次付清');
+        })();
       }
       const order = getOrder(orderId);
       const payments = db.prepare('SELECT * FROM payments WHERE order_id = ? ORDER BY pay_date DESC, id DESC')
@@ -113,7 +121,7 @@ export default async function (app) {
 
   app.put('/orders/:id', async (req, reply) => {
     const id = Number(req.params.id);
-    const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
+    const order = db.prepare('SELECT * FROM orders WHERE id = ? AND deleted = 0').get(id);
     if (!order) return reply.status(404).send({ message: '订单不存在' });
     const b = req.body || {};
     const title = b.title !== undefined ? String(b.title).trim() : order.title;
@@ -123,6 +131,10 @@ export default async function (app) {
     const status = b.status !== undefined ? String(b.status) : order.status;
     if (!['open', 'closed'].includes(status)) return reply.status(400).send({ message: '状态不合法' });
     const itemId = 'item_id' in b ? (b.item_id ? Number(b.item_id) : null) : order.item_id;
+    if (itemId != null) {
+      const targetItem = db.prepare('SELECT id FROM items WHERE id = ? AND deleted = 0').get(itemId);
+      if (!targetItem) return reply.status(400).send({ message: '关联的预算项目不存在（或已删除）' });
+    }
     try {
       db.prepare(`UPDATE orders SET title = ?, vendor = ?, item_id = ?, total_amount = ?, note = ?, status = ?
                   WHERE id = ?`)
@@ -220,6 +232,11 @@ export default async function (app) {
       incoming.push({ ext, buf, originalName: file.filename });
     }
     if (!incoming.length) return reply.status(400).send({ message: '未收到任何文件' });
+    if (incoming.length > 10) return reply.status(400).send({ message: '单次最多上传 10 张' });
+    const totalBytes = incoming.reduce((n, f) => n + f.buf.length, 0);
+    if (totalBytes > 30 * 1024 * 1024) {
+      return reply.status(400).send({ message: '单次上传总量超过 30MB，请分批上传' });
+    }
 
     const saved = [];
     const insert = db.prepare('INSERT INTO receipts (payment_id, filename, original_name) VALUES (?, ?, ?)');

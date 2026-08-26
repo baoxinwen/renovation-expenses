@@ -42,11 +42,14 @@ export default async function (app) {
       ORDER BY s.sort_order, s.id`).all();
 
     // 月度趋势 = 真实现金流：订单付款（含退款负数）+ 已买项支出（按购买日期）
+    // 口径约定：挂在软删项目上的订单付款不计（与"实际已花"合计一致，恢复项目后自动回来）
     const byMonth = db.prepare(`
       SELECT month, ROUND(SUM(amount), 2) AS amount FROM (
         SELECT substr(p.pay_date, 1, 7) AS month, p.amount AS amount
-        FROM payments p JOIN orders o ON o.id = p.order_id
-        WHERE o.deleted = 0
+        FROM payments p
+        JOIN orders o ON o.id = p.order_id
+        LEFT JOIN items di ON di.id = o.item_id
+        WHERE o.deleted = 0 AND (o.item_id IS NULL OR di.deleted = 0)
         UNION ALL
         SELECT substr(bought_date, 1, 7) AS month, quantity * unit_price AS amount
         FROM items WHERE deleted = 0 AND bought = 1 AND bought_date IS NOT NULL
@@ -65,7 +68,7 @@ export default async function (app) {
       JOIN orders o ON o.id = p.order_id
       LEFT JOIN items i ON i.id = o.item_id
       LEFT JOIN sections s ON s.id = i.section_id
-      WHERE o.deleted = 0
+      WHERE o.deleted = 0 AND (o.item_id IS NULL OR i.deleted = 0)
       ORDER BY p.pay_date DESC, p.id DESC LIMIT 10`).all();
 
     return { by_section: bySection, by_month: byMonth, top_items: topItems, recent_payments: recentPayments };

@@ -277,6 +277,83 @@ try {
   check('板块与项目全部回来（含新建同名 = 6 个）', r.sections.length === 6, `=${r.sections.length}`);
   check('恢复后床的行还在', r.sections.some((s) => s.items?.some((i) => i.name === '床')));
 
+  console.log('== 10b. 导出→再导入 round-trip（H4） ==');
+  const exBuf = Buffer.from(await (await fetch(`${BASE}/export/excel`)).arrayBuffer());
+  const rtFd = new FormData();
+  rtFd.append('file', new Blob([exBuf]), 'roundtrip.xlsx');
+  const rtRes = await fetch(`${BASE}/plan/import?mode=replace`, { method: 'POST', body: rtFd });
+  const rt = await rtRes.json();
+  check('round-trip 导入成功', rtRes.status === 200, JSON.stringify(rt));
+  check('round-trip 板块结构保留', rt.sections === 5, `=${rt.sections}`);
+  check('round-trip 预算目标保留', rt.target === 160000, `=${rt.target}`);
+  check('round-trip 项目数保留', rt.items === 9, `=${rt.items}`);
+  r = (await req('GET', '/plan')).json;
+  check(`round-trip 清单总计一致（${PLAN_TOTAL.toFixed(2)}）`, Math.abs(r.plan_total - PLAN_TOTAL) < 1, `=${r.plan_total}`);
+  check('round-trip 已买语义保留（冰箱已勾）', r.sections.flatMap((s) => s.items).some((i) => i.name === '冰箱' && i.bought === 1));
+
+  console.log('== 10c. 文件内重名板块合并（M9） ==');
+  const dupWb = new ExcelJS.Workbook();
+  const dupWs = dupWb.addWorksheet('S');
+  dupWs.addRow(['序号', '项目名称', '规格', '单位', '数量', '单价（元）', '总价（元）', '备注']);
+  dupWs.addRow(['【板块X】重复板块', '', '', '', '', '', '', '']);
+  dupWs.addRow([1, '甲物', '', '件', 1, 100, 100]);
+  dupWs.addRow(['【板块X】重复板块', '', '', '', '', '', '', '']);
+  dupWs.addRow([2, '乙物', '', '件', 1, 200, 200]);
+  const dupPath = path.join(tmpDir, 'dup.xlsx');
+  await dupWb.xlsx.writeFile(dupPath);
+  const dupFd = new FormData();
+  dupFd.append('file', new Blob([fs.readFileSync(dupPath)]), 'dup.xlsx');
+  const dupRes = await fetch(`${BASE}/plan/import?mode=replace`, { method: 'POST', body: dupFd });
+  const dup = await dupRes.json();
+  check('重名板块导入不 500', dupRes.status === 200, JSON.stringify(dup).slice(0, 80));
+  r = (await req('GET', '/plan')).json;
+  check('重名板块合并为 1 个且两项都在',
+    r.sections.filter((s) => s.name.includes('重复板块')).length === 1
+    && r.sections.flatMap((s) => s.items).filter((i) => ['甲物', '乙物'].includes(i.name)).length === 2);
+  // 还原现场：重新导入主 fixture
+  const fdRestore = new FormData();
+  fdRestore.append('file', new Blob([fs.readFileSync(fixturePath)]), 'fixture.xlsx');
+  await fetch(`${BASE}/plan/import?mode=replace`, { method: 'POST', body: fdRestore });
+
+  console.log('== 10d. 软删边界（M10） ==');
+  // ③ 订单不可挂软删项目
+  r = (await req('GET', '/plan')).json;
+  const lamp3 = r.sections.flatMap((s) => s.items).find((i) => i.name === '智能开关面板');
+  await req('DELETE', `/items/${lamp3.id}`);
+  r = await req('POST', '/orders', { title: '挂软删项目', item_id: lamp3.id, total_amount: 10 });
+  check('创建订单挂软删项目被拒（400）', r.status === 400, `=${r.status}`);
+  // ② PUT 软删资源返回 404
+  r = await req('PUT', `/items/${lamp3.id}`, { name: '改名' });
+  check('PUT 软删项目返回 404', r.status === 404, `=${r.status}`);
+  // ① 孤儿恢复：删项目→删板块→恢复项目→板块连带恢复
+  r = (await req('GET', '/plan')).json;
+  const bed = r.sections.flatMap((s) => s.items).find((i) => i.name === '床');
+  const furnSec = r.sections.find((s) => s.name.includes('家具'));
+  await req('DELETE', `/items/${bed.id}`);
+  await req('DELETE', `/sections/${furnSec.id}`);
+  r = (await req('GET', '/plan')).json;
+  check('板块+项目删除后清单 4 板块', r.sections.length === 4, `=${r.sections.length}`);
+  r = await req('POST', `/items/${bed.id}/restore`);
+  check('恢复项目成功', r.status === 200);
+  r = (await req('GET', '/plan')).json;
+  check('所属板块连带恢复（无孤儿，5 板块）', r.sections.length === 5, `=${r.sections.length}`);
+  check('床回到清单', r.sections.flatMap((s) => s.items).some((i) => i.name === '床'));
+
+  // by_month 口径：软删项目的挂单付款不计入月度趋势
+  r = await req('POST', '/orders', { title: '口径测试单', item_id: bed.id, total_amount: 500 });
+  const kjOrderId = r.json.id;
+  await req('POST', `/orders/${kjOrderId}/payments`, { amount: 500, pay_date: '2026-07-01' });
+  let charts1 = (await req('GET', '/stats/charts')).json;
+  check('口径基准：07 月含 500', charts1.by_month.some((m) => m.month === '2026-07' && m.amount === 500), JSON.stringify(charts1.by_month));
+  await req('DELETE', `/items/${bed.id}`);
+  let charts2 = (await req('GET', '/stats/charts')).json;
+  check('软删项目后 07 月付款剔除（M1 口径统一）', !charts2.by_month.some((m) => m.month === '2026-07'), JSON.stringify(charts2.by_month));
+  await req('POST', `/items/${bed.id}/restore`);
+  let charts3 = (await req('GET', '/stats/charts')).json;
+  check('恢复项目后 07 月回来', charts3.by_month.some((m) => m.month === '2026-07' && m.amount === 500));
+  await req('DELETE', `/orders/${kjOrderId}`);
+  await req('POST', `/items/${bed.id}/restore`);
+
   console.log('== 10. 请求防护（#4） ==');
   let res4 = await fetch(`${BASE}/settings`, { headers: { Origin: 'https://evil.example.com' } });
   check('恶意 Origin 被拒', res4.status === 403, `status=${res4.status}`);

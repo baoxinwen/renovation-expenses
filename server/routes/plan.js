@@ -148,7 +148,7 @@ export default async function (app) {
 
   app.put('/items/:id', async (req, reply) => {
     const id = Number(req.params.id);
-    const item = db.prepare('SELECT * FROM items WHERE id = ?').get(id);
+    const item = db.prepare('SELECT * FROM items WHERE id = ? AND deleted = 0').get(id);
     if (!item) return reply.status(404).send({ message: '项目不存在' });
     const b = req.body || {};
     const name = b.name !== undefined ? String(b.name).trim() : item.name;
@@ -165,11 +165,10 @@ export default async function (app) {
       if (b.bought_date == null || b.bought_date === '') boughtDate = null;
       else {
         const d = String(b.bought_date);
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(d)
-          || Number(d.slice(5, 7)) < 1 || Number(d.slice(5, 7)) > 12
-          || Number(d.slice(8, 10)) < 1 || Number(d.slice(8, 10)) > 31) {
-          return reply.status(400).send({ message: '购买日期无效' });
-        }
+        const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d);
+        const dt = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
+        const ok = dt && dt.getFullYear() === Number(m[1]) && dt.getMonth() === Number(m[2]) - 1 && dt.getDate() === Number(m[3]);
+        if (!ok) return reply.status(400).send({ message: '购买日期无效（应为真实日期）' });
         boughtDate = d;
       }
     }
@@ -199,8 +198,21 @@ export default async function (app) {
   });
 
   app.post('/items/:id/restore', async (req, reply) => {
-    const info = db.prepare('UPDATE items SET deleted = 0 WHERE id = ? AND deleted = 1').run(Number(req.params.id));
-    if (info.changes === 0) return reply.status(404).send({ message: '没有可恢复的项目' });
-    return db.prepare(`${ITEM_SELECT} WHERE i.id = ?`).get(Number(req.params.id));
+    const id = Number(req.params.id);
+    const item = db.prepare('SELECT * FROM items WHERE id = ? AND deleted = 1').get(id);
+    if (!item) return reply.status(404).send({ message: '没有可恢复的项目' });
+    // 所属板块已软删时连带恢复，避免出现"计入总计但任何列表不可见"的孤儿
+    const sec = db.prepare('SELECT * FROM sections WHERE id = ? AND deleted = 1').get(item.section_id);
+    const restore = db.transaction(() => {
+      if (sec) {
+        const originalName = sec.name.replace(`#已删${sec.id}`, '');
+        const taken = db.prepare('SELECT COUNT(*) AS c FROM sections WHERE name = ? AND id != ?').get(originalName, sec.id).c > 0;
+        db.prepare('UPDATE sections SET deleted = 0, name = ? WHERE id = ?')
+          .run(taken ? `${originalName}（恢复）` : originalName, sec.id);
+      }
+      db.prepare('UPDATE items SET deleted = 0 WHERE id = ?').run(id);
+    });
+    restore();
+    return db.prepare(`${ITEM_SELECT} WHERE i.id = ?`).get(id);
   });
 }

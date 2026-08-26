@@ -92,8 +92,11 @@ CREATE INDEX IF NOT EXISTS idx_receipts_payment ON receipts(payment_id);
 // 存量库迁移：v2 的 actual_price（直填实际价）→ v2.1 的 bought（已买勾选）
 let itemCols = db.prepare('PRAGMA table_info(items)').all().map((c) => c.name);
 if (itemCols.includes('actual_price') && !itemCols.includes('bought')) {
-  db.exec('ALTER TABLE items ADD COLUMN bought INTEGER NOT NULL DEFAULT 0');
-  db.prepare('UPDATE items SET bought = 1 WHERE actual_price IS NOT NULL').run();
+  // 事务性 DDL：中途崩溃不会留下半迁移状态
+  db.transaction(() => {
+    db.exec('ALTER TABLE items ADD COLUMN bought INTEGER NOT NULL DEFAULT 0');
+    db.prepare('UPDATE items SET bought = 1 WHERE actual_price IS NOT NULL').run();
+  })();
   itemCols = db.prepare('PRAGMA table_info(items)').all().map((c) => c.name);
 }
 // v2.2：软删除标记（订单与项目删除后可撤销）

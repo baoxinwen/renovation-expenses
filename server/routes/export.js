@@ -69,7 +69,8 @@ export default async function (app) {
       const items = itemsBySection.all(sec.id);
       if (!items.length) return;
       const secRow = ++r;
-      const secCell = ws.getCell(`B${r}`);
+      // 板块名写在第 1 列（与用户评估表一致），保证导出文件可再导入还原板块结构
+      const secCell = ws.getCell(`A${r}`);
       secCell.value = `【${sec.name}】`;
       secCell.font = { bold: true, size: 12 };
       items.forEach((it) => {
