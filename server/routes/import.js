@@ -133,7 +133,7 @@ export default async function (app) {
     }
     const ext = file.filename.toLowerCase();
     if (!ext.endsWith('.xlsx') && !ext.endsWith('.xlsm')) {
-      return reply.status(400).send({ message: '只支持 .xlsx 文件' });
+      return reply.status(400).send({ message: '只支持 .xlsx / .xlsm 文件' });
     }
     const buf = await file.toBuffer();
     if (file.truncated) {
