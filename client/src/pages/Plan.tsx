@@ -108,7 +108,8 @@ function SortableRow(props: React.HTMLAttributes<HTMLTableRowElement> & { 'data-
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: id! });
   const style: React.CSSProperties = {
     ...props.style,
-    transform: CSS.Transform.toString(transform),
+    // 垂直排序：忽略水平位移，防止拖拽中行体超出容器出现横向滚动条
+    transform: CSS.Transform.toString(transform ? { ...transform, x: 0 } : transform),
     transition,
     ...(isDragging ? { position: 'relative', zIndex: 2, background: 'var(--surface)', boxShadow: 'var(--shadow-card)' } : {}),
   };
