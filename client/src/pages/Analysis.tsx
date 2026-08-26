@@ -6,6 +6,9 @@ import { toast } from 'sonner';
 import { api } from '../api';
 import type { Charts, Summary } from '../api';
 import { fmtMoney } from '../format';
+
+// 图表 Y 轴万元缩写（两处共用）
+const fmtAxisWan = (v: number) => (v >= 10000 ? v / 10000 + '万' : String(v));
 import { useThemeModeCtx } from '../App';
 import { chartThemeName, chartColors } from '../utils/echartsTheme';
 import AnimatedMoney from '../components/AnimatedMoney';
@@ -57,7 +60,7 @@ export default function Analysis() {
     tooltip: { trigger: 'axis', valueFormatter: (v: number) => fmtMoney(v) },
     grid: { left: 70, right: 20, top: 20, bottom: 30 },
     xAxis: { type: 'category', data: (charts?.by_month ?? []).map((m) => m.month) },
-    yAxis: { type: 'value', axisLabel: { formatter: (v: number) => (v >= 10000 ? v / 10000 + '万' : v) } },
+    yAxis: { type: 'value', axisLabel: { formatter: fmtAxisWan } },
     series: [{
       type: 'bar',
       data: (charts?.by_month ?? []).map((m) => m.amount),
@@ -70,7 +73,7 @@ export default function Analysis() {
     tooltip: { trigger: 'axis', valueFormatter: (v: number) => fmtMoney(v) },
     legend: { top: 0 },
     grid: { left: 110, right: 40, top: 36, bottom: 30 },
-    xAxis: { type: 'value', axisLabel: { formatter: (v: number) => (v >= 10000 ? v / 10000 + '万' : v) } },
+    xAxis: { type: 'value', axisLabel: { formatter: fmtAxisWan } },
     yAxis: { type: 'category', inverse: true, data: chartable.map((i) => i.name) },
     series: [
       { name: '预算', type: 'bar', data: chartable.map((i) => i.budget), barMaxWidth: 14, itemStyle: { color: colors.budget, borderRadius: [0, 4, 4, 0] } },

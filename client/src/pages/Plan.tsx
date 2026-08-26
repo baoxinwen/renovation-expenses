@@ -19,6 +19,7 @@ import { api } from '../api';
 import type { Item, Order, PlanData, Section } from '../api';
 import { fmtMoney } from '../format';
 import ItemFormModal from '../components/ItemFormModal';
+import { confirmAsync } from '../utils/confirm';
 import { EditableText, EditableNum, SortableRow, DragHandle, SectionDragHandle, SortableSectionCard } from '../components/plan/PlanEditing';
 import BuyModal from '../components/BuyModal';
 import QuickPayModal from '../components/QuickPayModal';
@@ -135,22 +136,25 @@ export default function Plan() {
 
   // 勾「已买」→ 打开购买登记弹窗（确认成交价与日期；原价由后端存为预算基线）
   const confirmBuy = async (itemId: number, price: number, date: string) => {
-    const item = buyTarget;
-    if (item && !item.bought && item.order_paid > 0) {
-      const proceed = await new Promise<boolean>((resolve) => {
-        Modal.confirm({
-          title: '该项目已有订单付款，可能重复计入',
-          content: `「${item.name}」下订单已付 ${fmtMoney(item.order_paid)}，再记为已买会把总价也计入实际。通常二选一即可，仍要记吗？`,
-          okText: '仍要记',
-          onOk: () => resolve(true),
-          onCancel: () => resolve(false),
-        });
-      });
-      if (!proceed) return;
-    }
     setBuySaving(true);
     try {
-      const updated = await api.updateItem(itemId, { bought: true, unit_price: price, bought_date: date });
+      // 后端 409（项目下已有订单付款）时弹确认，用户坚持则带 force 重试
+      const submit = (force: boolean) =>
+        api.updateItem(itemId, { bought: true, unit_price: price, bought_date: date, ...(force ? { force } : {}) });
+      let updated: Awaited<ReturnType<typeof api.updateItem>>;
+      try {
+        updated = await submit(false);
+      } catch (e) {
+        if (!(e as Error).message.includes('重复计入')) throw e;
+        const item = buyTarget;
+        const ok = await confirmAsync({
+          title: '该项目已有订单付款，可能重复计入',
+          content: item ? `「${item.name}」下订单已付 ${fmtMoney(item.order_paid)}，再记为已买会把总价也计入实际。通常二选一即可，仍要记吗？` : '',
+          okText: '仍要记',
+        });
+        if (!ok) return;
+        updated = await submit(true);
+      }
       patchItem(updated);
       setBuyTarget(null);
     } catch (e) {
@@ -297,16 +301,16 @@ export default function Plan() {
     );
   }
 
-  const diff = plan!.plan_total - plan!.total_budget;
-  const overBudget = plan!.total_budget > 0 && diff > 0;
-  const allItems = plan!.sections.flatMap((s) => s.items ?? []);
+  const diff = plan.plan_total - plan.total_budget;
+  const overBudget = plan.total_budget > 0 && diff > 0;
+  const allItems = plan.sections.flatMap((s) => s.items ?? []);
   const bought = allItems.filter((i) => i.bought || i.actual_amount > 0).length;
 
   // 搜索过滤（名称/规格/备注；命中的板块保留，空的隐藏）
   const q = search.trim().toLowerCase();
   const searching = q.length > 0;
   const visibleSections = searching
-    ? plan!.sections
+    ? plan.sections
         .map((sec) => ({
           ...sec,
           items: (sec.items ?? []).filter((it) =>
@@ -315,7 +319,7 @@ export default function Plan() {
             it.note.toLowerCase().includes(q)),
         }))
         .filter((sec) => (sec.items ?? []).length > 0)
-    : plan!.sections;
+    : plan.sections;
   const totalUnpaid = unpaid.reduce((s, o) => s + Math.max(0, o.total_amount - (o.paid ?? 0)), 0);
 
   const itemColumns: TableColumnsType<Item> = [
@@ -389,18 +393,18 @@ export default function Plan() {
         <Col xs={24} md={16}>
           <Card>
             <div className="label-caption" style={{ marginBottom: 4 }}>预算健康 · 清单总计</div>
-            <AnimatedMoney value={plan!.plan_total} style={{ fontSize: 34, color: 'var(--ink)', display: 'block' }} />
+            <AnimatedMoney value={plan.plan_total} style={{ fontSize: 34, color: 'var(--ink)', display: 'block' }} />
             <div style={{ margin: '12px 0 8px' }}>
-              <WoodProgress value={plan!.plan_total} budget={plan!.total_budget} size="lg" />
+              <WoodProgress value={plan.plan_total} budget={plan.total_budget} size="lg" />
             </div>
             <Space size={6} style={{ marginTop: 4 }}>
-              <span className="label-caption">目标 {fmtMoney(plan!.total_budget)}</span>
-              {plan!.total_budget > 0 && (
+              <span className="label-caption">目标 {fmtMoney(plan.total_budget)}</span>
+              {plan.total_budget > 0 && (
                 <span className="tabular" style={{ fontWeight: 600, color: overBudget ? 'var(--clay)' : 'var(--sage)' }}>
                   {overBudget ? `超支 ${fmtMoney(diff)}` : `结余 ${fmtMoney(-diff)}`}
                 </span>
               )}
-              <Button type="text" size="small" icon={<EditOutlined />} onClick={() => { targetForm.setFieldsValue({ total_budget: plan!.total_budget }); setTargetOpen(true); }}>
+              <Button type="text" size="small" icon={<EditOutlined />} onClick={() => { targetForm.setFieldsValue({ total_budget: plan.total_budget }); setTargetOpen(true); }}>
                 改目标
               </Button>
             </Space>
@@ -409,7 +413,7 @@ export default function Plan() {
         <Col xs={12} md={4}>
           <Card style={{ height: '100%' }}>
             <div className="label-caption">实际已花</div>
-            <AnimatedMoney value={plan!.actual_total} style={{ fontSize: 22, display: 'block', marginTop: 8 }} />
+            <AnimatedMoney value={plan.actual_total} style={{ fontSize: 22, display: 'block', marginTop: 8 }} />
             <div className="label-caption" style={{ marginTop: 8 }}>已买项总价 + 订单付款</div>
           </Card>
         </Col>
@@ -502,7 +506,7 @@ export default function Plan() {
 
       {/* ===== 板块 → 项目清单（可拖拽） ===== */}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onSectionDragEnd}>
-        <SortableContext items={searching ? [] : plan!.sections.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+        <SortableContext items={searching ? [] : plan.sections.map((s) => s.id)} strategy={verticalListSortingStrategy}>
           <Space direction="vertical" size={16} style={{ width: '100%' }}>
             {visibleSections.map((sec, idx) => (
               <SortableSectionCard key={sec.id} section={sec} index={idx}>
@@ -602,11 +606,11 @@ export default function Plan() {
         <Card><Empty description={`没有找到与「${search}」匹配的项目`} style={{ padding: 32 }} /></Card>
       )}
 
-      {plan!.unassigned_paid > 0 && (
+      {plan.unassigned_paid > 0 && (
         <Alert
           type="warning"
           showIcon
-          message={`有 ${fmtMoney(plan!.unassigned_paid)} 的订单付款未挂到任何预算项目，不计入清单实际合计。可在订单页把订单关联到项目。`}
+          message={`有 ${fmtMoney(plan.unassigned_paid)} 的订单付款未挂到任何预算项目，不计入清单实际合计。可在订单页把订单关联到项目。`}
           action={<Button size="small" onClick={() => nav('/orders')}>去订单</Button>}
         />
       )}

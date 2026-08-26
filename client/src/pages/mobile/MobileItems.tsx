@@ -121,7 +121,8 @@ export default function MobileItems() {
             if (!ok) return;
           }
           try {
-            await api.updateItem(itemId, { bought: true, unit_price: price, bought_date: date });
+            // 前置确认已通过 → 直接带 force（后端 409 守卫已由确认满足）
+            await api.updateItem(itemId, { bought: true, unit_price: price, bought_date: date, force: true });
             setBuyTarget(null);
             toast.success('已记录购买');
             load();

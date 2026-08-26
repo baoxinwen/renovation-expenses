@@ -7,6 +7,7 @@ import { Input, InputNumber } from 'antd';
 import { HolderOutlined } from '@ant-design/icons';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities';
 import type { Section } from '../../api';
 
 // ---------- 行内编辑单元格：失焦提交；成功闪光 / 失败回滚 ----------
@@ -82,7 +83,7 @@ export function EditableNum({ value, onCommit }: {
 }
 
 // ---------- dnd-kit：项目行拖拽（拖手柄列） ----------
-const RowListenersContext = createContext<{ listeners?: Record<string, unknown> }>({});
+const RowListenersContext = createContext<{ listeners?: SyntheticListenerMap }>({});
 
 export function SortableRow(props: React.HTMLAttributes<HTMLTableRowElement> & { 'data-row-key'?: number }) {
   const id = props['data-row-key'];
@@ -107,7 +108,7 @@ export function DragHandle() {
 }
 
 // ---------- dnd-kit：板块卡片拖拽 ----------
-const SectionHandleContext = createContext<{ listeners?: Record<string, unknown> }>({});
+const SectionHandleContext = createContext<{ listeners?: SyntheticListenerMap }>({});
 
 export function SectionDragHandle() {
   const { listeners } = useContext(SectionHandleContext);

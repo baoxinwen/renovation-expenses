@@ -30,7 +30,7 @@ export default function QuickPayModal({ order, onClose, onDone }: {
     }
   }, [order, form]);
 
-  const submit = async (values: { amount: number; pay_date: unknown; method?: string; note?: string }) => {
+  const submit = async (values: { amount: number; pay_date: dayjs.Dayjs; method?: string; note?: string }) => {
     if (!order) return;
     const remaining = order.total_amount - (order.paid ?? 0);
     // 负数=退款、超过未付余额=补差价，都属于非常规操作，二次确认防误触
@@ -46,7 +46,7 @@ export default function QuickPayModal({ order, onClose, onDone }: {
     try {
       const payment = await api.addPayment(order.id, {
         amount: values.amount,
-        pay_date: (values.pay_date as dayjs.Dayjs).format('YYYY-MM-DD'),
+        pay_date: values.pay_date.format('YYYY-MM-DD'),
         method: values.method,
         note: values.note,
       });

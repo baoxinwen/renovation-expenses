@@ -46,7 +46,7 @@ export default function MobileRecord() {
     .map((it) => ({ value: it.id, label: `${it.name}${it.spec ? ` · ${it.spec}` : ''}`, item: it }));
 
   // ---- 流程 1：付一笔款 ----
-  const submitPay = async (v: { order_id: number; amount: number; pay_date: unknown; method?: string; note?: string }) => {
+  const submitPay = async (v: { order_id: number; amount: number; pay_date: dayjs.Dayjs; method?: string; note?: string }) => {
     const order = openOrders.find((o) => o.id === v.order_id);
     if (!order) return toast.error('请选择订单');
     const remaining = order.total_amount - (order.paid ?? 0);
@@ -62,7 +62,7 @@ export default function MobileRecord() {
     try {
       const payment = await api.addPayment(order.id, {
         amount: v.amount,
-        pay_date: (v.pay_date as dayjs.Dayjs).format('YYYY-MM-DD'),
+        pay_date: v.pay_date.format('YYYY-MM-DD'),
         method: v.method,
         note: v.note,
       });
@@ -82,10 +82,11 @@ export default function MobileRecord() {
   };
 
   // ---- 流程 2：买了东西（已买登记） ----
-  const submitBought = async (v: { item_id: number; price: number; date: unknown }) => {
+  const submitBought = async (v: { item_id: number; price: number; date: dayjs.Dayjs }) => {
     const item = allItems.find((it) => it.id === v.item_id);
     if (!item) return toast.error('请选择项目');
-    if (doubleCountRisk(item)) {
+    const doubleCount = doubleCountRisk(item);
+    if (doubleCount) {
       const ok = await confirmDoubleCount(item);
       if (!ok) return;
     }
@@ -94,7 +95,8 @@ export default function MobileRecord() {
       await api.updateItem(item.id, {
         bought: true,
         unit_price: v.price,
-        bought_date: (v.date as dayjs.Dayjs).format('YYYY-MM-DD'),
+        bought_date: v.date.format('YYYY-MM-DD'),
+        ...(doubleCount ? { force: true } : {}),
       });
       toast.success(`已记录：${item.name}`);
       setBoughtItem(null);
@@ -110,7 +112,7 @@ export default function MobileRecord() {
   // ---- 流程 3：新购买（一次付清含票据） ----
   const submitNew = async (v: {
     item_id?: number; title: string; vendor?: string; total_amount: number;
-    pay_date: unknown; pay_method?: string; note?: string;
+    pay_date: dayjs.Dayjs; pay_method?: string; note?: string;
   }) => {
     setSaving(true);
     try {
@@ -122,7 +124,7 @@ export default function MobileRecord() {
         note: v.note,
         paid_now: {
           amount: v.total_amount,
-          pay_date: (v.pay_date as dayjs.Dayjs).format('YYYY-MM-DD'),
+          pay_date: v.pay_date.format('YYYY-MM-DD'),
           method: v.pay_method ?? '微信',
         },
       });

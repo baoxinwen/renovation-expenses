@@ -152,7 +152,7 @@ export const api = {
   updateItem: (id: number, patch: Partial<{
     name: string; spec: string; unit: string; quantity: number;
     unit_price: number; bought: boolean; bought_date: string | null; note: string;
-  }>) => req<Item>(`/api/items/${id}`, 'PUT', patch),
+  }> & { force?: boolean }) => req<Item>(`/api/items/${id}`, 'PUT', patch),
   deleteItem: (id: number) => req<{ ok: boolean; deleted: boolean }>(`/api/items/${id}`, 'DELETE'),
   restoreItem: (id: number) => req<Item>(`/api/items/${id}/restore`, 'POST'),
   reorderItems: (ids: number[]) => req('/api/items/reorder', 'PUT', { ids }),
