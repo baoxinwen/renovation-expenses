@@ -31,8 +31,18 @@ export const ThemeModeContext = createContext<{
 });
 export const useThemeModeCtx = () => useContext(ThemeModeContext);
 
-function SideMenu() {
-  const nav = useNavigate();
+/** 内容区宽度分级：记录/管理页收窄居中，重表格页稍宽（解决宽屏下的空旷感） */
+function ContentShell({ children }: { children: React.ReactNode }) {
+  const loc = useLocation();
+  const narrow = loc.pathname.startsWith('/orders') || loc.pathname.startsWith('/settings');
+  return (
+    <Content style={{ padding: 24, maxWidth: narrow ? 960 : 1140, margin: '0 auto', width: '100%' }}>
+      {children}
+    </Content>
+  );
+}
+
+function SideMenu() {  const nav = useNavigate();
   const loc = useLocation();
   const selected = loc.pathname.startsWith('/orders')
     ? '/orders'
@@ -133,7 +143,7 @@ export default function App() {
               </div>
             </Sider>
             <Layout style={{ background: 'transparent' }}>
-              <Content style={{ padding: 24, maxWidth: 1440, margin: '0 auto', width: '100%' }}>
+              <ContentShell>
                 <Routes>
                   <Route path="/" element={<Plan />} />
                   <Route path="/analysis" element={<Analysis />} />
@@ -142,7 +152,7 @@ export default function App() {
                   <Route path="/settings" element={<Settings />} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
-              </Content>
+              </ContentShell>
             </Layout>
           </Layout>
           )}

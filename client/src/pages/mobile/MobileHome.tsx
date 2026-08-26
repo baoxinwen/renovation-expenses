@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button, Card, Empty, Skeleton, Space } from 'antd';
 import { toast } from 'sonner';
 import { api } from '../../api';
-import type { Order, PlanData } from '../../api';
+import type { Charts, Order, PlanData } from '../../api';
 import { fmtMoney } from '../../format';
 import WoodProgress from '../../components/WoodProgress';
 import AnimatedMoney from '../../components/AnimatedMoney';
@@ -14,12 +14,14 @@ export default function MobileHome() {
   const nav = useNavigate();
   const [plan, setPlan] = useState<PlanData | null>(null);
   const [unpaid, setUnpaid] = useState<Order[]>([]);
+  const [charts, setCharts] = useState<Charts | null>(null);
   const [payTarget, setPayTarget] = useState<Order | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [p, orders] = await Promise.all([api.getPlan(), api.getOrders({ status: 'open' })]);
+      const [p, orders, c] = await Promise.all([api.getPlan(), api.getOrders({ status: 'open' }), api.getCharts()]);
       setPlan(p);
+      setCharts(c);
       setUnpaid(orders.filter((o) => (o.paid ?? 0) < o.total_amount && o.total_amount > 0));
     } catch (e) {
       toast.error((e as Error).message);
@@ -86,6 +88,24 @@ export default function MobileHome() {
           ))
         )}
       </Card>
+
+      {(charts?.recent_payments ?? []).length > 0 && (
+        <Card title="最近付款" styles={{ body: { padding: '4px 12px 12px' }, header: { fontSize: 15, minHeight: 40 } }}>
+          {charts!.recent_payments.slice(0, 3).map((r) => (
+            <div
+              key={r.id}
+              onClick={() => nav(`/orders/${r.order_id}`)}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', borderBottom: '1px solid var(--line)' }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.order_title}</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-2)' }}>{r.pay_date}{r.item_name ? ` · ${r.item_name}` : ''}</div>
+              </div>
+              <span className="tabular" style={{ fontWeight: 600 }}>{fmtMoney(r.amount)}</span>
+            </div>
+          ))}
+        </Card>
+      )}
 
       <Card styles={{ body: { padding: 14 } }}>
         <div style={{ display: 'flex', gap: 10 }}>

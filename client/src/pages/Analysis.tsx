@@ -32,6 +32,23 @@ export default function Analysis() {
 
   useEffect(() => { load(); }, [load]);
 
+
+  // TOP10 拆分：前 5 详画，其余合并为「其他」，避免长尾压扁
+  const chartable = useMemo(() => {
+    const items = charts?.top_items ?? [];
+    if (items.length <= 5) return items;
+    const rest = items.slice(5);
+    return [
+      ...items.slice(0, 5),
+      {
+        id: -1,
+        name: `其他 ${rest.length} 项`,
+        budget: rest.reduce((n, i) => n + i.budget, 0),
+        actual: rest.reduce((n, i) => n + i.actual, 0),
+      },
+    ];
+  }, [charts]);
+
   const themeName = useMemo(() => chartThemeName(isDark), [isDark]);
   const colors = chartColors(isDark);
 
@@ -65,12 +82,12 @@ export default function Analysis() {
     legend: { top: 0 },
     grid: { left: 110, right: 40, top: 36, bottom: 30 },
     xAxis: { type: 'value', axisLabel: { formatter: (v: number) => (v >= 10000 ? v / 10000 + '万' : v) } },
-    yAxis: { type: 'category', inverse: true, data: (charts?.top_items ?? []).map((i) => i.name) },
+    yAxis: { type: 'category', inverse: true, data: chartable.map((i) => i.name) },
     series: [
-      { name: '预算', type: 'bar', data: (charts?.top_items ?? []).map((i) => i.budget), barMaxWidth: 14, itemStyle: { color: colors.budget, borderRadius: [0, 4, 4, 0] } },
-      { name: '实际', type: 'bar', data: (charts?.top_items ?? []).map((i) => i.actual), barMaxWidth: 14, itemStyle: { color: colors.actual, borderRadius: [0, 4, 4, 0] } },
+      { name: '预算', type: 'bar', data: chartable.map((i) => i.budget), barMaxWidth: 14, itemStyle: { color: colors.budget, borderRadius: [0, 4, 4, 0] } },
+      { name: '实际', type: 'bar', data: chartable.map((i) => i.actual), barMaxWidth: 14, itemStyle: { color: colors.actual, borderRadius: [0, 4, 4, 0] } },
     ],
-  }), [charts, colors]);
+  }), [chartable, colors]);
 
   // 错误/加载早退必须位于全部 useMemo 之后（React 不允许条件分支改变 hook 数量）
   if (error) {
@@ -98,6 +115,7 @@ export default function Analysis() {
   }
 
   const diff = summary ? summary.plan_total - summary.total_budget : 0;
+
 
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
@@ -139,52 +157,84 @@ export default function Analysis() {
         </Col>
       </Row>
 
-      <Card title="板块汇总：预算 vs 实际" size="small">
-        <Table
-          rowKey="id"
-          size="small"
-          dataSource={summary?.sections ?? []}
-          pagination={false}
-          columns={[
-            { title: '板块', dataIndex: 'name' },
-            { title: '项目数', dataIndex: 'item_count', width: 80, align: 'right' },
-            { title: '已落实', dataIndex: 'bought_count', width: 80, align: 'right' },
-            { title: '预算小计', dataIndex: 'budget_subtotal', width: 130, align: 'right', render: (v: number) => <span className="tabular">{fmtMoney(v)}</span> },
-            { title: '实际小计', dataIndex: 'actual_subtotal', width: 130, align: 'right', render: (v: number) => <span className="tabular">{fmtMoney(v)}</span> },
-            {
-              title: '执行率', width: 110, align: 'right',
-              render: (_, s: Summary['sections'][number]) => {
-                if (!s.budget_subtotal) return <span style={{ color: 'var(--ink-3)' }}>—</span>;
-                const pct = s.actual_subtotal / s.budget_subtotal;
-                return <Tag color={pct > 1 ? 'error' : pct >= 0.9 ? 'warning' : 'success'}>{Math.round(pct * 100)}%</Tag>;
-              },
-            },
-          ]}
-        />
-      </Card>
-
       <Row gutter={16}>
-        <Col xs={24} lg={12}>
-          <Card title="板块预算 vs 实际" size="small">
-            {charts?.by_section?.length
-              ? <ReactECharts option={sectionOption} theme={themeName} notMerge style={{ height: 260 }} />
-              : <Empty description="清单还没有项目，去预算清单页添加或导入" style={{ padding: 32 }} />}
+        <Col xs={24} lg={13}>
+          <Card title="板块汇总：预算 vs 实际" size="small">
+            <Table
+              rowKey="id"
+              size="small"
+              dataSource={summary?.sections ?? []}
+              pagination={false}
+              columns={[
+                { title: '板块', dataIndex: 'name', render: (v: string) => <span style={{ whiteSpace: 'nowrap' }}>{v}</span> },
+                { title: '项目数', dataIndex: 'item_count', width: 60, align: 'right' },
+                { title: '已落实', dataIndex: 'bought_count', width: 60, align: 'right' },
+                { title: '预算小计', dataIndex: 'budget_subtotal', width: 110, align: 'right', render: (v: number) => <span className="tabular">{fmtMoney(v)}</span> },
+                { title: '实际小计', dataIndex: 'actual_subtotal', width: 110, align: 'right', render: (v: number) => <span className="tabular">{fmtMoney(v)}</span> },
+                {
+                  title: '执行率', width: 90, align: 'right',
+                  render: (_, s: Summary['sections'][number]) => {
+                    if (!s.budget_subtotal) return <span style={{ color: 'var(--ink-3)' }}>—</span>;
+                    const pct = s.actual_subtotal / s.budget_subtotal;
+                    // 0% = 还没开始，中性灰；>=90% 预警橙；>100% 超支红
+                    const color = pct === 0 ? undefined : pct > 1 ? 'error' : pct >= 0.9 ? 'warning' : 'success';
+                    return <Tag color={color}>{Math.round(pct * 100)}%</Tag>;
+                  },
+                },
+              ]}
+            />
           </Card>
         </Col>
-        <Col xs={24} lg={12}>
+        <Col xs={24} lg={11}>
           <Card title="月度付款趋势（含已买支出）" size="small">
             {charts?.by_month?.length
-              ? <ReactECharts option={monthOption} theme={themeName} notMerge style={{ height: 260 }} />
+              ? <ReactECharts option={monthOption} theme={themeName} notMerge style={{ height: 300 }} />
               : <Empty description="还没有付款记录——到订单页记第一笔定金" style={{ padding: 32 }} />}
           </Card>
         </Col>
       </Row>
 
-      <Card title="花费 TOP10 项目（按预算）" size="small">
-        {charts?.top_items?.length
-          ? <ReactECharts option={topOption} theme={themeName} notMerge style={{ height: 360 }} />
-          : <Empty description="清单还没有项目" style={{ padding: 32 }} />}
-      </Card>
+      <Row gutter={16}>
+        <Col xs={24} lg={13}>
+          <Card title="花费 TOP10 项目（按预算）" size="small" styles={{ body: { paddingBottom: 0 } }}>
+            {chartable.length
+              ? <ReactECharts option={topOption} theme={themeName} notMerge style={{ height: 320 }} />
+              : <Empty description="清单还没有项目" style={{ padding: 32 }} />}
+          </Card>
+        </Col>
+        <Col xs={24} lg={11}>
+          <Card title="项目排行" size="small" styles={{ body: { paddingTop: 8 } }}>
+            <Table
+              rowKey={(r) => r.name}
+              size="small"
+              dataSource={charts?.top_items ?? []}
+              pagination={false}
+              onRow={(r) => ({ onClick: () => nav(`/orders?item_id=${r.id}`), style: { cursor: 'pointer' } })}
+              columns={[
+                { title: '项目', dataIndex: 'name', ellipsis: true },
+                {
+                  title: '预算/实际', key: 'ba', width: 150, align: 'right',
+                  render: (_, it) => (
+                    <span className="tabular" style={{ fontSize: 12 }}>
+                      {fmtMoney(it.budget)}
+                      <span style={{ color: 'var(--ink-3)', margin: '0 3px' }}>/</span>
+                      <span style={{ color: it.actual > 0 ? 'var(--wood-600)' : 'var(--ink-3)', fontWeight: 600 }}>{fmtMoney(it.actual)}</span>
+                    </span>
+                  ),
+                },
+                {
+                  title: '差', width: 70, align: 'right',
+                  render: (_, it) => {
+                    const d = it.actual - it.budget;
+                    if (it.actual === 0) return <span style={{ color: 'var(--ink-3)' }}>—</span>;
+                    return <span className="tabular" style={{ color: d > 0 ? 'var(--clay)' : 'var(--sage)' }}>{d > 0 ? '+' : ''}{Math.round((d / it.budget) * 100)}%</span>;
+                  },
+                },
+              ]}
+            />
+          </Card>
+        </Col>
+      </Row>
 
       <Card title="最近付款" size="small">
         <Table

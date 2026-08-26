@@ -143,7 +143,7 @@ export default function Orders() {
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
       <Card size="small">
         <Space wrap size={12}>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
+          <Button type="primary" size="large" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
             新建订单
           </Button>
           <Select
@@ -183,6 +183,14 @@ export default function Orders() {
             onSearch={(v) => setFilters((f) => ({ ...f, q: v }))}
           />
           <Button icon={<ReloadOutlined />} onClick={load} />
+          {filters.status === 'open' && !filters.item_id && (
+            <Tag
+              style={{ cursor: 'pointer', marginInlineEnd: 0 }}
+              onClick={() => setFilters((f) => ({ ...f, status: undefined }))}
+            >
+              仅显示进行中 · 查看全部
+            </Tag>
+          )}
         </Space>
       </Card>
 
@@ -191,7 +199,7 @@ export default function Orders() {
         loading={loading}
         dataSource={rows}
         onRow={(r) => ({ onClick: () => nav(`/orders/${r.id}`), style: { cursor: 'pointer' } })}
-        pagination={{ pageSize: 20, showTotal: (t) => `共 ${t} 笔订单` }}
+        pagination={rows.length > 20 ? { pageSize: 20, showTotal: (t) => `共 ${t} 笔订单` } : false}
         scroll={{ x: 980 }}
         columns={[
           {

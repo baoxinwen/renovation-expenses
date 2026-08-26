@@ -71,6 +71,8 @@ function EditableNum({ value, onCommit }: {
         variant="borderless"
         defaultValue={value ?? undefined}
         min={0}
+        formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+        parser={(t) => Number(String(t).replace(/,/g, '')) as number}
         style={{ width: '100%' }}
         onClick={(e) => e.stopPropagation()}
         onBlur={async (e) => {
@@ -162,6 +164,8 @@ export default function Plan() {
   const [targetOpen, setTargetOpen] = useState(false);
   const [targetForm] = Form.useForm();
 
+  const [sectionModalOpen, setSectionModalOpen] = useState(false);
+  const [sectionName, setSectionName] = useState('');
   const [itemModal, setItemModal] = useState<{ sectionId: number } | null>(null);
   const [savingItem, setSavingItem] = useState(false);
 
@@ -170,13 +174,14 @@ export default function Plan() {
   const [buySaving, setBuySaving] = useState(false);
   const [payTarget, setPayTarget] = useState<Order | null>(null);
 
-  // 清单搜索 / 板块折叠 / 待付尾款
+  // 清单搜索 / 板块折叠 / 待付尾款摘要展开
   const [search, setSearch] = useState('');
   const [collapsed, setCollapsed] = useState<Set<number>>(() => {
     try { return new Set<number>(JSON.parse(localStorage.getItem('reno-collapsed') ?? '[]')); }
     catch { return new Set(); }
   });
   const [unpaid, setUnpaid] = useState<Order[]>([]);
+  const [unpaidOpen, setUnpaidOpen] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -508,13 +513,6 @@ export default function Plan() {
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
       {/* ===== 主卡：预算健康 + 三小卡 ===== */}
-      {overBudget && (
-        <Alert
-          type="error"
-          showIcon
-          message={`清单总计已超预算目标：目标 ${fmtMoney(plan!.total_budget)}，清单 ${fmtMoney(plan!.plan_total)}，超出 ${fmtMoney(diff)}`}
-        />
-      )}
       <Row gutter={16}>
         <Col xs={24} md={16}>
           <Card>
@@ -552,80 +550,81 @@ export default function Plan() {
         </Col>
       </Row>
 
-      {/* ===== 工具栏 ===== */}
+      {/* ===== 工具栏：左搜索 / 右动作组 ===== */}
       <Card size="small" className="no-print">
-        <Space wrap>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <Input.Search
-            style={{ width: 200 }}
+            style={{ width: 220 }}
             placeholder="搜项目 / 品牌 / 备注"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             allowClear
           />
-          <Input.Search
-            style={{ width: 200 }}
-            placeholder="新增板块名称"
-            value={newSection}
-            onChange={(e) => setNewSection(e.target.value)}
-            enterButton={<PlusOutlined />}
-            onSearch={async (v) => {
-              const name = v.trim();
-              if (!name) return;
-              try {
-                await api.addSection(name);
-                setNewSection('');
-                toast.success('板块已添加');
-                load();
-              } catch (e) {
-                toast.error((e as Error).message);
-              }
-            }}
-          />
-          <Upload accept=".xlsx,.xlsm" showUploadList={false} beforeUpload={(f) => { doImport(f); return false; }}>
-            <Button icon={<UploadOutlined />}>从 Excel 导入</Button>
-          </Upload>
-          <Button icon={<DownloadOutlined />} href="/api/export/excel">导出 Excel</Button>
-          <span className="label-caption">点击单元格直接编辑，失焦保存；⠿ 拖动行或板块排序</span>
-        </Space>
+          <span className="label-caption" style={{ flex: 1, minWidth: 200 }}>
+            点单元格直接编辑；悬停行首 ⠿ 可拖动排序
+          </span>
+          <Space wrap style={{ marginLeft: 'auto' }}>
+            <Button type="primary" ghost icon={<PlusOutlined />} onClick={() => setSectionModalOpen(true)}>
+              新增板块
+            </Button>
+            <Upload accept=".xlsx,.xlsm" showUploadList={false} beforeUpload={(f) => { doImport(f); return false; }}>
+              <Button icon={<UploadOutlined />}>导入</Button>
+            </Upload>
+            <Button icon={<DownloadOutlined />} href="/api/export/excel">导出</Button>
+          </Space>
+        </div>
       </Card>
 
-      {/* ===== 待付尾款 ===== */}
+      {/* ===== 待付尾款：单行摘要，点开展开 ===== */}
       {unpaid.length > 0 && (
-        <Card size="small" className="no-print" title={<span>待付尾款 <span style={{ color: 'var(--clay)', fontWeight: 600 }}>共 {fmtMoney(totalUnpaid)}</span></span>}>
-          <Table<Order>
-            rowKey="id"
-            size="small"
-            dataSource={unpaid}
-            pagination={false}
-            onRow={(r) => ({ onClick: () => nav(`/orders/${r.id}`), style: { cursor: 'pointer' } })}
-            columns={[
-              {
-                title: '订单', dataIndex: 'title',
-                render: (_, o) => (
-                  <div>
-                    <span style={{ fontWeight: 500 }}>{o.title}</span>
-                    {o.vendor && <span style={{ color: 'var(--ink-2)', fontSize: 12, marginLeft: 6 }}>{o.vendor}</span>}
-                  </div>
-                ),
-              },
-              { title: '预算项目', dataIndex: 'item_name', width: 180, render: (v) => v || <span style={{ color: 'var(--ink-3)' }}>未关联</span> },
-              { title: '总额', dataIndex: 'total_amount', width: 110, align: 'right' as const, render: (v: number) => <span className="tabular">{fmtMoney(v)}</span> },
-              { title: '已付', dataIndex: 'paid', width: 110, align: 'right' as const, render: (v: number) => <span className="tabular">{fmtMoney(v ?? 0)}</span> },
-              {
-                title: '未付', width: 110, align: 'right' as const,
-                render: (_, o) => <span className="tabular" style={{ fontWeight: 600, color: 'var(--clay)' }}>{fmtMoney(o.total_amount - (o.paid ?? 0))}</span>,
-              },
-              {
-                title: '', width: 140,
-                render: (_, o) => (
-                  <Space size={0} onClick={(e) => e.stopPropagation()}>
-                    <Button type="link" size="small" onClick={() => setPayTarget(o)}>记一笔</Button>
-                    <Button type="link" size="small" onClick={() => nav(`/orders/${o.id}`)}>详情</Button>
-                  </Space>
-                ),
-              },
-            ]}
-          />
+        <Card
+          size="small"
+          className="no-print"
+          styles={{ body: { padding: '8px 16px', cursor: 'pointer' } }}
+          onClick={() => setUnpaidOpen((v) => !v)}
+          title={null}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Tag color="error" style={{ marginRight: 2 }}>待付尾款</Tag>
+            <span style={{ fontWeight: 600 }} className="tabular">{fmtMoney(totalUnpaid)}</span>
+            <span className="label-caption">{unpaid.length} 笔未结清 · 点击{unpaidOpen ? '收起' : '展开'}</span>
+            <span style={{ marginLeft: 'auto', color: 'var(--ink-3)' }}>{unpaidOpen ? '▲' : '▼'}</span>
+          </div>
+          {unpaidOpen && (
+            <div style={{ marginTop: 10, cursor: 'default' }} onClick={(e) => e.stopPropagation()}>
+              <Table<Order>
+                rowKey="id"
+                size="small"
+                dataSource={unpaid}
+                pagination={false}
+                onRow={(r) => ({ onClick: () => nav(`/orders/${r.id}`), style: { cursor: 'pointer' } })}
+                columns={[
+                  {
+                    title: '订单', dataIndex: 'title',
+                    render: (_, o) => (
+                      <div>
+                        <span style={{ fontWeight: 500 }}>{o.title}</span>
+                        {o.vendor && <span style={{ color: 'var(--ink-2)', fontSize: 12, marginLeft: 6 }}>{o.vendor}</span>}
+                      </div>
+                    ),
+                  },
+                  { title: '预算项目', dataIndex: 'item_name', width: 180, render: (v) => v || <span style={{ color: 'var(--ink-3)' }}>未关联</span> },
+                  { title: '总额', dataIndex: 'total_amount', width: 110, align: 'right' as const, render: (v: number) => <span className="tabular">{fmtMoney(v)}</span> },
+                  { title: '已付', dataIndex: 'paid', width: 110, align: 'right' as const, render: (v: number) => <span className="tabular">{fmtMoney(v ?? 0)}</span> },
+                  {
+                    title: '未付', width: 110, align: 'right' as const,
+                    render: (_, o) => <span className="tabular" style={{ fontWeight: 600, color: 'var(--clay)' }}>{fmtMoney(o.total_amount - (o.paid ?? 0))}</span>,
+                  },
+                  {
+                    title: '', width: 90,
+                    render: (_, o) => (
+                      <Button type="link" size="small" onClick={() => setPayTarget(o)}>记一笔</Button>
+                    ),
+                  },
+                ]}
+              />
+            </div>
+          )}
         </Card>
       )}
 
@@ -665,7 +664,7 @@ export default function Plan() {
                   }
                   extra={
                     <Space>
-                      <Button type="primary" size="small" icon={<PlusOutlined />} onClick={() => setItemModal({ sectionId: sec.id })}>
+                      <Button size="small" icon={<PlusOutlined />} onClick={() => setItemModal({ sectionId: sec.id })}>
                         添加项目
                       </Button>
                       <Dropdown
@@ -751,6 +750,36 @@ export default function Plan() {
             <InputNumber min={0} precision={2} style={{ width: '100%' }} placeholder="160000" />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* 新增板块弹窗 */}
+      <Modal
+        title="新增板块"
+        open={sectionModalOpen}
+        onCancel={() => { setSectionModalOpen(false); setSectionName(''); }}
+        onOk={async () => {
+          const name = sectionName.trim();
+          if (!name) return;
+          try {
+            await api.addSection(name);
+            toast.success('板块已添加');
+            setSectionModalOpen(false);
+            setSectionName('');
+            load();
+          } catch (e) {
+            toast.error((e as Error).message);
+          }
+        }}
+        okText="添加"
+        destroyOnClose
+      >
+        <Input
+          placeholder="如：封窗、全屋定制"
+          value={sectionName}
+          onChange={(e) => setSectionName(e.target.value)}
+          onPressEnter={() => document.querySelector<HTMLButtonElement>('.ant-modal .ant-btn-primary')?.click()}
+          maxLength={20}
+        />
       </Modal>
 
       <ItemFormModal

@@ -226,12 +226,12 @@ export default function OrderDetail() {
       >
         <Row gutter={16}>
           <Col xs={24} md={16}>
-            <Descriptions column={2} size="small">
+            <Descriptions column={3} size="small">
               <Descriptions.Item label="商家 / 施工方">{order.vendor || '—'}</Descriptions.Item>
               <Descriptions.Item label="状态">
                 {order.status === 'closed' ? <Tag color="green">已结清</Tag> : <Tag color="blue">进行中</Tag>}
               </Descriptions.Item>
-              <Descriptions.Item label="关联预算项目" span={2}>
+              <Descriptions.Item label="关联预算项目" span={3}>
                 {order.item_name ? (
                   <Space size={6}>
                     <span>{order.item_name}</span>
@@ -239,23 +239,22 @@ export default function OrderDetail() {
                   </Space>
                 ) : '未关联（付款不计入清单实际）'}
               </Descriptions.Item>
-              <Descriptions.Item label="订单总额" span={2}>
+              <Descriptions.Item label="订单总额">
                 <span style={{ fontSize: 20, fontWeight: 600 }}>{fmtMoney(order.total_amount)}</span>
               </Descriptions.Item>
               {order.note && (
-                <Descriptions.Item label="备注" span={2}>{order.note}</Descriptions.Item>
+                <Descriptions.Item label="备注" span={3}>{order.note}</Descriptions.Item>
               )}
             </Descriptions>
           </Col>
           <Col xs={24} md={8}>
-            <div style={{ textAlign: 'right', padding: 8 }}>
+            <div style={{ textAlign: 'right', padding: 8, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <div style={{ color: '#8c8c8c' }}>已付 / 未付</div>
               <div style={{ fontSize: 22, fontWeight: 600, color: '#52c41a' }}>{fmtMoney(paid)}</div>
               <div style={{ fontSize: 16, color: overpaid ? '#faad14' : unpaid > 0 ? '#fa8c16' : '#52c41a' }}>
                 {overpaid ? '已付超出 ' : '未付 '}
                 {fmtMoney(overpaid ? paid - order.total_amount : unpaid)}
               </div>
-              <div style={{ color: '#bfbfbf', fontSize: 12, marginTop: 4 }}>创建于 {order.created_at}</div>
             </div>
           </Col>
         </Row>

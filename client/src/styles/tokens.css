@@ -160,15 +160,24 @@ body {
   background: var(--wood-50);
 }
 
-/* 拖拽手柄 */
+/* 拖拽手柄：默认隐身，悬停板块卡片时浮现（降低标题区图标密度） */
 .drag-handle {
   cursor: grab;
   color: var(--ink-3);
-  transition: color var(--dur-hover) var(--ease-out);
+  transition: color var(--dur-hover) var(--ease-out), opacity var(--dur-hover) var(--ease-out);
   touch-action: none;
+  opacity: 0;
+}
+.ant-card:hover .drag-handle,
+.ant-table-tbody > tr:hover .drag-handle {
+  opacity: 0.55;
 }
 .drag-handle:hover {
   color: var(--wood-600);
+  opacity: 1 !important;
+}
+.drag-handle:focus-visible {
+  opacity: 1;
 }
 
 /* 已买行：鼠尾草左缘线 + 降饱和，扫视即可分辨"还剩什么没买" */
