@@ -211,6 +211,19 @@ try {
   check('取消已买', r.json.bought === 0 && r.json.actual_amount === 0);
   await req('PUT', `/items/${lamp2.id}`, { unit_price: 129 }); // 还原
 
+  console.log('== 5c+. 双算 force 守卫 ==');
+  const sw2 = (await req('GET', '/plan')).json.sections.flatMap((s) => s.items).find((i) => i.name === '智能开关面板');
+  const guardOrder = (await req('POST', '/orders', {
+    title: '守卫测试', item_id: sw2.id, total_amount: 2580,
+    paid_now: { amount: 2580, pay_date: '2026-08-26' },
+  })).json;
+  r = await req('PUT', `/items/${sw2.id}`, { bought: true });
+  check('有订单付款时勾已买 → 409', r.status === 409 && r.json.needForce === true, JSON.stringify(r.json));
+  r = await req('PUT', `/items/${sw2.id}`, { bought: true, force: true });
+  check('force:true 放行', r.status === 200 && r.json.bought === 1);
+  await req('PUT', `/items/${sw2.id}`, { bought: false });
+  await req('DELETE', `/orders/${guardOrder.id}`);
+
   console.log('== 6. 导出 ==');
   const ex = await fetch(`${BASE}/export/excel`);
   const buf = Buffer.from(await ex.arrayBuffer());

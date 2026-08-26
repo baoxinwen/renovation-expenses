@@ -34,6 +34,23 @@ function getOrder(id) {
   return db.prepare(`${ORDER_SELECT} WHERE o.id = ?`).get(id);
 }
 
+// 订单详情（含付款与分组票据，单查询取票据避免 N+1）
+function getOrderWithPayments(orderId) {
+  const order = getOrder(orderId);
+  if (!order) return null;
+  const payments = db.prepare('SELECT * FROM payments WHERE order_id = ? ORDER BY pay_date DESC, id DESC')
+    .all(orderId);
+  const receipts = db.prepare(`
+    SELECT r.* FROM receipts r JOIN payments p ON p.id = r.payment_id
+    WHERE p.order_id = ? ORDER BY r.id`).all(orderId);
+  const byPayment = new Map();
+  for (const r of receipts) {
+    if (!byPayment.has(r.payment_id)) byPayment.set(r.payment_id, []);
+    byPayment.get(r.payment_id).push(r);
+  }
+  return { ...order, payments: payments.map((p) => ({ ...p, receipts: byPayment.get(p.id) ?? [] })) };
+}
+
 function fkError(e, reply) {
   if (String(e?.message || '').includes('FOREIGN KEY constraint failed')) {
     return reply.status(400).send({ message: '关联的预算项目不存在' });
@@ -95,6 +112,8 @@ export default async function (app) {
     }
 
     try {
+      // 结清口径约定：仅「一次付清建单且付足」时自动 closed（金额已知确定）；
+      // 之后的付款变动不自动改状态——结清与否由用户人工确认（防止补差价/退款误判）
       const status = paidNow && paidNow.amount >= total ? 'closed' : 'open';
       // db.transaction(fn) 返回包装函数，需再调用执行
       const orderId = db.transaction(() => {
@@ -109,11 +128,7 @@ export default async function (app) {
         }
         return newId;
       })();
-      const order = getOrder(orderId);
-      const payments = db.prepare('SELECT * FROM payments WHERE order_id = ? ORDER BY pay_date DESC, id DESC')
-        .all(orderId)
-        .map((p) => ({ ...p, receipts: db.prepare('SELECT * FROM receipts WHERE payment_id = ? ORDER BY id').all(p.id) }));
-      return { ...order, payments };
+      return getOrderWithPayments(orderId);
     } catch (e) {
       return fkError(e, reply);
     }
@@ -122,13 +137,7 @@ export default async function (app) {
   app.get('/orders/:id', async (req, reply) => {
     const order = getOrder(Number(req.params.id));
     if (!order || order.deleted) return reply.status(404).send({ message: '订单不存在' });
-    const payments = db.prepare('SELECT * FROM payments WHERE order_id = ? ORDER BY pay_date DESC, id DESC')
-      .all(order.id)
-      .map((p) => ({
-        ...p,
-        receipts: db.prepare('SELECT * FROM receipts WHERE payment_id = ? ORDER BY id').all(p.id),
-      }));
-    return { ...order, payments };
+    return getOrderWithPayments(order.id);
   });
 
   app.put('/orders/:id', async (req, reply) => {

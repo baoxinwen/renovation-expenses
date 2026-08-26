@@ -160,6 +160,19 @@ export default async function (app) {
     if (unitPrice === null) return reply.status(400).send({ message: '单价必须是非负数字' });
 
     const bought = b.bought !== undefined ? (b.bought ? 1 : 0) : item.bought;
+    // 双算守卫（API 级）：勾已买且项目下已有有效订单付款 → 409；
+    // 前端确认后带 force:true 可通过（此时双计是用户显式选择，见 PRD 口径说明）
+    if (bought === 1 && !b.force) {
+      const orderPaid = db.prepare(`
+        SELECT COALESCE(SUM(p.amount), 0) AS s FROM payments p JOIN orders o ON o.id = p.order_id
+        WHERE o.item_id = ? AND o.deleted = 0`).get(id).s;
+      if (orderPaid > 0) {
+        return reply.status(409).send({
+          message: `该项目下订单已付 ${orderPaid} 元，勾「已买」会重复计入实际合计`,
+          needForce: true,
+        });
+      }
+    }
     let boughtDate = item.bought_date;
     if ('bought_date' in b) {
       if (b.bought_date == null || b.bought_date === '') boughtDate = null;
