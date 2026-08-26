@@ -1,9 +1,10 @@
-import db, { ITEM_ACTUAL_SQL } from '../db.js';
+import db, { itemActualSQL, getTotalBudget } from '../db.js';
 
+const ITEM_ACTUAL = itemActualSQL('i');
 const ITEM_SELECT = `
   SELECT i.*,
          (i.quantity * i.unit_price) AS budget_amount,
-         (${ITEM_ACTUAL_SQL}) AS actual_amount,
+         (${ITEM_ACTUAL}) AS actual_amount,
          (SELECT COUNT(*) FROM orders o WHERE o.item_id = i.id AND o.deleted = 0) AS order_count,
          COALESCE((SELECT SUM(p.amount) FROM payments p JOIN orders o ON o.id = p.order_id
                    WHERE o.item_id = i.id AND o.deleted = 0), 0) AS order_paid
@@ -26,12 +27,11 @@ function validNum(v, { allowZero = true } = {}) {
 export default async function (app) {
   // ===== 整张清单（含板块/项目两级聚合，不含软删项） =====
   app.get('/plan', async () => {
-    const settingsRow = db.prepare("SELECT value FROM settings WHERE key = 'total_budget'").get();
-    const totalBudget = Number(settingsRow?.value ?? 0);
+    const totalBudget = getTotalBudget();
     const sections = db.prepare('SELECT * FROM sections WHERE deleted = 0 ORDER BY sort_order, id').all();
     const itemsBySection = db.prepare(`${ITEM_SELECT} WHERE i.section_id = ? AND i.deleted = 0 ORDER BY i.sort_order, i.id`);
     const planTotal = db.prepare('SELECT COALESCE(SUM(quantity * unit_price), 0) AS s FROM items WHERE deleted = 0').get().s;
-    const actualTotal = db.prepare(`SELECT COALESCE(SUM(${ITEM_ACTUAL_SQL.replace(/i\./g, 'items.')}), 0) AS s FROM items WHERE items.deleted = 0`).get().s;
+    const actualTotal = db.prepare(`SELECT COALESCE(SUM(${itemActualSQL('items').trim()}), 0) AS s FROM items WHERE items.deleted = 0`).get().s;
     const unassignedPaid = db.prepare(`
       SELECT COALESCE(SUM(p.amount), 0) AS s FROM payments p JOIN orders o ON o.id = p.order_id
       WHERE o.item_id IS NULL AND o.deleted = 0`).get().s;

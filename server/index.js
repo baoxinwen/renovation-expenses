@@ -4,7 +4,7 @@ import fastifyMultipart from '@fastify/multipart';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { UPLOAD_DIR } from './db.js';
+import { DATA_DIR, UPLOAD_DIR } from './db.js';
 import settingsRoutes from './routes/settings.js';
 import planRoutes from './routes/plan.js';
 import orderRoutes from './routes/orders.js';
@@ -15,8 +15,21 @@ import importRoutes from './routes/import.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 5174);
 const DIST_DIR = path.join(__dirname, '..', 'dist');
+const LOG_DIR = path.join(DATA_DIR, 'logs');
+fs.mkdirSync(LOG_DIR, { recursive: true });
 
-const app = Fastify({ logger: false });
+// pino（Fastify 内置日志器）：控制台 + data/logs 按天轮转（保留 14 天）
+const logger = {
+  level: 'info',
+  transport: {
+    targets: [
+      { target: 'pino-roll', options: { file: path.join(LOG_DIR, 'app'), frequency: 'daily', limit: { count: 14 }, mkdir: true } },
+      { target: 'pino/file', options: { destination: 1 } },
+    ],
+  },
+};
+
+const app = Fastify({ logger });
 
 // 只允许本机/局域网地址：拦截跨站表单（multipart 无预检）与 DNS rebinding（非法 Host）
 // IPv6：::1 环回、fe80:: 链路本地、fc00::/7（fc/fd 前缀）ULA 私有段
@@ -39,7 +52,24 @@ app.addHook('onRequest', async (req, reply) => {
   }
 });
 
-await app.register(fastifyMultipart, { limits: { fileSize: 10 * 1024 * 1024 } });
+// 写操作审计：所有非 GET 的 /api 请求统一留痕（含失败），新路由自动覆盖
+app.addHook('onResponse', async (req, reply) => {
+  if (req.method === 'GET') return;
+  const url = req.raw.url || '';
+  if (!url.startsWith('/api/')) return;
+  req.log.info({
+    audit: true,
+    method: req.method,
+    route: req.routeOptions?.url ?? url.split('?')[0],
+    status: reply.statusCode,
+    ms: Math.round(reply.elapsedTime),
+  }, '写操作');
+});
+
+await app.register(fastifyMultipart, {
+  // 全局关闭框架级 413 抛错，改由各端点自判 truncated 给中文提示
+  limits: { fileSize: 10 * 1024 * 1024, throwFileSizeLimit: false },
+});
 
 // 票据照片静态服务：/uploads/<filename>
 await app.register(fastifyStatic, {
@@ -67,17 +97,20 @@ if (fs.existsSync(DIST_DIR)) {
   });
 }
 
-app.setErrorHandler((err, _req, reply) => {
+app.setErrorHandler((err, req, reply) => {
+  req.log.error({ err, url: req.raw.url }, '请求处理失败');
   const status = err.statusCode && err.statusCode >= 400 ? err.statusCode : 500;
   reply.status(status).send({ message: status === 500 ? '服务器内部错误' : err.message });
 });
 
 app.listen({ port: PORT, host: '0.0.0.0' })
   .then(() => {
+    app.log.info({ port: PORT }, '装修账本已启动');
     console.log('');
     console.log('  装修账本已启动');
     console.log(`  本机访问:   http://localhost:${PORT}`);
     console.log(`  局域网访问: http://<本机IP>:${PORT}（后期手机在同 WiFi 下可用）`);
+    console.log(`  运行日志:   ${path.join(LOG_DIR, 'app-YYYY-MM-DD.log')}`);
     console.log('');
   })
   .catch((err) => {

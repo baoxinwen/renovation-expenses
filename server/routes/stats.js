@@ -1,24 +1,22 @@
-import db, { ITEM_ACTUAL_SQL } from '../db.js';
+import db, { itemActualSQL, sectionAggregatesSQL, getTotalBudget } from '../db.js';
 
 export default async function (app) {
   app.get('/stats/summary', async () => {
-    const row = db.prepare("SELECT value FROM settings WHERE key = 'total_budget'").get();
-    const totalBudget = Number(row?.value ?? 0);
+    const totalBudget = getTotalBudget();
     const planTotal = db.prepare('SELECT COALESCE(SUM(quantity * unit_price), 0) AS s FROM items WHERE deleted = 0').get().s;
     // 预算基线：首次改价前的单价（未改过的用现价），用于展示"预算漂移"
     const initPlanTotal = db.prepare(
       'SELECT COALESCE(SUM(quantity * COALESCE(init_unit_price, unit_price)), 0) AS s FROM items WHERE deleted = 0'
     ).get().s;
     const actualTotal = db.prepare(
-      `SELECT COALESCE(SUM(${ITEM_ACTUAL_SQL.replace(/i\./g, 't.')}), 0) AS s FROM items t WHERE t.deleted = 0`
+      `SELECT COALESCE(SUM(${itemActualSQL('items').trim()}), 0) AS s FROM items WHERE items.deleted = 0`
     ).get().s;
     const unassignedPaid = db.prepare(`
       SELECT COALESCE(SUM(p.amount), 0) AS s FROM payments p JOIN orders o ON o.id = p.order_id
       WHERE o.item_id IS NULL AND o.deleted = 0`).get().s;
     const sections = db.prepare(`
       SELECT s.id, s.name, s.sort_order,
-             COALESCE((SELECT SUM(i.quantity * i.unit_price) FROM items i WHERE i.section_id = s.id AND i.deleted = 0), 0) AS budget_subtotal,
-             COALESCE((SELECT SUM(${ITEM_ACTUAL_SQL}) FROM items i WHERE i.section_id = s.id AND i.deleted = 0), 0) AS actual_subtotal,
+             ${sectionAggregatesSQL()},
              (SELECT COUNT(*) FROM items i WHERE i.section_id = s.id AND i.deleted = 0) AS item_count,
              (SELECT COUNT(*) FROM items i WHERE i.section_id = s.id AND i.deleted = 0 AND i.bought = 1) AS bought_count
       FROM sections s WHERE s.deleted = 0 ORDER BY s.sort_order, s.id`).all();
@@ -33,10 +31,11 @@ export default async function (app) {
   });
 
   app.get('/stats/charts', async () => {
+    const actual = itemActualSQL('i');
     const bySection = db.prepare(`
       SELECT s.name AS name,
              COALESCE((SELECT SUM(i.quantity * i.unit_price) FROM items i WHERE i.section_id = s.id AND i.deleted = 0), 0) AS budget,
-             COALESCE((SELECT SUM(${ITEM_ACTUAL_SQL}) FROM items i WHERE i.section_id = s.id AND i.deleted = 0), 0) AS actual
+             COALESCE((SELECT SUM(${actual}) FROM items i WHERE i.section_id = s.id AND i.deleted = 0), 0) AS actual
       FROM sections s
       WHERE s.deleted = 0 AND EXISTS (SELECT 1 FROM items i WHERE i.section_id = s.id AND i.deleted = 0)
       ORDER BY s.sort_order, s.id`).all();
@@ -57,7 +56,7 @@ export default async function (app) {
 
     const topItems = db.prepare(`
       SELECT i.id AS id, i.name AS name, (i.quantity * i.unit_price) AS budget,
-             (${ITEM_ACTUAL_SQL}) AS actual
+             (${actual}) AS actual
       FROM items i WHERE i.deleted = 0 ORDER BY budget DESC LIMIT 10`).all();
 
     const recentPayments = db.prepare(`

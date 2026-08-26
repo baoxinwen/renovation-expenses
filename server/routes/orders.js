@@ -1,4 +1,4 @@
-import db, { UPLOAD_DIR } from '../db.js';
+import db, { UPLOAD_DIR, LIMITS, escapeLike } from '../db.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -6,6 +6,12 @@ import crypto from 'node:crypto';
 // HEIC 不在支持列表：Windows Chrome/Edge 无法解码会裂图。iPhone 请改拍 JPG（设置-相机-格式-兼容性最佳）
 const ALLOWED_EXT = ['jpg', 'jpeg', 'png', 'webp'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// 查询参数 id：非有限正数回 null（调用方转 400），避免 NaN 绑定成 NULL 静默失效
+function safeId(v) {
+  const n = Number(v);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
 
 // 真实日期校验（拦下 2026-99-99 / 0000-00-00）
 function validDate(s) {
@@ -47,16 +53,19 @@ function removeFiles(filenames) {
 }
 
 export default async function (app) {
-  app.get('/orders', async (req) => {
+  app.get('/orders', async (req, reply) => {
     const { item_id, section_id, status, q } = req.query;
     const where = ['o.deleted = 0'];
     const params = {};
-    if (item_id) { where.push('o.item_id = @item_id'); params.item_id = Number(item_id); }
-    if (section_id) { where.push('i.section_id = @section_id'); params.section_id = Number(section_id); }
+    // 非法 id 参数直接 400（NaN 绑定会静默变成 NULL 使过滤失效）
+    if (item_id && safeId(item_id) == null) return reply.status(400).send({ message: 'item_id 无效' });
+    if (section_id && safeId(section_id) == null) return reply.status(400).send({ message: 'section_id 无效' });
+    if (item_id) { where.push('o.item_id = @item_id'); params.item_id = safeId(item_id); }
+    if (section_id) { where.push('i.section_id = @section_id'); params.section_id = safeId(section_id); }
     if (status) { where.push('o.status = @status'); params.status = String(status); }
-    if (q) { where.push('(o.title LIKE @q OR o.vendor LIKE @q OR i.name LIKE @q)'); params.q = `%${q}%`; }
+    if (q) { where.push("(o.title LIKE @q ESCAPE '\\' OR o.vendor LIKE @q ESCAPE '\\' OR i.name LIKE @q ESCAPE '\\')"); params.q = `%${escapeLike(q)}%`; }
     const sql = ORDER_SELECT
-      + (where.length ? ` WHERE ${where.join(' AND ')}` : '')
+      + ` WHERE ${where.join(' AND ')}`
       + ' ORDER BY o.created_at DESC, o.id DESC';
     return db.prepare(sql).all(params);
   });
@@ -87,16 +96,19 @@ export default async function (app) {
 
     try {
       const status = paidNow && paidNow.amount >= total ? 'closed' : 'open';
-      const info = db.prepare(`INSERT INTO orders (title, vendor, item_id, total_amount, note, status)
-        VALUES (?, ?, ?, ?, ?, ?)`)
-        .run(title, String(b.vendor ?? ''), itemId, total, String(b.note ?? ''), status);
-      const orderId = Number(info.lastInsertRowid);
-      if (paidNow) {
-        db.transaction(() => {
+      // db.transaction(fn) 返回包装函数，需再调用执行
+      const orderId = db.transaction(() => {
+        const info = db.prepare(`INSERT INTO orders (title, vendor, item_id, total_amount, note, status)
+          VALUES (?, ?, ?, ?, ?, ?)`)
+          .run(title, String(b.vendor ?? ''), itemId, total, String(b.note ?? ''), status);
+        const newId = Number(info.lastInsertRowid);
+        if (paidNow) {
+          // 与建单同一事务：崩溃不会留下「已结清却无首付款」的残缺订单
           db.prepare(`INSERT INTO payments (order_id, amount, pay_date, method, note) VALUES (?, ?, ?, ?, ?)`)
-            .run(orderId, paidNow.amount, paidNow.payDate, paidNow.method, paidNow.note || '一次付清');
-        })();
-      }
+            .run(newId, paidNow.amount, paidNow.payDate, paidNow.method, paidNow.note || '一次付清');
+        }
+        return newId;
+      })();
       const order = getOrder(orderId);
       const payments = db.prepare('SELECT * FROM payments WHERE order_id = ? ORDER BY pay_date DESC, id DESC')
         .all(orderId)
@@ -182,8 +194,10 @@ export default async function (app) {
 
   app.put('/payments/:id', async (req, reply) => {
     const id = Number(req.params.id);
-    const payment = db.prepare('SELECT * FROM payments WHERE id = ?').get(id);
-    if (!payment) return reply.status(404).send({ message: '付款记录不存在' });
+    const payment = db.prepare(`
+      SELECT p.* FROM payments p JOIN orders o ON o.id = p.order_id
+      WHERE p.id = ? AND o.deleted = 0`).get(id);
+    if (!payment) return reply.status(404).send({ message: '付款记录不存在（或订单已删除）' });
     const b = req.body || {};
     const amount = b.amount !== undefined ? Number(b.amount) : payment.amount;
     if (!Number.isFinite(amount) || amount === 0) {
@@ -201,9 +215,12 @@ export default async function (app) {
 
   app.delete('/payments/:id', async (req, reply) => {
     const id = Number(req.params.id);
+    const payment = db.prepare(`
+      SELECT p.id FROM payments p JOIN orders o ON o.id = p.order_id
+      WHERE p.id = ? AND o.deleted = 0`).get(id);
+    if (!payment) return reply.status(404).send({ message: '付款记录不存在（或订单已删除）' });
     const files = receiptFilesOfPayment(id);
-    const info = db.prepare('DELETE FROM payments WHERE id = ?').run(id);
-    if (info.changes === 0) return reply.status(404).send({ message: '付款记录不存在' });
+    db.prepare('DELETE FROM payments WHERE id = ?').run(id);
     removeFiles(files);
     return { ok: true };
   });
@@ -217,8 +234,9 @@ export default async function (app) {
     if (!payment) return reply.status(404).send({ message: '付款记录不存在（或订单已删除）' });
 
     // 两遍式：先全部读取并校验，任一失败直接 400，不落任何文件（避免半传残留）
+    // throwFileSizeLimit 已全局关闭（见 index.js），超限走 file.truncated 的中文提示
     const incoming = [];
-    const files = req.files({ limits: { fileSize: 10 * 1024 * 1024 } });
+    const files = req.files({ limits: { fileSize: LIMITS.RECEIPT_FILE_MB * 1024 * 1024, throwFileSizeLimit: false } });
     for await (const file of files) {
       if (file.fieldname !== 'files') continue;
       const ext = path.extname(file.filename).toLowerCase().slice(1);
@@ -232,28 +250,33 @@ export default async function (app) {
       incoming.push({ ext, buf, originalName: file.filename });
     }
     if (!incoming.length) return reply.status(400).send({ message: '未收到任何文件' });
-    if (incoming.length > 10) return reply.status(400).send({ message: '单次最多上传 10 张' });
+    if (incoming.length > LIMITS.RECEIPT_MAX_FILES) {
+      return reply.status(400).send({ message: `单次最多上传 ${LIMITS.RECEIPT_MAX_FILES} 张` });
+    }
     const totalBytes = incoming.reduce((n, f) => n + f.buf.length, 0);
-    if (totalBytes > 30 * 1024 * 1024) {
-      return reply.status(400).send({ message: '单次上传总量超过 30MB，请分批上传' });
+    if (totalBytes > LIMITS.RECEIPT_TOTAL_MB * 1024 * 1024) {
+      return reply.status(400).send({ message: `单次上传总量超过 ${LIMITS.RECEIPT_TOTAL_MB}MB，请分批上传` });
     }
 
-    const saved = [];
+    // 先全部落盘，再单独事务插库（事务内不做文件 IO，进程崩溃也不会库回滚+文件残留错位）
+    const written = incoming.map(({ ext, originalName }) => {
+      const filename = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}.${ext}`;
+      fs.writeFileSync(path.join(UPLOAD_DIR, filename), incoming.find((f) => f.ext === ext && f.originalName === originalName).buf);
+      return { filename, originalName };
+    });
     const insert = db.prepare('INSERT INTO receipts (payment_id, filename, original_name) VALUES (?, ?, ?)');
+    const saved = [];
     try {
+      // 同步事务内收集 lastInsertRowid，安全
       db.transaction(() => {
-        incoming.forEach(({ ext, buf, originalName }) => {
-          const filename = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}.${ext}`;
-          fs.writeFileSync(path.join(UPLOAD_DIR, filename), buf);
-          // 先登记再插库：若 insert 失败，catch 也能清掉刚写入的这个文件（不留孤儿）
-          saved.push({ payment_id: paymentId, filename, original_name: originalName });
+        written.forEach(({ filename, originalName }) => {
           const info = insert.run(paymentId, filename, originalName);
-          saved[saved.length - 1].id = Number(info.lastInsertRowid);
+          saved.push({ id: Number(info.lastInsertRowid), payment_id: paymentId, filename, original_name: originalName });
         });
       })();
     } catch (e) {
-      // 落盘/插库中途失败：清掉已写文件，不留脏数据
-      removeFiles(saved.map((s) => s.filename));
+      // 插库失败：清掉刚写的文件，不留磁盘孤儿
+      removeFiles(written.map((w) => w.filename));
       throw e;
     }
     return saved;
@@ -261,8 +284,12 @@ export default async function (app) {
 
   app.delete('/receipts/:id', async (req, reply) => {
     const id = Number(req.params.id);
-    const receipt = db.prepare('SELECT * FROM receipts WHERE id = ?').get(id);
-    if (!receipt) return reply.status(404).send({ message: '票据不存在' });
+    const receipt = db.prepare(`
+      SELECT r.* FROM receipts r
+      JOIN payments p ON p.id = r.payment_id
+      JOIN orders o ON o.id = p.order_id
+      WHERE r.id = ? AND o.deleted = 0`).get(id);
+    if (!receipt) return reply.status(404).send({ message: '票据不存在（或订单已删除）' });
     db.prepare('DELETE FROM receipts WHERE id = ?').run(id);
     removeFiles([receipt.filename]);
     return { ok: true };

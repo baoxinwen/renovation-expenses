@@ -1,9 +1,8 @@
-import db from '../db.js';
+import db, { getSetting } from '../db.js';
 
 export default async function (app) {
   app.get('/settings', async () => {
-    const row = db.prepare("SELECT value FROM settings WHERE key = 'total_budget'").get();
-    return { total_budget: Number(row?.value ?? 0) };
+    return { total_budget: getSetting('total_budget') };
   });
 
   app.put('/settings', async (req, reply) => {

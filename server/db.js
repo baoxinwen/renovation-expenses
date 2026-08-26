@@ -133,12 +133,58 @@ function seed() {
   }
   insertSetting.run('seeded', '1');
 }
-seed();
 
-// ===== 通用聚合：项目实际支出 = 已买项总价 + 挂单付款（不含软删订单） =====
-export const ITEM_ACTUAL_SQL = `
-  (CASE WHEN i.bought = 1 THEN i.quantity * i.unit_price ELSE 0 END
+// 三段写包事务：中途崩溃不至于留下残缺的预置板块（重启时 hasSection>0 会跳过补种）
+db.transaction(seed)();
+
+// ===== 共享常量（上传/导入上限，各处必须一致） =====
+export const LIMITS = {
+  RECEIPT_FILE_MB: 10,    // 单张票据
+  RECEIPT_TOTAL_MB: 30,   // 单次上传总量
+  RECEIPT_MAX_FILES: 10,  // 单次张数
+  IMPORT_FILE_MB: 20,     // Excel 文件
+  IMPORT_MAX_ROWS: 3000,  // 工作表行数
+};
+
+// ===== 共享查询片段（口径唯一出处，勿在各路由复制） =====
+export function getSetting(key) {
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+  return row ? Number(row.value) : 0;
+}
+
+export function getTotalBudget() {
+  return getSetting('total_budget');
+}
+
+// 项目实际支出 = 已买项总价 + 挂有效订单的付款合计（退款负数冲抵）。
+// 注：既勾「已买」又挂订单付款时两路都会计入——前端有双算确认，此为显式选择的口径。
+export function itemActualSQL(alias = 'i') {
+  return `
+  (CASE WHEN ${alias}.bought = 1 THEN ${alias}.quantity * ${alias}.unit_price ELSE 0 END
    + COALESCE((SELECT SUM(p.amount) FROM payments p JOIN orders o ON o.id = p.order_id
-               WHERE o.item_id = i.id AND o.deleted = 0), 0))`;
+               WHERE o.item_id = ${alias}.id AND o.deleted = 0), 0))`;
+}
+
+// 板块预算/实际小计（plan、stats、export 三处统一出处）
+export function sectionAggregatesSQL() {
+  const actual = itemActualSQL('i');
+  return `
+    COALESCE((SELECT SUM(i.quantity * i.unit_price) FROM items i WHERE i.section_id = s.id AND i.deleted = 0), 0) AS budget,
+    COALESCE((SELECT SUM(${actual}) FROM items i WHERE i.section_id = s.id AND i.deleted = 0), 0) AS actual`;
+}
+
+// 清单总计 / 实际合计（items 全表口径）
+export function totalsSQL() {
+  const actual = itemActualSQL('items').trim();
+  return {
+    planTotal: 'COALESCE(SUM(quantity * unit_price), 0)',
+    actualTotal: `COALESCE(SUM(${actual}), 0)`,
+  };
+}
+
+// LIKE 关键字转义（% _ \），配合 ESCAPE 使用
+export function escapeLike(q) {
+  return String(q).replace(/[\\%_]/g, (c) => `\\${c}`);
+}
 
 export default db;

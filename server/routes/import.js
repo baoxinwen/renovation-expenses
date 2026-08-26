@@ -1,5 +1,44 @@
-import db from '../db.js';
+import db, { LIMITS } from '../db.js';
 import ExcelJS from 'exceljs';
+
+// 在工作表中定位表头行与关键列（项目名称/规格/单位/数量/单价/备注）
+function findHeader(ws) {
+  let headerRow = -1;
+  const col = {};
+  ws.eachRow({ includeEmpty: false }, (row, rn) => {
+    if (headerRow > 0) return;
+    const texts = {};
+    row.eachCell({ includeEmpty: false }, (c, cn) => {
+      const t = cellText(c.value).trim();
+      if (t) texts[cn] = t;
+    });
+    const has = (kw) => Object.values(texts).some((t) => t.includes(kw));
+    if (has('项目名称') && has('单价')) {
+      headerRow = rn;
+      for (const [cn, t] of Object.entries(texts)) {
+        if (t.includes('项目名称')) col.name = Number(cn);
+        else if (t.includes('规格') || t.includes('品牌')) col.spec = Number(cn);
+        else if (t.includes('单位')) col.unit = Number(cn);
+        else if (t.includes('数量')) col.quantity = Number(cn);
+        else if (t.includes('单价')) col.unitPrice = Number(cn);
+        else if (t.includes('备注')) col.note = Number(cn);
+      }
+    }
+  });
+  return { headerRow, col };
+}
+
+// 从标记行提取预算目标数字（约定：D 列起为值区，A/B 列是标签）
+function extractTarget(row) {
+  let target = null;
+  row.eachCell({ includeEmpty: false }, (c, cn) => {
+    if (target == null && cn > 3) {
+      const n = cellNum(c.value);
+      if (n != null && n >= 0) target = n;
+    }
+  });
+  return target;
+}
 
 // 单元格取文本：兼容数字 / richText / 公式结果
 function cellText(v) {
@@ -37,28 +76,7 @@ function parseWorkbook(wb) {
   if (!ws) throw new Error('Excel 中没有工作表');
 
   // 1. 找表头行与列位置
-  let headerRow = -1;
-  const col = {};
-  ws.eachRow({ includeEmpty: false }, (row, rn) => {
-    if (headerRow > 0) return;
-    const texts = {};
-    row.eachCell({ includeEmpty: false }, (c, cn) => {
-      const t = cellText(c.value).trim();
-      if (t) texts[cn] = t;
-    });
-    const has = (kw) => Object.values(texts).some((t) => t.includes(kw));
-    if (has('项目名称') && has('单价')) {
-      headerRow = rn;
-      for (const [cn, t] of Object.entries(texts)) {
-        if (t.includes('项目名称')) col.name = Number(cn);
-        else if (t.includes('规格') || t.includes('品牌')) col.spec = Number(cn);
-        else if (t.includes('单位')) col.unit = Number(cn);
-        else if (t.includes('数量')) col.quantity = Number(cn);
-        else if (t.includes('单价')) col.unitPrice = Number(cn);
-        else if (t.includes('备注')) col.note = Number(cn);
-      }
-    }
-  });
+  const { headerRow, col } = findHeader(ws);
   if (headerRow < 0 || !col.name || !col.unitPrice) {
     throw new Error('未找到表头（需要含「项目名称」和「单价」两列）');
   }
@@ -90,13 +108,7 @@ function parseWorkbook(wb) {
     }
     const targetMark = heads.find((t) => t.includes('预算目标') || t.includes('总预算'));
     if (targetMark) {
-      // 取该行第一个非空数字
-      row.eachCell({ includeEmpty: false }, (c, cn) => {
-        if (target == null && cn > 3) {
-          const n = cellNum(c.value);
-          if (n != null && n >= 0) target = n;
-        }
-      });
+      if (target == null) target = extractTarget(row);
       return;
     }
     const name = cellText(row.getCell(col.name).value).trim();
@@ -137,7 +149,7 @@ function parseWorkbook(wb) {
 export default async function (app) {
   app.post('/plan/import', async (req, reply) => {
     const mode = (req.query.mode === 'append') ? 'append' : 'replace';
-    const file = await req.file({ limits: { fileSize: 20 * 1024 * 1024 } });
+    const file = await req.file({ limits: { fileSize: LIMITS.IMPORT_FILE_MB * 1024 * 1024 } });
     if (!file || file.fieldname !== 'file') {
       return reply.status(400).send({ message: '请上传 Excel 文件（字段名 file）' });
     }
@@ -147,7 +159,7 @@ export default async function (app) {
     }
     const buf = await file.toBuffer();
     if (file.truncated) {
-      return reply.status(400).send({ message: '文件超过 20MB 限制，请检查是否传对了文件' });
+      return reply.status(400).send({ message: `文件超过 ${LIMITS.IMPORT_FILE_MB}MB 限制，请检查是否传对了文件` });
     }
     const wb = new ExcelJS.Workbook();
     try {
@@ -156,8 +168,8 @@ export default async function (app) {
       return reply.status(400).send({ message: 'Excel 文件解析失败，请确认是有效的 .xlsx' });
     }
 
-    if (wb.worksheets[0] && wb.worksheets[0].rowCount > 3000) {
-      return reply.status(400).send({ message: '工作表行数超过 3000，请检查是否传对了文件' });
+    if (wb.worksheets[0] && wb.worksheets[0].rowCount > LIMITS.IMPORT_MAX_ROWS) {
+      return reply.status(400).send({ message: `工作表行数超过 ${LIMITS.IMPORT_MAX_ROWS}，请检查是否传对了文件` });
     }
     let parsed;
     try {
