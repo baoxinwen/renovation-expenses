@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { api } from '../api';
 import type { Order, Payment, Receipt, Section, OrderFormValues } from '../api';
 import { fmtMoney, PAY_METHODS } from '../format';
+import { useIsMobile } from '../hooks/useIsMobile';
 import OrderFormModal from '../components/OrderFormModal';
 
 interface PaymentFormValues {
@@ -21,6 +22,7 @@ interface PaymentFormValues {
 
 export default function OrderDetail() {
   const { id } = useParams();
+  const isMobile = useIsMobile();
   const orderId = Number(id);
   const nav = useNavigate();
 
@@ -272,7 +274,7 @@ export default function OrderDetail() {
           rowKey="id"
           dataSource={payments}
           pagination={false}
-          scroll={{ x: 860 }}
+          scroll={isMobile ? { x: 860 } : undefined}
           locale={{ emptyText: '还没有付款记录，点击右上角「记一笔付款」开始' }}
           columns={[
             { title: '日期', dataIndex: 'pay_date', width: 110 },

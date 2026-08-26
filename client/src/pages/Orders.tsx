@@ -5,12 +5,14 @@ import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { api } from '../api';
 import type { Order, OrderFormValues, Section } from '../api';
 import { fmtMoney } from '../format';
+import { useIsMobile } from '../hooks/useIsMobile';
 import WoodProgress from '../components/WoodProgress';
 import { toast } from 'sonner';
 import OrderFormModal from '../components/OrderFormModal';
 
 export default function Orders() {
   const nav = useNavigate();
+  const isMobile = useIsMobile();
   const [searchParams] = useSearchParams();
   const [sections, setSections] = useState<Section[]>([]);
   const [rows, setRows] = useState<Order[]>([]);
@@ -191,7 +193,7 @@ export default function Orders() {
         dataSource={rows}
         onRow={(r) => ({ onClick: () => nav(`/orders/${r.id}`), style: { cursor: 'pointer' } })}
         pagination={rows.length > 20 ? { pageSize: 20, showTotal: (t) => `共 ${t} 笔订单` } : false}
-        scroll={{ x: 980 }}
+        scroll={isMobile ? { x: 980 } : undefined}
         columns={[
           {
             title: '订单',
