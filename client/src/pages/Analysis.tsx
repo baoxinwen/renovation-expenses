@@ -50,19 +50,8 @@ export default function Analysis() {
   }, [charts]);
 
   const themeName = useMemo(() => chartThemeName(isDark), [isDark]);
-  const colors = chartColors(isDark);
-
-  const sectionOption = useMemo(() => ({
-    tooltip: { trigger: 'axis', valueFormatter: (v: number) => fmtMoney(v) },
-    legend: { top: 0 },
-    grid: { left: 80, right: 30, top: 36, bottom: 30 },
-    xAxis: { type: 'value', axisLabel: { formatter: (v: number) => (v >= 10000 ? v / 10000 + '万' : v) } },
-    yAxis: { type: 'category', inverse: true, data: (charts?.by_section ?? []).map((s) => s.name) },
-    series: [
-      { name: '预算', type: 'bar', data: (charts?.by_section ?? []).map((s) => s.budget), barMaxWidth: 16, itemStyle: { color: colors.budget, borderRadius: [0, 4, 4, 0] } },
-      { name: '实际', type: 'bar', data: (charts?.by_section ?? []).map((s) => s.actual), barMaxWidth: 16, itemStyle: { color: colors.actual, borderRadius: [0, 4, 4, 0] } },
-    ],
-  }), [charts, colors]);
+  // paletteFor 每次渲染返回新对象，包 useMemo 才不会让下方 options 记忆化失效
+  const colors = useMemo(() => chartColors(isDark), [isDark]);
 
   const monthOption = useMemo(() => ({
     tooltip: { trigger: 'axis', valueFormatter: (v: number) => fmtMoney(v) },

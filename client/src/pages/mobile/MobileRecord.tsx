@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Card, DatePicker, Form, Input, InputNumber, Segmented, Select, Typography, Upload } from 'antd';
-import { PaperClipOutlined } from '@ant-design/icons';
+import { Button, Card, DatePicker, Form, Input, InputNumber, Segmented, Select, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { toast } from 'sonner';
 import { api } from '../../api';
 import type { Item, Order, Section } from '../../api';
 import { fmtMoney, PAY_METHODS } from '../../format';
+import ReceiptUploader from '../../components/ReceiptUploader';
+import { confirmAsync } from '../../utils/confirm';
+import { confirmDoubleCount, doubleCountRisk } from '../../utils/domain';
 
 type Mode = 'pay' | 'bought' | 'new';
 
@@ -43,25 +45,19 @@ export default function MobileRecord() {
     .filter((it) => it.order_count === 0)
     .map((it) => ({ value: it.id, label: `${it.name}${it.spec ? ` · ${it.spec}` : ''}`, item: it }));
 
-  const uploadProps = (files: File[], setFiles: React.Dispatch<React.SetStateAction<File[]>>) => ({
-    accept: '.jpg,.jpeg,.png,.webp',
-    multiple: true,
-    fileList: files.map((f, i) => ({ uid: `k${i}`, name: f.name, status: 'done' } as never)),
-    beforeUpload: (file: unknown) => {
-      // 多选时 antd 在同一 tick 逐个回调，必须函数式更新才能全部保留
-      setFiles((prev: File[]) => [...prev, file as File]);
-      return false;
-    },
-    onRemove: (file: { uid?: string }) => {
-      const idx = Number(String(file.uid ?? '').slice(1));
-      setFiles((prev: File[]) => prev.filter((_, i) => i !== idx));
-    },
-  });
-
   // ---- 流程 1：付一笔款 ----
   const submitPay = async (v: { order_id: number; amount: number; pay_date: unknown; method?: string; note?: string }) => {
     const order = openOrders.find((o) => o.id === v.order_id);
     if (!order) return toast.error('请选择订单');
+    const remaining = order.total_amount - (order.paid ?? 0);
+    if (v.amount < 0 || v.amount > Math.max(0, remaining)) {
+      const ok = await confirmAsync(
+        v.amount < 0
+          ? { title: '这笔是退款吗？', content: `金额为负（${fmtMoney(v.amount)}）会冲抵已付金额。确定继续？` }
+          : { title: '本笔付款将超出未付余额', content: `未付 ${fmtMoney(remaining)}，本笔 ${fmtMoney(v.amount)}。确定继续？` },
+      );
+      if (!ok) return;
+    }
     setSaving(true);
     try {
       const payment = await api.addPayment(order.id, {
@@ -89,6 +85,10 @@ export default function MobileRecord() {
   const submitBought = async (v: { item_id: number; price: number; date: unknown }) => {
     const item = allItems.find((it) => it.id === v.item_id);
     if (!item) return toast.error('请选择项目');
+    if (doubleCountRisk(item)) {
+      const ok = await confirmDoubleCount(item);
+      if (!ok) return;
+    }
     setSaving(true);
     try {
       await api.updateItem(item.id, {
@@ -192,9 +192,7 @@ export default function MobileRecord() {
               <Input placeholder="如：中期款" maxLength={100} />
             </Form.Item>
             <Form.Item label="票据照片（可选）">
-              <Upload {...uploadProps(payFiles, setPayFiles)}>
-                <Button icon={<PaperClipOutlined />}>拍照 / 相册</Button>
-              </Upload>
+              <ReceiptUploader files={payFiles} setFiles={setPayFiles} compact />
             </Form.Item>
             <Button type="primary" size="large" block htmlType="submit" loading={saving}>记录付款</Button>
           </Form>
@@ -273,9 +271,7 @@ export default function MobileRecord() {
               <Select allowClear options={PAY_METHODS.map((m) => ({ value: m, label: m }))} />
             </Form.Item>
             <Form.Item label="票据照片（可选）">
-              <Upload {...uploadProps(newFiles, setNewFiles)}>
-                <Button icon={<PaperClipOutlined />}>拍照 / 相册</Button>
-              </Upload>
+              <ReceiptUploader files={newFiles} setFiles={setNewFiles} compact />
             </Form.Item>
             <Button type="primary" size="large" block htmlType="submit" loading={saving}>记录购买</Button>
           </Form>

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, Collapse, Empty, Input, Modal, Skeleton, Tag } from 'antd';
+import { Card, Collapse, Empty, Input, Skeleton, Tag } from 'antd';
 import { toast } from 'sonner';
 import { api } from '../../api';
 import type { Item, PlanData } from '../../api';
 import { fmtMoney } from '../../format';
+import { confirmDoubleCount, doubleCountRisk } from '../../utils/domain';
 import BuyModal from '../../components/BuyModal';
 
 /** 移动清单：搜索 + 板块手风琴 + 项目卡片；点卡片 = 购买登记（编辑/排序请回电脑端） */
@@ -115,20 +116,12 @@ export default function MobileItems() {
         onClose={() => setBuyTarget(null)}
         onConfirm={async (itemId, price, date) => {
           const item = buyTarget;
-          if (item && !item.bought && item.order_paid > 0) {
-            const ok = await new Promise<boolean>((resolve) => {
-              Modal.confirm({
-                title: '该项目已有订单付款，可能重复计入',
-                content: `「${item.name}」下订单已付 ${fmtMoney(item.order_paid)}，再记为已买会重复计入实际。仍要记吗？`,
-                okText: '仍要记',
-                onOk: () => resolve(true),
-                onCancel: () => resolve(false),
-              });
-            });
+          if (item && doubleCountRisk(item)) {
+            const ok = await confirmDoubleCount(item);
             if (!ok) return;
           }
           try {
-            const updated = await api.updateItem(itemId, { bought: true, unit_price: price, bought_date: date });
+            await api.updateItem(itemId, { bought: true, unit_price: price, bought_date: date });
             setBuyTarget(null);
             toast.success('已记录购买');
             load();

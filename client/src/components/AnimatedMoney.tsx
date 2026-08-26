@@ -1,17 +1,16 @@
 import { useCountUp } from '../hooks/useCountUp';
+import { fmtMoney } from '../format';
 
-/** 金额数字滚动组件：¥1,234.56，滚动 600ms */
+/** 金额数字滚动组件：滚动到目标值，格式规则与 fmtMoney 唯一出处 */
 export default function AnimatedMoney({ value, className, style }: {
   value: number;
   className?: string;
   style?: React.CSSProperties;
 }) {
   const v = useCountUp(value);
-  const neg = v < 0;
-  const abs = Math.abs(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return (
     <span className={`num-display ${className ?? ''}`} style={style}>
-      {neg ? '-' : ''}¥{abs}
+      {fmtMoney(v)}
     </span>
   );
 }

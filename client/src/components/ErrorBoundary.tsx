@@ -22,7 +22,6 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.error) {
-      const dark = document.documentElement.classList.contains('dark');
       return (
         <div
           style={{
@@ -32,8 +31,8 @@ export default class ErrorBoundary extends Component<Props, State> {
             alignItems: 'center',
             justifyContent: 'center',
             gap: 12,
-            background: dark ? '#201c19' : '#faf7f2',
-            color: dark ? '#ede7df' : '#2b2622',
+            background: 'var(--bg-linen)',
+            color: 'var(--ink)',
             fontFamily: 'inherit',
             padding: 24,
             textAlign: 'center',
@@ -47,12 +46,12 @@ export default class ErrorBoundary extends Component<Props, State> {
           </div>
           <div
             style={{
-              background: '#fff',
-              border: '1px solid #e8e1d8',
+              background: 'var(--surface)',
+              border: '1px solid var(--line)',
               borderRadius: 8,
               padding: '8px 12px',
               fontSize: 12,
-              color: '#b5542d',
+              color: 'var(--clay)',
               maxWidth: 480,
               wordBreak: 'break-all',
             }}
@@ -66,7 +65,7 @@ export default class ErrorBoundary extends Component<Props, State> {
               padding: '8px 24px',
               borderRadius: 8,
               border: 'none',
-              background: dark ? '#c89b72' : '#8c5e3c',
+              background: 'var(--wood-600)',
               color: '#fff',
               fontSize: 14,
               cursor: 'pointer',

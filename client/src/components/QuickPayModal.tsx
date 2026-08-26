@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Button, DatePicker, Form, Input, InputNumber, Modal, Select, Upload } from 'antd';
-import { PaperClipOutlined } from '@ant-design/icons';
+import { DatePicker, Form, Input, InputNumber, Modal, Select } from 'antd';
 import dayjs from 'dayjs';
 import { toast } from 'sonner';
 import { api } from '../api';
 import type { Order } from '../api';
 import { fmtMoney, PAY_METHODS } from '../format';
+import { confirmAsync } from '../utils/confirm';
+import ReceiptUploader from './ReceiptUploader';
 
 /** 待付尾款行内记付款（桌面清单页 / 移动首页共用），可附票据照片 */
 export default function QuickPayModal({ order, onClose, onDone }: {
@@ -34,16 +35,11 @@ export default function QuickPayModal({ order, onClose, onDone }: {
     const remaining = order.total_amount - (order.paid ?? 0);
     // 负数=退款、超过未付余额=补差价，都属于非常规操作，二次确认防误触
     if (values.amount < 0 || values.amount > Math.max(0, remaining)) {
-      const proceed = await new Promise<boolean>((resolve) => {
-        Modal.confirm({
-          title: values.amount < 0 ? '这笔是退款吗？' : '本笔付款将超出未付余额',
-          content: values.amount < 0
-            ? `金额为负（${fmtMoney(values.amount)}）会冲抵已付金额。确定继续？`
-            : `未付 ${fmtMoney(remaining)}，本笔 ${fmtMoney(values.amount)}。确定继续？`,
-          onOk: () => resolve(true),
-          onCancel: () => resolve(false),
-        });
-      });
+      const proceed = await confirmAsync(
+        values.amount < 0
+          ? { title: '这笔是退款吗？', content: `金额为负（${fmtMoney(values.amount)}）会冲抵已付金额。确定继续？` }
+          : { title: '本笔付款将超出未付余额', content: `未付 ${fmtMoney(remaining)}，本笔 ${fmtMoney(values.amount)}。确定继续？` },
+      );
       if (!proceed) return;
     }
     setSaving(true);
@@ -97,21 +93,7 @@ export default function QuickPayModal({ order, onClose, onDone }: {
             <Input placeholder="如：中期款、瓷砖尾款" maxLength={100} />
           </Form.Item>
           <Form.Item label="票据照片（可选）">
-            <Upload
-              accept=".jpg,.jpeg,.png,.webp"
-              multiple
-              fileList={files.map((f, i) => ({ uid: `k${i}`, name: f.name, status: 'done' } as never))}
-              beforeUpload={(file) => {
-                setFiles((prev) => [...prev, file as unknown as File]);
-                return false;
-              }}
-              onRemove={(file) => {
-                const idx = Number(String(file.uid).slice(1));
-                setFiles((prev) => prev.filter((_, i) => i !== idx));
-              }}
-            >
-              <Button icon={<PaperClipOutlined />}>添加票据</Button>
-            </Upload>
+            <ReceiptUploader files={files} setFiles={setFiles} compact />
           </Form.Item>
         </Form>
       )}

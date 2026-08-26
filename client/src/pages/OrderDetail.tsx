@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { api } from '../api';
 import type { Order, Payment, Receipt, Section, OrderFormValues } from '../api';
 import { fmtMoney, PAY_METHODS } from '../format';
+import { undoableDelete } from '../utils/domain';
 import { useIsMobile } from '../hooks/useIsMobile';
 import OrderFormModal from '../components/OrderFormModal';
 
@@ -112,28 +113,16 @@ export default function OrderDetail() {
   const deleteOrder = () =>
     Modal.confirm({
       title: '删除订单',
-      content: `「${order.title}」的付款记录与票据会一并隐藏（不再计入统计），删除后 8 秒内可撤销。`,
+      content: '付款记录与票据会一并隐藏（不再计入统计），删除后 8 秒内可撤销。',
       okType: 'danger',
       okText: '删除',
-      onOk: async () => {
-        try {
-          await api.deleteOrder(order.id);
-        } catch (e) {
-          toast.error((e as Error).message);
-          return;
-        }
-        toast.success(`已删除「${order.title}」`, {
-          duration: 8000,
-          action: {
-            label: '撤销',
-            // 本页即将卸载，撤销后跳回列表页触发其自动加载（避免恢复成功但界面不刷新）
-            onClick: () => api.restoreOrder(order.id)
-              .then(() => nav('/orders'))
-              .catch((e) => toast.error((e as Error).message)),
-          },
-        });
-        nav('/orders');
-      },
+      onOk: () => undoableDelete({
+        label: order.title,
+        del: () => api.deleteOrder(order.id),
+        restore: () => api.restoreOrder(order.id),
+        onChanged: () => {},
+        afterRestore: () => nav('/orders'),
+      }),
     });
 
   const openPayModal = (p?: Payment) => {
@@ -252,7 +241,7 @@ export default function OrderDetail() {
           <Col xs={24} md={8}>
             <div style={{ textAlign: 'right', padding: 8, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <div style={{ color: '#8c8c8c' }}>已付 / 未付</div>
-              <div style={{ fontSize: 22, fontWeight: 600, color: '#52c41a' }}>{fmtMoney(paid)}</div>
+              <div style={{ fontSize: 22, fontWeight: 600, color: 'var(--sage)' }}>{fmtMoney(paid)}</div>
               <div style={{ fontSize: 16, color: overpaid ? '#faad14' : unpaid > 0 ? '#fa8c16' : '#52c41a' }}>
                 {overpaid ? '已付超出 ' : '未付 '}
                 {fmtMoney(overpaid ? paid - order.total_amount : unpaid)}

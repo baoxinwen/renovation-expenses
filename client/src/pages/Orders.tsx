@@ -5,6 +5,8 @@ import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { api } from '../api';
 import type { Order, OrderFormValues, Section } from '../api';
 import { fmtMoney } from '../format';
+import { confirmAsync } from '../utils/confirm';
+import { undoableDelete, unpaidOf } from '../utils/domain';
 import { useIsMobile } from '../hooks/useIsMobile';
 import WoodProgress from '../components/WoodProgress';
 import { toast } from 'sonner';
@@ -56,26 +58,18 @@ export default function Orders() {
     // 双算校验：挂到已勾「已买」的项目会重复计入实际
     const target = values.item_id ? findItem(values.item_id) : null;
     if (target?.bought) {
-      const proceed = await new Promise<boolean>((resolve) => {
-        Modal.confirm({
-          title: '该项目已勾选「已买」',
-          content: `「${target.name}」的总价已计入实际，再把订单付款挂上去会重复计入。通常二选一即可，仍要关联吗？`,
-          okText: '仍要关联',
-          onOk: () => resolve(true),
-          onCancel: () => resolve(false),
-        });
+      const proceed = await confirmAsync({
+        title: '该项目已勾选「已买」',
+        content: `「${target.name}」的总价已计入实际，再把订单付款挂上去会重复计入。通常二选一即可，仍要关联吗？`,
+        okText: '仍要关联',
       });
       if (!proceed) return;
     }
     // 一次付清金额超出总额（用户手动改大）时确认
     if (values.paid_now && values.paid_now.amount > values.total_amount) {
-      const ok = await new Promise<boolean>((resolve) => {
-        Modal.confirm({
-          title: '付款金额超过订单总额',
-          content: `总额 ${fmtMoney(values.total_amount)}，本次 ${fmtMoney(values.paid_now!.amount)}。确定继续？`,
-          onOk: () => resolve(true),
-          onCancel: () => resolve(false),
-        });
+      const ok = await confirmAsync({
+        title: '付款金额超过订单总额',
+        content: `总额 ${fmtMoney(values.total_amount)}，本次 ${fmtMoney(values.paid_now.amount)}。确定继续？`,
       });
       if (!ok) return;
     }
@@ -101,22 +95,19 @@ export default function Orders() {
     }
   };
 
-  const doDeleteOrder = async (o: Order) => {
-    try {
-      await api.deleteOrder(o.id);
-    } catch (e) {
-      toast.error((e as Error).message);
-      return;
-    }
-    toast.success(`已删除「${o.title}」`, {
-      duration: 8000,
-      action: {
-        label: '撤销',
-        onClick: () => api.restoreOrder(o.id).then(load).catch((e) => toast.error((e as Error).message)),
-      },
+  const doDeleteOrder = (o: Order) =>
+    Modal.confirm({
+      title: '删除该订单？',
+      content: '付款与票据会隐藏保留（8 秒内可撤销）',
+      okText: '删除',
+      okType: 'danger',
+      onOk: () => undoableDelete({
+        label: o.title,
+        del: () => api.deleteOrder(o.id),
+        restore: () => api.restoreOrder(o.id),
+        onChanged: load,
+      }),
     });
-    load();
-  };
 
   const closeOrder = (o: Order) => {
     Modal.confirm({
@@ -134,7 +125,7 @@ export default function Orders() {
     });
   };
 
-  const unpaid = (o: Order) => Math.max(0, (o.total_amount ?? 0) - (o.paid ?? 0));
+  const unpaidAmount = (o: Order) => unpaidOf(o);
   const sum = rows.reduce(
     (acc, o) => ({ total: acc.total + o.total_amount, paid: acc.paid + (o.paid ?? 0) }),
     { total: 0, paid: 0 },
@@ -181,7 +172,8 @@ export default function Orders() {
             style={{ width: 220 }}
             placeholder="搜订单 / 商家 / 项目"
             allowClear
-            onSearch={(v) => setFilters((f) => ({ ...f, q: v }))}
+            value={filters.q}
+            onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
           />
           <Button icon={<ReloadOutlined />} onClick={load} />
         </Space>
@@ -227,9 +219,9 @@ export default function Orders() {
             render: (_, o) => {
               const over = (o.paid ?? 0) > o.total_amount;
               return over ? (
-                <span style={{ color: '#faad14' }}>已付超出</span>
+                <span style={{ color: 'var(--amber)' }}>已付超出</span>
               ) : (
-                <span style={{ color: unpaid(o) > 0 ? undefined : '#52c41a' }}>{fmtMoney(unpaid(o))}</span>
+                <span style={{ color: unpaidAmount(o) > 0 ? undefined : 'var(--sage)' }}>{fmtMoney(unpaidAmount(o))}</span>
               );
             },
           },

@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { DatePicker, Modal, Form, Input, InputNumber, Select, Switch, Upload } from 'antd';
-import { PaperClipOutlined } from '@ant-design/icons';
-import dayjs, { type Dayjs } from 'dayjs';
+import { DatePicker, Modal, Form, Input, InputNumber, Select, Switch } from 'antd';
+import dayjs from 'dayjs';
 import type { Order, OrderFormValues, Section } from '../api';
 import { PAY_METHODS } from '../format';
+import ReceiptUploader from './ReceiptUploader';
 
 interface Props {
   open: boolean;
@@ -13,12 +13,6 @@ interface Props {
   /** files：一次付清时选择待上传的票据照片（创建订单后自动传到首笔付款） */
   onOk: (values: OrderFormValues, files: File[]) => void;
   onCancel: () => void;
-}
-
-interface QuickPayValues {
-  pay_amount?: number;
-  pay_date?: Dayjs;
-  pay_method?: string;
 }
 
 export default function OrderFormModal({ open, initial, sections, confirmLoading, onOk, onCancel }: Props) {
@@ -148,24 +142,7 @@ export default function OrderFormModal({ open, initial, sections, confirmLoading
                   </Form.Item>
                 </div>
                 <Form.Item label="票据照片（可选）" style={{ marginBottom: 0 }}>
-                  <Upload
-                    accept=".jpg,.jpeg,.png,.webp"
-                    multiple
-                    listType="picture-card"
-                    fileList={files.map((f, i) => ({ uid: `k${i}`, name: f.name, status: 'done' } as never))}
-                    beforeUpload={(file) => {
-                      setFiles((prev) => [...prev, file as unknown as File]);
-                      return false;
-                    }}
-                    onRemove={(file) => {
-                      const idx = Number(String(file.uid).slice(1));
-                      setFiles((prev) => prev.filter((_, i) => i !== idx));
-                    }}
-                  >
-                    <div style={{ fontSize: 12, color: 'var(--ink-2)' }}>
-                      <PaperClipOutlined /> 添加票据
-                    </div>
-                  </Upload>
+                  <ReceiptUploader files={files} setFiles={setFiles} />
                 </Form.Item>
               </>
             )}
