@@ -33,6 +33,31 @@
 3. **买东西**：一次付清的小件 → 「+订单」勾选「一次付清」，金额默认=总额，票据直接拖进去，一个表单搞定（自动记付款+结清）；不想留票据就直接勾「已买」改单价；分定金尾款的大件 → 关闭「一次付清」建订单，每次付款记一笔，票据拍照上传
 4. **每周巡检**：看顶部主卡和板块小计，红色超支提醒一眼可见
 
+## Docker 部署（NAS / Linux 服务器）
+
+前提：已安装 Docker 与 Docker Compose v2。
+
+```bash
+# 1. 构建并启动（应用 + 每日自动备份两个容器）
+docker compose up -d --build
+
+# 2. 访问
+#    http://<NAS或服务器IP>:5174
+
+# 3. 查看状态与日志
+docker compose ps
+docker compose logs -f reno
+```
+
+- **数据持久化**：SQLite、票据、日志全部落在宿主 `./data/`（bind mount），升级镜像/重建容器数据不丢
+- **自动备份**：`backup` 容器每天 03:00 把 `data/` 打包到 `./backups/reno-时间戳.tar.gz`，保留最近 30 份；首次启动无备份时立即备份一次。手动触发：`docker compose exec backup /app/backup.sh run`
+- **恢复备份**：停容器 → 清空 `data/` → 解包备份覆盖（`tar xzf backups/reno-xxxx.tar.gz -C data`）→ 重启
+- **端口/主机名**：复制 `.env.example` 为 `.env` 可改宿主端口、追加放行的主机名（`EXTRA_ALLOWED_HOSTS`，通过 NAS 主机名或域名访问时需要）
+- **权限**：Linux 上若容器写数据报 EACCES，执行 `sudo chown -R 1000:1000 ./data`
+- **升级版本**：`git pull && docker compose up -d --build`（数据在宿主目录，不受影响）
+
+从 Windows 本机迁移数据到 NAS：停掉两边服务，把 Windows 的 `data/` 文件夹整个拷到 NAS 项目目录下即可。
+
 ## 数据在哪里？如何备份？
 
 ```

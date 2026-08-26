@@ -33,7 +33,16 @@ const app = Fastify({ logger });
 
 // 只允许本机/局域网地址：拦截跨站表单（multipart 无预检）与 DNS rebinding（非法 Host）
 // IPv6：::1 环回、fe80:: 链路本地、fc00::/7（fc/fd 前缀）ULA 私有段
-const ALLOWED_HOST = /^(localhost|127\.0\.0\.1|0\.0\.0\.0|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|\[::1\]|\[fe80(:[0-9a-f]{0,4})+\]|\[f[cd][0-9a-f]{2}(:[0-9a-f]{0,4})+\])(:\d+)?$/i;
+// Docker/NAS 部署时可用 EXTRA_ALLOWED_HOSTS 追加主机名（逗号分隔，按字面匹配）
+const extraHosts = String(process.env.EXTRA_ALLOWED_HOSTS || '')
+  .split(',')
+  .map((h) => h.trim().toLowerCase())
+  .filter(Boolean)
+  .map((h) => h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+const ALLOWED_HOST = new RegExp(
+  `^(localhost|127\\.0\\.0\\.1|0\\.0\\.0\\.0|10\\.\\d+\\.\\d+\\.\\d+|192\\.168\\.\\d+\\.\\d+|172\\.(1[6-9]|2\\d|3[01])\\.\\d+\\.\\d+|\\[::1\\]|\\[fe80(:[0-9a-f]{0,4})+\\]|\\[f[cd][0-9a-f]{2}(:[0-9a-f]{0,4})+\\]${extraHosts.length ? '|' + extraHosts.join('|') : ''})(:\\d+)?$`,
+  'i',
+);
 app.addHook('onRequest', async (req, reply) => {
   const host = String(req.headers.host || '').toLowerCase();
   if (!ALLOWED_HOST.test(host)) {

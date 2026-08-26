@@ -3,3 +3,5 @@ data/
 dist/
 *.log
 .zcode/
+backups/
+.env

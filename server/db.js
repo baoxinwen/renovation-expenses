@@ -12,7 +12,9 @@ export const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const db = new Database(path.join(DATA_DIR, 'reno.db'));
-db.pragma('journal_mode = WAL');
+// WAL 需要 mmap 共享内存，Windows Docker Desktop 的 bind mount 不支持（IOERR_SHMOPEN），
+// 容器环境通过 SQLITE_JOURNAL_MODE=DELETE 规避；裸机默认 WAL（读并发更好）
+db.pragma(`journal_mode = ${process.env.SQLITE_JOURNAL_MODE || 'WAL'}`);
 db.pragma('foreign_keys = ON');
 
 // 核心模型：板块(section) → 预算项目(item) → 订单(order,可选挂项目) → 付款(payment) → 票据(receipt)

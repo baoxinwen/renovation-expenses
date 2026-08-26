@@ -1,0 +1,43 @@
+name: renovation
+
+services:
+  reno:
+    build: .
+    image: renovation:latest
+    container_name: renovation
+    restart: unless-stopped
+    ports:
+      # 宿主端口可用 .env 的 PORT 覆盖；容器内固定 5174
+      - "${PORT:-5174}:5174"
+    environment:
+      - NODE_ENV=production
+      # Windows Docker Desktop 的 bind mount 不支持 WAL（IOERR_SHMOPEN）；NAS ext4 可改回 WAL
+      - SQLITE_JOURNAL_MODE=DELETE
+      # 额外放行的 Host（逗号分隔），例如 NAS 主机名或域名
+      # - EXTRA_ALLOWED_HOSTS=nas.local,renovation.example.com
+    volumes:
+      # 数据（SQLite + 票据 + 日志）持久化到宿主目录；
+      # Linux 上若容器内写报 EACCES：sudo chown -R 1000:1000 ./data
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5174/api/settings').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  backup:
+    image: alpine:3.20
+    container_name: renovation-backup
+    restart: unless-stopped
+    depends_on:
+      reno:
+        condition: service_healthy
+    volumes:
+      # 只读挂载数据源；备份写到宿主 ./backups
+      - ./data:/data:ro
+      - ./backups:/backups
+      - ./docker/backup.sh:/app/backup.sh:ro
+    entrypoint: ["/bin/sh", "/app/backup.sh", "schedule"]
+    environment:
+      - KEEP=30

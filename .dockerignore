@@ -1,0 +1,20 @@
+# 依赖与产物（镜像内重新安装/构建）
+node_modules
+dist
+
+# 运行时数据与日志（compose bind mount 提供）
+data
+backups
+
+# 版本控制与本地杂物
+.git
+.gitignore
+*.log
+
+# 文档与环境示例
+docs
+README.md
+.env.example
+
+# Windows 专用启动脚本（镜像内无用）
+启动.bat
