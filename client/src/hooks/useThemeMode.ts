@@ -32,6 +32,17 @@ export function useThemeMode() {
     return () => mq.removeEventListener('change', apply);
   }, [mode]);
 
+  // 其他标签页修改主题时同步
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY && e.newValue) {
+        setMode(e.newValue === 'light' || e.newValue === 'dark' ? e.newValue : 'system');
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
   const update = useCallback((m: ThemeMode) => setMode(m), []);
   return { mode, isDark, setMode: update };
 }

@@ -37,7 +37,7 @@ export default function Orders() {
   }, [filters]);
 
   useEffect(() => {
-    api.getPlan().then((p) => setSections(p.sections)).catch(() => {});
+    api.getPlan().then((p) => setSections(p.sections)).catch((e) => toast.error(`清单加载失败：${(e as Error).message}`));
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -65,6 +65,18 @@ export default function Orders() {
         });
       });
       if (!proceed) return;
+    }
+    // 一次付清金额超出总额（用户手动改大）时确认
+    if (values.paid_now && values.paid_now.amount > values.total_amount) {
+      const ok = await new Promise<boolean>((resolve) => {
+        Modal.confirm({
+          title: '付款金额超过订单总额',
+          content: `总额 ${fmtMoney(values.total_amount)}，本次 ${fmtMoney(values.paid_now!.amount)}。确定继续？`,
+          onOk: () => resolve(true),
+          onCancel: () => resolve(false),
+        });
+      });
+      if (!ok) return;
     }
     setSaving(true);
     try {
@@ -180,6 +192,7 @@ export default function Orders() {
         dataSource={rows}
         onRow={(r) => ({ onClick: () => nav(`/orders/${r.id}`), style: { cursor: 'pointer' } })}
         pagination={{ pageSize: 20, showTotal: (t) => `共 ${t} 笔订单` }}
+        scroll={{ x: 980 }}
         columns={[
           {
             title: '订单',

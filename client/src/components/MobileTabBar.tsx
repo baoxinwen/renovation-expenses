@@ -14,8 +14,10 @@ const TABS = [
 export default function MobileTabBar() {
   const nav = useNavigate();
   const loc = useLocation();
-  const active = TABS.find((t) => t.key !== '/record' && loc.pathname.startsWith(t.key))?.key
-    ?? (loc.pathname === '/record' ? '/record' : '/');
+  // '/' 精确匹配，其余前缀匹配——避免任何路径都命中首页
+  const active = loc.pathname === '/record'
+    ? '/record'
+    : TABS.filter((t) => t.key !== '/').find((t) => loc.pathname.startsWith(t.key))?.key ?? '/';
 
   return (
     <nav

@@ -33,8 +33,18 @@ export default function OrderFormModal({ open, initial, sections, confirmLoading
       form.resetFields();
       setPayFull(isNew);
       setFiles([]);
+      // 编辑模式回填现有值（缺失回填会让"仅改备注"提交时把 item_id 置空、静默解除项目关联）
+      if (initial) {
+        form.setFieldsValue({
+          title: initial.title,
+          vendor: initial.vendor || undefined,
+          item_id: initial.item_id ?? undefined,
+          total_amount: initial.total_amount,
+          note: initial.note || undefined,
+        });
+      }
     }
-  }, [open, isNew, form]);
+  }, [open, initial, isNew, form]);
 
   const submit = async () => {
     const values = await form.validateFields();

@@ -20,8 +20,15 @@ if not exist node_modules (
   )
 )
 
-if not exist dist (
-  echo 正在构建页面（仅首次需要）...
+rem 源码比构建产物新时自动重建（改过代码后无需手动 npm run build）
+set REBUILD=0
+if not exist dist\index.html set REBUILD=1
+if "%REBUILD%"=="0" (
+  powershell -NoProfile -Command "$d=(Get-Item 'dist\index.html').LastWriteTime; if (Get-ChildItem -Recurse -File 'client\src' | Where-Object { $_.LastWriteTime -gt $d }) { exit 1 } else { exit 0 }"
+  if errorlevel 1 set REBUILD=1
+)
+if "%REBUILD%"=="1" (
+  echo 检测到页面源码有更新，正在重新构建...
   call npm run build
   if errorlevel 1 (
     echo [错误] 页面构建失败，请把上方报错反馈给开发者

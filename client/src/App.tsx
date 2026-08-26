@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import { BrowserRouter, Link, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Link, Navigate, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { Button, ConfigProvider, Layout, Menu } from 'antd';
 import { BarChartOutlined, FileTextOutlined, OrderedListOutlined, SettingOutlined } from '@ant-design/icons';
 import { Toaster } from 'sonner';
@@ -98,7 +98,7 @@ export default function App() {
           /* ============ 桌面布局：亚麻侧栏（sticky） ============ */
           <Layout style={{ minHeight: '100vh', background: 'var(--bg-linen)' }}>
             <Sider
-              breakpoint="lg"
+              breakpoint="md"
               collapsedWidth="0"
               width={176}
               theme="light"
@@ -140,6 +140,7 @@ export default function App() {
                   <Route path="/orders" element={<Orders />} />
                   <Route path="/orders/:id" element={<OrderDetail />} />
                   <Route path="/settings" element={<Settings />} />
+                  <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </Content>
             </Layout>

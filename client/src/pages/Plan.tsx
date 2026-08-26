@@ -79,7 +79,10 @@ function EditableNum({ value, onCommit }: {
           if (raw === '') next = 0;
           else {
             const n = Number(raw);
-            if (!Number.isFinite(n)) return;
+            if (!Number.isFinite(n)) {
+              setResetKey((k) => k + 1); // 非法输入回滚显示为服务器值
+              return;
+            }
             next = n;
           }
           if (next === value) return;
@@ -312,7 +315,7 @@ export default function Plan() {
     const oldIndex = plan.sections.findIndex((s) => s.id === active.id);
     const newIndex = plan.sections.findIndex((s) => s.id === over.id);
     const sections = arrayMove(plan.sections, oldIndex, newIndex);
-    setPlan({ ...plan, sections });
+    setPlan((prev) => (prev ? { ...prev, sections } : prev));
     try {
       await api.reorderSections(sections.map((s) => s.id));
     } catch (e) {
@@ -578,7 +581,7 @@ export default function Plan() {
               }
             }}
           />
-          <Upload accept=".xlsx" showUploadList={false} beforeUpload={(f) => { doImport(f); return false; }}>
+          <Upload accept=".xlsx,.xlsm" showUploadList={false} beforeUpload={(f) => { doImport(f); return false; }}>
             <Button icon={<UploadOutlined />}>从 Excel 导入</Button>
           </Upload>
           <Button icon={<DownloadOutlined />} href="/api/export/excel">导出 Excel</Button>

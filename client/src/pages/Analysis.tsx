@@ -32,20 +32,6 @@ export default function Analysis() {
 
   useEffect(() => { load(); }, [load]);
 
-  if (error) {
-    return (
-      <Card>
-        <Alert
-          type="error"
-          showIcon
-          message="统计数据加载失败"
-          description={`${error}。可能是账本服务没有启动——数据没有丢失，启动后重试即可。`}
-          action={<Button size="small" onClick={load}>重试</Button>}
-        />
-      </Card>
-    );
-  }
-
   const themeName = useMemo(() => chartThemeName(isDark), [isDark]);
   const colors = chartColors(isDark);
 
@@ -85,6 +71,21 @@ export default function Analysis() {
       { name: '实际', type: 'bar', data: (charts?.top_items ?? []).map((i) => i.actual), barMaxWidth: 14, itemStyle: { color: colors.actual, borderRadius: [0, 4, 4, 0] } },
     ],
   }), [charts, colors]);
+
+  // 错误/加载早退必须位于全部 useMemo 之后（React 不允许条件分支改变 hook 数量）
+  if (error) {
+    return (
+      <Card>
+        <Alert
+          type="error"
+          showIcon
+          message="统计数据加载失败"
+          description={`${error}。可能是账本服务没有启动——数据没有丢失，启动后重试即可。`}
+          action={<Button size="small" onClick={load}>重试</Button>}
+        />
+      </Card>
+    );
+  }
 
   if (loading) {
     return (

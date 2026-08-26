@@ -114,11 +114,16 @@ export interface OrderFormValues {
 
 async function req<T = unknown>(url: string, method: string, body?: unknown): Promise<T> {
   const isForm = body instanceof FormData;
-  const res = await fetch(url, {
-    method,
-    headers: !isForm && body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
-    body: isForm ? body : body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method,
+      headers: !isForm && body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+      body: isForm ? body : body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    throw new Error('网络连接失败——账本服务可能没有启动，或手机与电脑不在同一 WiFi');
+  }
   if (!res.ok) {
     let message = `请求失败（${res.status}）`;
     try {

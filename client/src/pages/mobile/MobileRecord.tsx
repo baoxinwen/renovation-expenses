@@ -43,17 +43,18 @@ export default function MobileRecord() {
     .filter((it) => it.order_count === 0)
     .map((it) => ({ value: it.id, label: `${it.name}${it.spec ? ` · ${it.spec}` : ''}`, item: it }));
 
-  const uploadProps = (files: File[], setFiles: (f: File[]) => void) => ({
+  const uploadProps = (files: File[], setFiles: React.Dispatch<React.SetStateAction<File[]>>) => ({
     accept: '.jpg,.jpeg,.png,.webp',
     multiple: true,
     fileList: files.map((f, i) => ({ uid: `k${i}`, name: f.name, status: 'done' } as never)),
     beforeUpload: (file: unknown) => {
-      setFiles([...files, file as File]);
+      // 多选时 antd 在同一 tick 逐个回调，必须函数式更新才能全部保留
+      setFiles((prev: File[]) => [...prev, file as File]);
       return false;
     },
     onRemove: (file: { uid?: string }) => {
       const idx = Number(String(file.uid ?? '').slice(1));
-      setFiles(files.filter((_, i) => i !== idx));
+      setFiles((prev: File[]) => prev.filter((_, i) => i !== idx));
     },
   });
 

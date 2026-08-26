@@ -22,7 +22,7 @@ export default function QuickPayModal({ order, onClose, onDone }: {
       form.resetFields();
       setFiles([]);
       form.setFieldsValue({
-        amount: order.total_amount - (order.paid ?? 0),
+        amount: Math.max(0, order.total_amount - (order.paid ?? 0)),
         pay_date: dayjs(),
         method: '微信',
       });
@@ -31,6 +31,21 @@ export default function QuickPayModal({ order, onClose, onDone }: {
 
   const submit = async (values: { amount: number; pay_date: unknown; method?: string; note?: string }) => {
     if (!order) return;
+    const remaining = order.total_amount - (order.paid ?? 0);
+    // 负数=退款、超过未付余额=补差价，都属于非常规操作，二次确认防误触
+    if (values.amount < 0 || values.amount > Math.max(0, remaining)) {
+      const proceed = await new Promise<boolean>((resolve) => {
+        Modal.confirm({
+          title: values.amount < 0 ? '这笔是退款吗？' : '本笔付款将超出未付余额',
+          content: values.amount < 0
+            ? `金额为负（${fmtMoney(values.amount)}）会冲抵已付金额。确定继续？`
+            : `未付 ${fmtMoney(remaining)}，本笔 ${fmtMoney(values.amount)}。确定继续？`,
+          onOk: () => resolve(true),
+          onCancel: () => resolve(false),
+        });
+      });
+      if (!proceed) return;
+    }
     setSaving(true);
     try {
       const payment = await api.addPayment(order.id, {

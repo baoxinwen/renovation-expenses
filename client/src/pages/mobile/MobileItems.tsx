@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, Collapse, Empty, Input, Skeleton, Tag } from 'antd';
+import { Card, Collapse, Empty, Input, Modal, Skeleton, Tag } from 'antd';
 import { toast } from 'sonner';
 import { api } from '../../api';
 import type { Item, PlanData } from '../../api';
@@ -114,6 +114,19 @@ export default function MobileItems() {
         open={!!buyTarget}
         onClose={() => setBuyTarget(null)}
         onConfirm={async (itemId, price, date) => {
+          const item = buyTarget;
+          if (item && !item.bought && item.order_paid > 0) {
+            const ok = await new Promise<boolean>((resolve) => {
+              Modal.confirm({
+                title: '该项目已有订单付款，可能重复计入',
+                content: `「${item.name}」下订单已付 ${fmtMoney(item.order_paid)}，再记为已买会重复计入实际。仍要记吗？`,
+                okText: '仍要记',
+                onOk: () => resolve(true),
+                onCancel: () => resolve(false),
+              });
+            });
+            if (!ok) return;
+          }
           try {
             const updated = await api.updateItem(itemId, { bought: true, unit_price: price, bought_date: date });
             setBuyTarget(null);

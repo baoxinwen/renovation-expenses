@@ -2,8 +2,20 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>装修账本</title>
+    <!-- viewport-fit=cover：让 env(safe-area-inset-*) 生效（刘海屏安全区） -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>装修账本</title>
+    <script>
+      // 首帧前应用暗色（与 useThemeMode 同规则），避免深色用户闪白屏
+      (function () {
+        try {
+          var mode = localStorage.getItem('reno-theme-mode');
+          var dark = mode === 'dark'
+            || ((!mode || mode === 'system') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) document.documentElement.classList.add('dark');
+        } catch (e) { /* 无 localStorage 时按浅色 */ }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -31,6 +31,7 @@ export function useCountUp(target: number, duration = 600): number {
       const eased = 1 - Math.pow(1 - t, 3);
       const value = from + (target - from) * eased;
       setDisplay(value);
+      fromRef.current = value; // 动画中记录当前值，目标再变时从视觉现状起步（不回退）
       if (t < 1) {
         rafRef.current = requestAnimationFrame(tick);
       } else {

@@ -50,7 +50,7 @@ export default function OrderDetail() {
 
   useEffect(() => {
     load();
-    api.getPlan().then((p) => setSections(p.sections)).catch(() => {});
+    api.getPlan().then((p) => setSections(p.sections)).catch((e) => toast.error(`清单加载失败：${(e as Error).message}`));
   }, [load]);
 
   if (!order) {
@@ -124,7 +124,10 @@ export default function OrderDetail() {
           duration: 8000,
           action: {
             label: '撤销',
-            onClick: () => api.restoreOrder(order.id).then(load).catch((e) => toast.error((e as Error).message)),
+            // 本页即将卸载，撤销后跳回列表页触发其自动加载（避免恢复成功但界面不刷新）
+            onClick: () => api.restoreOrder(order.id)
+              .then(() => nav('/orders'))
+              .catch((e) => toast.error((e as Error).message)),
           },
         });
         nav('/orders');
@@ -270,6 +273,7 @@ export default function OrderDetail() {
           rowKey="id"
           dataSource={payments}
           pagination={false}
+          scroll={{ x: 860 }}
           locale={{ emptyText: '还没有付款记录，点击右上角「记一笔付款」开始' }}
           columns={[
             { title: '日期', dataIndex: 'pay_date', width: 110 },

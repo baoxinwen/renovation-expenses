@@ -92,6 +92,9 @@ export default function MobileHome() {
           <Button block size="large" onClick={() => nav('/record')}>＋ 记一笔</Button>
           <Button block size="large" onClick={() => nav('/items')}>看清单</Button>
         </div>
+        <div style={{ textAlign: 'center', marginTop: 10 }}>
+          <Button type="link" size="small" onClick={() => nav('/analysis')}>查看统计图表</Button>
+        </div>
       </Card>
 
       <QuickPayModal order={payTarget} onClose={() => setPayTarget(null)} onDone={load} />
