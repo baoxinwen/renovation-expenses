@@ -20,8 +20,7 @@ export default function Orders() {
   const [filters, setFilters] = useState<{ section_id?: number; item_id?: number; status?: string; q: string }>(() => ({
     item_id: searchParams.get('item_id') ? Number(searchParams.get('item_id')) : undefined,
     section_id: searchParams.get('section_id') ? Number(searchParams.get('section_id')) : undefined,
-    // 默认只看进行中的订单，隐藏已结清小件；从清单行带 item_id 进来时显示该项目的全部订单
-    status: searchParams.get('status') ?? (searchParams.get('item_id') ? undefined : 'open'),
+    status: searchParams.get('status') ?? undefined,
     q: '',
   }));
 
@@ -183,14 +182,6 @@ export default function Orders() {
             onSearch={(v) => setFilters((f) => ({ ...f, q: v }))}
           />
           <Button icon={<ReloadOutlined />} onClick={load} />
-          {filters.status === 'open' && !filters.item_id && (
-            <Tag
-              style={{ cursor: 'pointer', marginInlineEnd: 0 }}
-              onClick={() => setFilters((f) => ({ ...f, status: undefined }))}
-            >
-              仅显示进行中 · 查看全部
-            </Tag>
-          )}
         </Space>
       </Card>
 
