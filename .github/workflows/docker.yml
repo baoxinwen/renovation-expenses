@@ -1,0 +1,58 @@
+name: Build Docker Image
+
+# 推送到 main 分支时自动构建镜像并发布到 GitHub Container Registry
+on:
+  push:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  # ghcr 镜像名必须全小写（仓库名 Renovation → renovation）
+  IMAGE_NAME: baoxinwen/renovation
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # 允许推送镜像到 ghcr.io（GITHUB_TOKEN 自动注入）
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      # QEMU 模拟器：让 x86 构建机产出 arm64 镜像（NAS 常见架构）
+      - name: 设置 QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: 设置 Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 登录 ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 镜像标签策略：main 分支 → latest + 短哈希（可回溯到具体提交）
+      - name: 生成镜像标签
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha
+
+      - name: 构建并推送（amd64 + arm64）
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # GitHub Actions 缓存：原生模块与依赖层复用，加速后续构建
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
