@@ -27,15 +27,17 @@ case "$1" in
     do_backup
     ;;
   schedule)
-    mkdir -p /etc/crontabs /backups
-    echo "0 3 * * * /app/backup.sh run" > /etc/crontabs/root
+    mkdir -p /backups
+    # Debian 原生 cron：cron.d 方式注册定时任务
+    echo "0 3 * * * root /app/backup.sh run" > /etc/cron.d/backup
+    chmod 0644 /etc/cron.d/backup
     echo "[backup] 定时任务已注册：每天 03:00 备份，保留最近 ${KEEP} 份"
-    # 首次启动（尚无任何备份）时尝试补一次；失败不退出——crond 常驻优先
+    # 首次启动（尚无任何备份）时尝试补一次；失败不退出——cron 常驻优先
     if ! ls /backups/reno-*.tar.gz >/dev/null 2>&1; then
       do_backup || echo "[backup] 首次备份失败，明天 03:00 将自动重试"
     fi
     echo "[backup] 进入常驻定时模式"
-    exec crond -f -l 0
+    exec cron -f
     ;;
   *)
     echo "用法: backup.sh [run|schedule]"

@@ -24,9 +24,9 @@ ENV NODE_ENV=production PORT=5174
 # 可选：放行额外的 Host（逗号分隔主机名），见 README
 # ENV EXTRA_ALLOWED_HOSTS=nas.local
 
-# gosu：entrypoint 修完数据目录权限后降权到 node 用户运行应用
+# gosu：entrypoint 降权；cron：backup sidecar 的定时备份（共用本镜像）
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends gosu \
+    && apt-get install -y --no-install-recommends gosu cron \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
@@ -34,8 +34,10 @@ COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/server ./server
 COPY --from=builder --chown=node:node /app/package.json ./
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+# 备份脚本打进镜像：backup sidecar 直接复用本镜像执行，无需挂载宿主脚本
+COPY docker/backup.sh /app/backup.sh
 # Windows 检出的脚本无可执行位，显式 chmod（双保险：ENTRYPOINT 用 sh 执行不依赖权限位）
-RUN chmod +x /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /app/backup.sh
 
 # 数据卷：SQLite 库 + 票据 + 日志（compose 里 bind mount 到宿主 ./data）
 VOLUME /app/data
