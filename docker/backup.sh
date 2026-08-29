@@ -7,6 +7,7 @@ set -e
 KEEP="${KEEP:-30}"   # 保留最近 N 份
 
 do_backup() {
+  set +e
   STAMP=$(date +%Y%m%d-%H%M%S)
   OUT="/backups/reno-$STAMP.tar.gz"
   echo "[$(date '+%F %T')] 开始备份 -> $OUT"
@@ -18,6 +19,7 @@ do_backup() {
     rm -f "$f"
     echo "[$(date '+%F %T')] 清理旧备份: $f"
   done
+  set -e
 }
 
 case "$1" in
@@ -28,10 +30,11 @@ case "$1" in
     mkdir -p /etc/crontabs /backups
     echo "0 3 * * * /app/backup.sh run" > /etc/crontabs/root
     echo "[backup] 定时任务已注册：每天 03:00 备份，保留最近 ${KEEP} 份"
-    # 首次启动（尚无任何备份）时立即做一次，避免裸奔
+    # 首次启动（尚无任何备份）时尝试补一次；失败不退出——crond 常驻优先
     if ! ls /backups/reno-*.tar.gz >/dev/null 2>&1; then
-      do_backup
+      do_backup || echo "[backup] 首次备份失败，明天 03:00 将自动重试"
     fi
+    echo "[backup] 进入常驻定时模式"
     exec crond -f -l 0
     ;;
   *)
