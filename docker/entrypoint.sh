@@ -1,10 +1,11 @@
 #!/bin/sh
 set -e
-# root 启动时：先把数据目录属主修正为运行用户（node），再降权执行应用。
-# 解决 NAS bind mount 场景：宿主目录属主是 NAS 登录用户（uid 任意），
-# 容器内固定 uid 1000 无权写入导致的 EACCES。
+# root 启动：修正挂载目录属主 → 注册每日备份定时任务（备份在主容器内完成）→ 降权运行应用
 if [ "$(id -u)" = "0" ]; then
   chown -R node:node /app/data 2>/dev/null || true
-  exec gosu node:node "$@"
+  chown -R node:node /app/backups 2>/dev/null || true
+  echo '0 3 * * * node /app/backup.sh run' > /etc/cron.d/backup
+  chmod 0644 /etc/cron.d/backup
+  cron
 fi
 exec "$@"

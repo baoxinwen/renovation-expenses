@@ -24,7 +24,7 @@ ENV NODE_ENV=production PORT=5174
 # 可选：放行额外的 Host（逗号分隔主机名），见 README
 # ENV EXTRA_ALLOWED_HOSTS=nas.local
 
-# gosu：entrypoint 降权；cron：backup sidecar 的定时备份（共用本镜像）
+# gosu：entrypoint 降权；cron：容器内每日自动备份（每天 03:00 以 node 用户执行）
 RUN apt-get update \
     && apt-get install -y --no-install-recommends gosu cron \
     && rm -rf /var/lib/apt/lists/*

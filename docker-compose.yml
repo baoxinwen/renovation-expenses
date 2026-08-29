@@ -13,30 +13,10 @@ services:
       - SQLITE_JOURNAL_MODE=DELETE
     volumes:
       - ./data:/app/data
+      - ./backups:/app/backups
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5174/api/settings').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       start_period: 10s
       retries: 3
-
-  backup:
-    # 复用账本镜像（NAS 上已拉取，零额外下载）：镜像内置 /app/backup.sh，
-    # 无需挂载任何脚本文件。同时删掉旧的 ./docker/backup.sh 挂载方式。
-    image: ghcr.io/baoxinwen/renovation:latest
-    container_name: renovation-backup
-    restart: unless-stopped
-    depends_on:
-      reno:
-        condition: service_healthy
-    volumes:
-      # 数据源：只读挂载（:ro），备份程序物理上无法写坏账本数据
-      - ./data:/data:ro
-      # 备份产出目录（宿主 ./backups）
-      - ./backups:/backups
-    # 覆盖默认启动命令：执行镜像内置备份脚本的 schedule 模式——
-    # 注册每天 03:00 定时任务 → 首次启动若无备份立即补一次 → 常驻监听
-    entrypoint: ["/app/backup.sh", "schedule"]
-    environment:
-      # 备份保留份数（超出自动删最旧）
-      - KEEP=30
