@@ -34,6 +34,8 @@ COPY --from=builder --chown=node:node /app/dist ./dist
 COPY --from=builder --chown=node:node /app/server ./server
 COPY --from=builder --chown=node:node /app/package.json ./
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+# Windows 检出的脚本无可执行位，显式 chmod（双保险：ENTRYPOINT 用 sh 执行不依赖权限位）
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # 数据卷：SQLite 库 + 票据 + 日志（compose 里 bind mount 到宿主 ./data）
 VOLUME /app/data
@@ -44,5 +46,5 @@ EXPOSE 5174
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||5174)+'/api/settings').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-ENTRYPOINT ["entrypoint.sh"]
+ENTRYPOINT ["/bin/sh", "/usr/local/bin/entrypoint.sh"]
 CMD ["node", "server/index.js"]
