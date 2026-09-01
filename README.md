@@ -41,7 +41,7 @@
 前提：已安装 Docker 与 Docker Compose。
 
 ```bash
-# 1. 构建并启动（应用 + 每日自动备份两个容器）
+# 1. 构建并启动（单容器：应用 + 内置每日备份 cron）
 docker compose up -d --build
 
 # 2. 访问
@@ -53,7 +53,7 @@ docker compose logs -f reno
 ```
 
 - **数据持久化**：SQLite、票据、日志全部落在宿主 `./data/`（bind mount），升级镜像/重建容器数据不丢
-- **自动备份**：`backup` 容器每天 03:00 把 `data/` 打包到 `./backups/reno-时间戳.tar.gz`，保留最近 30 份；首次启动无备份时立即备份一次。手动触发：`docker compose exec backup /app/backup.sh run`
+- **自动备份**：主容器内置 cron 每天 03:00 把 `data/` 打包到 `./backups/reno-时间戳.tar.gz`，保留最近 30 份。手动触发：`docker exec renovation /app/backup.sh`
 - **恢复备份**：停容器 → 清空 `data/` → 解包备份覆盖（`tar xzf backups/reno-xxxx.tar.gz -C data`）→ 重启
 - **端口/主机名**：复制 `.env.example` 为 `.env` 可改宿主端口、追加放行的主机名（`EXTRA_ALLOWED_HOSTS`，通过 NAS 主机名或域名访问时需要）
 - **权限**：Linux 上若容器写数据报 EACCES，执行 `sudo chown -R 1000:1000 ./data`
@@ -68,7 +68,7 @@ data/
 ```
 
 **备份（裸机方式）**：关闭账本后复制整个 `data/` 文件夹；恢复时覆盖回来。
-**备份（Docker 方式）**：`backup` 容器每天 03:00 自动打包到 `backups/`，恢复方法见 Docker 部署章节。
+**备份（Docker 方式）**：主容器内置 cron 每天 03:00 自动打包到 `backups/`，恢复方法见 Docker 部署章节。
 **轻量备份**：清单页「导出 Excel」（不含照片与付款记录）。
 
 ## 开发相关
