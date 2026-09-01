@@ -2,6 +2,7 @@
   "name": "renovation-budget",
   "version": "1.0.0",
   "description": "装修记账与预算管理工具",
+  "license": "MIT",
   "type": "module",
   "main": "server/index.js",
   "scripts": {
@@ -9,7 +10,8 @@
     "dev:client": "vite",
     "dev": "concurrently -k -n server,client -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
     "build": "tsc --noEmit -p client/tsconfig.json && vite build",
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "test": "node server/test-api-v2.mjs"
   },
   "dependencies": {
     "@fastify/multipart": "^10.1.1",
