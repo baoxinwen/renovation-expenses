@@ -244,28 +244,54 @@ export default async function (app) {
 
     // 两遍式：先全部读取并校验，任一失败直接 400，不落任何文件（避免半传残留）
     // throwFileSizeLimit 已全局关闭（见 index.js），超限走 file.truncated 的中文提示
+    // 张数/总量限制在流内生效：busboy files 上限截停后续部分 + 逐张计数/累计总量，
+    // 内存上界 = RECEIPT_MAX_FILES × RECEIPT_FILE_MB，超限部分只排水不缓冲
     const incoming = [];
-    const files = req.files({ limits: { fileSize: LIMITS.RECEIPT_FILE_MB * 1024 * 1024, throwFileSizeLimit: false } });
+    let totalBytes = 0;
+    let received = 0;
+    let badRequest = null;
+    const files = req.files({
+      limits: {
+        fileSize: LIMITS.RECEIPT_FILE_MB * 1024 * 1024,
+        files: LIMITS.RECEIPT_MAX_FILES + 1, // 多放 1 个用于探测超限；再多的部分 busboy 直接丢弃
+        throwFileSizeLimit: false,
+      },
+    });
+    // 早退后必须排干剩余部分再回包，否则连接悬挂在未读完的 multipart 流上
+    const drainRest = async () => {
+      for await (const file of files) {
+        for await (const _ of file.file) { void _; } // 丢弃数据块，不进内存
+      }
+    };
     for await (const file of files) {
       if (file.fieldname !== 'files') continue;
+      received += 1;
+      if (received > LIMITS.RECEIPT_MAX_FILES) {
+        badRequest = `单次最多上传 ${LIMITS.RECEIPT_MAX_FILES} 张`;
+        break;
+      }
       const ext = path.extname(file.filename).toLowerCase().slice(1);
       if (!ALLOWED_EXT.includes(ext)) {
-        return reply.status(400).send({ message: `不支持的图片格式：${file.filename}（支持 jpg/png/webp；HEIC 请转 JPG）` });
+        badRequest = `不支持的图片格式：${file.filename}（支持 jpg/png/webp；HEIC 请转 JPG）`;
+        break;
       }
       const buf = await file.toBuffer();
       if (file.truncated) {
-        return reply.status(400).send({ message: `单张照片不能超过 10MB：${file.filename}` });
+        badRequest = `单张照片不能超过 10MB：${file.filename}`;
+        break;
+      }
+      totalBytes += buf.length;
+      if (totalBytes > LIMITS.RECEIPT_TOTAL_MB * 1024 * 1024) {
+        badRequest = `单次上传总量超过 ${LIMITS.RECEIPT_TOTAL_MB}MB，请分批上传`;
+        break;
       }
       incoming.push({ ext, buf, originalName: file.filename });
     }
+    if (badRequest) {
+      await drainRest();
+      return reply.status(400).send({ message: badRequest });
+    }
     if (!incoming.length) return reply.status(400).send({ message: '未收到任何文件' });
-    if (incoming.length > LIMITS.RECEIPT_MAX_FILES) {
-      return reply.status(400).send({ message: `单次最多上传 ${LIMITS.RECEIPT_MAX_FILES} 张` });
-    }
-    const totalBytes = incoming.reduce((n, f) => n + f.buf.length, 0);
-    if (totalBytes > LIMITS.RECEIPT_TOTAL_MB * 1024 * 1024) {
-      return reply.status(400).send({ message: `单次上传总量超过 ${LIMITS.RECEIPT_TOTAL_MB}MB，请分批上传` });
-    }
 
     // 先全部落盘，再单独事务插库（事务内不做文件 IO，进程崩溃也不会库回滚+文件残留错位）
     const written = incoming.map(({ ext, originalName }) => {
