@@ -294,9 +294,10 @@ export default async function (app) {
     if (!incoming.length) return reply.status(400).send({ message: '未收到任何文件' });
 
     // 先全部落盘，再单独事务插库（事务内不做文件 IO，进程崩溃也不会库回滚+文件残留错位）
-    const written = incoming.map(({ ext, originalName }) => {
+    // buffer 必须随条目携带：按 ext+originalName 反查会在同名文件时串写内容
+    const written = incoming.map(({ ext, buf, originalName }) => {
       const filename = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}.${ext}`;
-      fs.writeFileSync(path.join(UPLOAD_DIR, filename), incoming.find((f) => f.ext === ext && f.originalName === originalName).buf);
+      fs.writeFileSync(path.join(UPLOAD_DIR, filename), buf);
       return { filename, originalName };
     });
     const insert = db.prepare('INSERT INTO receipts (payment_id, filename, original_name) VALUES (?, ?, ?)');
