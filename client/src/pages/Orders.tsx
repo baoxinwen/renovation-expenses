@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Card, Input, Modal, Popconfirm, Select, Space, Table, Tag } from 'antd';
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
@@ -18,6 +18,7 @@ export default function Orders() {
   const [searchParams] = useSearchParams();
   const [sections, setSections] = useState<Section[]>([]);
   const [rows, setRows] = useState<Order[]>([]);
+  const loadSeq = useRef(0);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -29,13 +30,16 @@ export default function Orders() {
   }));
 
   const load = useCallback(async () => {
+    // 序号守卫：搜索每键触发请求，后发先至时丢弃过期响应，避免旧结果覆盖新结果
+    const seq = ++loadSeq.current;
     setLoading(true);
     try {
-      setRows(await api.getOrders({ ...filters, q: filters.q || undefined }));
+      const rows = await api.getOrders({ ...filters, q: filters.q || undefined });
+      if (seq === loadSeq.current) setRows(rows);
     } catch (e) {
-      toast.error((e as Error).message);
+      if (seq === loadSeq.current) toast.error((e as Error).message);
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
   }, [filters]);
 
