@@ -11,6 +11,9 @@ services:
     environment:
       - NODE_ENV=production
       - SQLITE_JOURNAL_MODE=DELETE
+      # .env 里的变量只用于本文件插值，不会自动进容器——README 承诺的
+      # EXTRA_ALLOWED_HOSTS（NAS 主机名放行）必须在此显式透传
+      - EXTRA_ALLOWED_HOSTS=${EXTRA_ALLOWED_HOSTS:-}
     volumes:
       - ./data:/app/data
       - ./backups:/app/backups

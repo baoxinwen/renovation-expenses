@@ -11,7 +11,7 @@
     "dev": "concurrently -k -n server,client -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
     "build": "tsc --noEmit -p client/tsconfig.json && vite build",
     "start": "node server/index.js",
-    "test": "node server/test-api-v2.mjs && node server/test-i1-export-actual.mjs"
+    "test": "node server/test-api-v2.mjs && node server/test-i1-export-actual.mjs && node server/test-i2-compose-env.mjs"
   },
   "dependencies": {
     "@fastify/multipart": "^10.1.1",
