@@ -2,17 +2,50 @@
 # 装修账本 · 备份（主容器内 cron 每天 03:00 调用；手动触发：
 #   docker exec renovation /app/backup.sh）
 # 打包 /app/data 到 /app/backups，保留最近 KEEP 份（默认 30）
+# 一致性：reno.db 先经 SQLite 在线备份 API（better-sqlite3 backup）做快照再打包，
+#   不对运行中的库直接 tar（页级撕裂风险）；uploads/logs 为普通文件，直接复制。
+# 失败可见：无 MTA，cron 输出无处投递——失败写入 $BACKUP_DIR/backup.log 并非零退出。
 set -e
+DATA_DIR="${DATA_DIR:-/app/data}"
+BACKUP_DIR="${BACKUP_DIR:-/app/backups}"
+APP_DIR="${APP_DIR:-/app}"
 KEEP="${KEEP:-30}"
 STAMP=$(date +%Y%m%d-%H%M%S)
-OUT="/app/backups/reno-$STAMP.tar.gz"
+OUT="$BACKUP_DIR/reno-$STAMP.tar.gz"
+LOG="$BACKUP_DIR/backup.log"
 
-echo "[$(date '+%F %T')] 开始备份 -> $OUT"
-tar czf "$OUT" -C /app/data .
-SIZE=$(du -h "$OUT" | cut -f1)
-echo "[$(date '+%F %T')] 完成: $OUT ($SIZE)"
+log() { echo "[$(date '+%F %T')] $*" | tee -a "$LOG"; }
 
-ls -1t /app/backups/reno-*.tar.gz 2>/dev/null | tail -n +$((KEEP + 1)) | while read -r f; do
-  rm -f "$f"
-  echo "[$(date '+%F %T')] 清理旧备份: $f"
-done
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT INT TERM
+mkdir -p "$TMP/data" "$BACKUP_DIR"
+
+# set -e 在 if 条件内不生效，函数内部失败必须显式 return 1
+backup() {
+  # 1) 数据库：在线一致性快照（安全用于运行中的库，WAL/DELETE 皆可）
+  if ! ( cd "$APP_DIR" && node -e 'const db = require("better-sqlite3")(process.argv[1], { readonly: true });
+    db.backup(process.argv[2]).then(() => db.close()).catch((e) => { console.error(e); process.exit(1); });' \
+    "$DATA_DIR/reno.db" "$TMP/data/reno.db" ); then
+    echo "数据库快照失败" >&2
+    return 1
+  fi
+  # 2) 附件/日志等普通文件：直接复制（并发写最多缺尾帧，风险远低于数据库页撕裂）
+  for d in uploads logs; do
+    if [ -d "$DATA_DIR/$d" ]; then
+      cp -r "$DATA_DIR/$d" "$TMP/data/" || return 1
+    fi
+  done
+  # 3) 打包（快照库 + 附件，绝不含运行中库的 -journal/-wal/-shm）
+  tar czf "$OUT" -C "$TMP" data || return 1
+}
+
+if backup; then
+  log "备份完成 -> $OUT ($(du -h "$OUT" | cut -f1))"
+  ls -1t "$BACKUP_DIR"/reno-*.tar.gz 2>/dev/null | tail -n +$((KEEP + 1)) | while read -r f; do
+    rm -f "$f"
+    log "清理旧备份: $f"
+  done
+else
+  log "备份失败（DATA_DIR=$DATA_DIR）——请检查数据库与磁盘状态"
+  exit 1
+fi
