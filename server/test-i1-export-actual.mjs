@@ -56,8 +56,9 @@ try {
   const linked = await req('POST', '/orders', {
     title: '挂单订单', item_id: item.json.id, total_amount: 30,
     paid_now: { amount: 30, pay_date: '2026-09-01' },
+    force: true, // 已买项目挂单触发 I5 双算守卫，测试场景即「确认后显式双算」
   });
-  check('造数：挂单付款 30', linked.status === 200);
+  check('造数：挂单付款 30', linked.status === 200, `status=${linked.status}`);
   const loose = await req('POST', '/orders', {
     title: '未关联订单', total_amount: 5,
     paid_now: { amount: 5, pay_date: '2026-09-02' },
