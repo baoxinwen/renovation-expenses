@@ -6,7 +6,7 @@ import { api } from '../api';
 import type { Order, OrderFormValues, Section } from '../api';
 import { fmtMoney } from '../format';
 import { confirmAsync } from '../utils/confirm';
-import { undoableDelete, unpaidOf } from '../utils/domain';
+import { confirmOrderOnBoughtItem, undoableDelete, unpaidOf } from '../utils/domain';
 import { useIsMobile } from '../hooks/useIsMobile';
 import WoodProgress from '../components/WoodProgress';
 import { toast } from 'sonner';
@@ -55,16 +55,9 @@ export default function Orders() {
     sections.flatMap((s) => s.items ?? []).find((it) => it.id === id);
 
   const createOrder = async (values: OrderFormValues, files: File[]) => {
-    // 双算校验：挂到已勾「已买」的项目会重复计入实际
+    // 双算校验：挂到已勾「已买」的项目会重复计入实际（服务端有 409 守卫，确认后带 force）
     const target = values.item_id ? findItem(values.item_id) : null;
-    if (target?.bought) {
-      const proceed = await confirmAsync({
-        title: '该项目已勾选「已买」',
-        content: `「${target.name}」的总价已计入实际，再把订单付款挂上去会重复计入。通常二选一即可，仍要关联吗？`,
-        okText: '仍要关联',
-      });
-      if (!proceed) return;
-    }
+    if (target?.bought && !(await confirmOrderOnBoughtItem(target))) return;
     // 一次付清金额超出总额（用户手动改大）时确认
     if (values.paid_now && values.paid_now.amount > values.total_amount) {
       const ok = await confirmAsync({
@@ -75,7 +68,7 @@ export default function Orders() {
     }
     setSaving(true);
     try {
-      const order = await api.addOrder(values);
+      const order = await api.addOrder({ ...values, ...(target?.bought ? { force: true } : {}) });
       // 一次付清：把选好的票据直接传到首笔付款上
       const pay = order.payments?.[0];
       if (pay && files.length) {

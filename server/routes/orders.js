@@ -95,8 +95,16 @@ export default async function (app) {
     if (!Number.isFinite(total) || total <= 0) return reply.status(400).send({ message: '订单总额必须是正数' });
     const itemId = b.item_id ? Number(b.item_id) : null;
     if (itemId != null) {
-      const targetItem = db.prepare('SELECT id FROM items WHERE id = ? AND deleted = 0').get(itemId);
+      const targetItem = db.prepare('SELECT id, name, bought FROM items WHERE id = ? AND deleted = 0').get(itemId);
       if (!targetItem) return reply.status(400).send({ message: '关联的预算项目不存在（或已删除）' });
+      // 双算守卫（API 级）：项目已勾「已买」再挂订单付款会重复计入实际；
+      // 前端确认后带 force:true 可通过（与 PUT /items 的 needForce 模式一致，见 PRD 口径说明）
+      if (targetItem.bought && !b.force) {
+        return reply.status(409).send({
+          message: `「${targetItem.name}」已勾「已买」，再挂订单付款会重复计入实际合计`,
+          needForce: true,
+        });
+      }
     }
 
     // 一次付清：创建订单的同时记首笔付款；付足自动结清（小件购买一步到位）

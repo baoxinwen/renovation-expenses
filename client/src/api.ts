@@ -110,6 +110,8 @@ export interface OrderFormValues {
   note?: string;
   /** 一次付清：创建订单的同时记首笔付款，付足自动结清 */
   paid_now?: { amount: number; pay_date: string; method?: string; note?: string };
+  /** 双算守卫：挂到已勾「已买」的项目时，前端确认后置 true 才能通过 409（非表单字段） */
+  force?: boolean;
 }
 
 async function req<T = unknown>(url: string, method: string, body?: unknown): Promise<T> {

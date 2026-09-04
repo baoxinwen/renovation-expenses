@@ -7,7 +7,7 @@ import type { Item, Order, Section } from '../../api';
 import { fmtMoney, PAY_METHODS } from '../../format';
 import ReceiptUploader from '../../components/ReceiptUploader';
 import { confirmAsync } from '../../utils/confirm';
-import { confirmDoubleCount, doubleCountRisk } from '../../utils/domain';
+import { confirmDoubleCount, confirmOrderOnBoughtItem, doubleCountRisk } from '../../utils/domain';
 
 type Mode = 'pay' | 'bought' | 'new';
 
@@ -114,6 +114,9 @@ export default function MobileRecord() {
     item_id?: number; title: string; vendor?: string; total_amount: number;
     pay_date: dayjs.Dayjs; pay_method?: string; note?: string;
   }) => {
+    // 双算校验：挂到已勾「已买」的项目会重复计入实际（服务端有 409 守卫，确认后带 force）
+    const target = v.item_id ? allItems.find((x) => x.id === v.item_id) : null;
+    if (target?.bought && !(await confirmOrderOnBoughtItem(target))) return;
     setSaving(true);
     try {
       const order = await api.addOrder({
@@ -127,6 +130,7 @@ export default function MobileRecord() {
           pay_date: v.pay_date.format('YYYY-MM-DD'),
           method: v.pay_method ?? '微信',
         },
+        ...(target?.bought ? { force: true } : {}),
       });
       const pay = order.payments?.[0];
       let fail = 0;
