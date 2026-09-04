@@ -128,11 +128,16 @@ async function req<T = unknown>(url: string, method: string, body?: unknown): Pr
   }
   if (!res.ok) {
     let message = `请求失败（${res.status}）`;
+    let needForce = false;
     try {
       const data = await res.json();
       if (data?.message) message = data.message;
+      // 服务端 409 双算守卫的结构化标志（needForce），随错误抛出供调用方判断
+      needForce = data?.needForce === true;
     } catch { /* 忽略解析失败 */ }
-    throw new Error(message);
+    const err = new Error(message) as Error & { needForce?: boolean };
+    if (needForce) err.needForce = true;
+    throw err;
   }
   return res.json() as Promise<T>;
 }

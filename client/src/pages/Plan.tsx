@@ -145,7 +145,9 @@ export default function Plan() {
       try {
         updated = await submit(false);
       } catch (e) {
-        if (!(e as Error).message.includes('重复计入')) throw e;
+        // 409 双算守卫走结构化 needForce 标志（api.ts 随错误抛出）；文案匹配仅作兜底
+        const needForceErr = e as Error & { needForce?: boolean };
+        if (!needForceErr.needForce && !needForceErr.message.includes('重复计入')) throw e;
         const item = buyTarget;
         const ok = await confirmAsync({
           title: '该项目已有订单付款，可能重复计入',
