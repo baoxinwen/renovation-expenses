@@ -218,7 +218,8 @@ export default function Analysis() {
                   title: '差', width: 70, align: 'right',
                   render: (_, it) => {
                     const d = it.actual - it.budget;
-                    if (it.actual === 0) return <span style={{ color: 'var(--ink-3)' }}>—</span>;
+                    // 无支出或无预算基线（budget=0）时百分比无意义，不渲染 +Infinity%
+                    if (it.actual === 0 || it.budget === 0) return <span style={{ color: 'var(--ink-3)' }}>—</span>;
                     return <span className="tabular" style={{ color: d > 0 ? 'var(--clay)' : 'var(--sage)' }}>{d > 0 ? '+' : ''}{Math.round((d / it.budget) * 100)}%</span>;
                   },
                 },
