@@ -184,10 +184,11 @@ export default function Plan() {
       else next.add(id);
       return next;
     });
-    // 持久化放 updater 之外：StrictMode 下 updater 会双执行
-    setCollapsedAfterPersist();
   };
-  const setCollapsedAfterPersist = () => {};
+  // 折叠状态持久化：effect 里写回（幂等，StrictMode 双执行无害），刷新后恢复
+  useEffect(() => {
+    localStorage.setItem('reno-collapsed', JSON.stringify([...collapsed]));
+  }, [collapsed]);
 
   // 板块拖拽排序
   const onSectionDragEnd = async (event: DragEndEvent) => {
