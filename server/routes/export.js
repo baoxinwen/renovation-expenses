@@ -18,7 +18,7 @@ function styleHeader(ws) {
 // ===== Sheet 构建函数（导出主流程拆分）=====
 
 // Sheet1 预算评估表：与用户评估表同构，公式联动
-function buildBudgetSheet(wb, { sections, itemsBySection, totalBudget, totalSpent }) {
+function buildBudgetSheet(wb, { sections, itemsBySection, totalBudget, actualLikeApp }) {
   const ws = wb.addWorksheet('预算评估表');
   ws.columns = [
     { header: '序号', key: 'seq', width: 6 },
@@ -74,7 +74,7 @@ function buildBudgetSheet(wb, { sections, itemsBySection, totalBudget, totalSpen
   ws.getCell(`D${targetRow + 2}`).value = { formula: `D${targetRow + 1}-D${targetRow}` };
   ws.getCell(`F${targetRow + 2}`).value = '正数=清单超目标，负数=未超';
   ws.getCell(`B${targetRow + 3}`).value = '实际已花（口径同应用：已买+挂单付款）';
-  ws.getCell(`D${targetRow + 3}`).value = totalSpent;
+  ws.getCell(`D${targetRow + 3}`).value = actualLikeApp;
 }
 
 // Sheet2 付款明细
@@ -128,7 +128,7 @@ export default async function (app) {
       WHERE o.deleted = 0
       ORDER BY p.pay_date, p.id`).all();
     const totalSpent = payments.reduce((s, p) => s + p.amount, 0);
-    // 「实际已花」与应用首页口径对齐：已买项总价 + 有效订单(挂有效项目)付款；未关联付款单列
+    // 「实际已花」与应用首页口径对齐：已买项总价 + 有效订单(挂有效项目)付款（口径唯一出处见 db.js itemActualSQL）
     const boughtTotal = db.prepare('SELECT COALESCE(SUM(quantity * unit_price), 0) AS s FROM items WHERE deleted = 0 AND bought = 1').get().s;
     const linkedPaid = db.prepare(`
       SELECT COALESCE(SUM(p.amount), 0) AS s FROM payments p
@@ -136,14 +136,11 @@ export default async function (app) {
       JOIN items i ON i.id = o.item_id
       WHERE o.deleted = 0 AND i.deleted = 0`).get().s;
     const actualLikeApp = boughtTotal + linkedPaid;
-    const unassignedPaid = db.prepare(`
-      SELECT COALESCE(SUM(p.amount), 0) AS s FROM payments p JOIN orders o ON o.id = p.order_id
-      WHERE o.item_id IS NULL AND o.deleted = 0`).get().s;
 
     const wb = new ExcelJS.Workbook();
     wb.creator = '装修账本';
 
-    buildBudgetSheet(wb, { sections, itemsBySection, totalBudget, totalSpent });
+    buildBudgetSheet(wb, { sections, itemsBySection, totalBudget, actualLikeApp });
 
     buildPaymentSheet(wb, { payments, totalSpent });
 
