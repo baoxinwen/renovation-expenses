@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import path from 'node:path';
+import fs from 'node:fs';
 import { ZipArchive } from 'archiver';
 import db, { itemActualSQL, UPLOAD_DIR, getTotalBudget } from '../db.js';
 
@@ -177,23 +178,32 @@ export default async function (app) {
       ORDER BY o.id, p.pay_date, r.id`).all(...params);
     if (!rows.length) return reply.status(404).send({ message: '没有可导出的票据照片' });
 
+    // 磁盘缺失的票据跳过并留痕（备份部分恢复/手工清理会出现）：
+    // archiver 对 ENOENT 只发 warning 仍出包，但清单若按库记录生成会「声称 N 张、包里 M 张」；
+    // 其余读流错误若无监听会变成 uncaught exception，故显式接管 error。
+    const existing = rows.filter((r) => fs.existsSync(path.join(UPLOAD_DIR, r.filename)));
+    const missing = rows.length - existing.length;
+    if (missing) req.log.warn(`票据导出：${missing} 个文件已不在磁盘，已跳过`);
+    if (!existing.length) return reply.status(404).send({ message: '没有可导出的票据照片' });
+
     const safe = (s) => String(s).replace(/[\\/:*?"<>|]/g, '_');
     const archive = new ZipArchive({ zlib: { level: 6 } });
+    archive.on('error', (err) => req.log.error({ err }, '票据打包失败'));
     const seen = new Set();
-    rows.forEach((r) => {
+    existing.forEach((r) => {
       let entry = `${safe(r.title)}_${r.order_id}/${r.pay_date}_${r.amount}元/${safe(r.original_name)}`;
       let n = 2;
       while (seen.has(entry)) entry = `${safe(r.title)}_${r.order_id}/${r.pay_date}_${r.amount}元/${n++}_${safe(r.original_name)}`;
       seen.add(entry);
       archive.file(path.join(UPLOAD_DIR, r.filename), { name: entry });
     });
-    const manifest = rows.map((r) =>
+    const manifest = existing.map((r) =>
       `${r.title}（${r.vendor || '商家未填'}）｜${r.pay_date}｜${r.amount} 元｜${r.method || '方式未填'}｜票据：${r.original_name}${r.pay_note ? `｜${r.pay_note}` : ''}`
     ).join('\n');
-    archive.append(`票据清单（${rows.length} 张）\n生成时间：${new Date().toLocaleString('zh-CN')}\n\n${manifest}\n`, { name: '票据清单.txt' });
+    archive.append(`票据清单（${existing.length} 张${missing ? `，另有 ${missing} 张文件缺失未打包` : ''}）\n生成时间：${new Date().toLocaleString('zh-CN')}\n\n${manifest}\n`, { name: '票据清单.txt' });
     archive.finalize();
 
-    const label = orderId ? safe(rows[0].title) : '全部订单';
+    const label = orderId ? safe(existing[0].title) : '全部订单';
     reply.header('Content-Type', 'application/zip');
     reply.header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(`票据_${label}.zip`)}`);
     return reply.send(archive);
