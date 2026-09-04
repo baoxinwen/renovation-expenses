@@ -120,7 +120,7 @@ export default function OrderDetail() {
         label: order.title,
         del: () => api.deleteOrder(order.id),
         restore: () => api.restoreOrder(order.id),
-        onChanged: () => {},
+        onChanged: () => nav('/orders'),
         afterRestore: () => nav('/orders'),
       }),
     });
