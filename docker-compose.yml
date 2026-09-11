@@ -10,6 +10,8 @@ services:
       - "${PORT:-5174}:5174"
     environment:
       - NODE_ENV=production
+      # 时区：README 承诺「每天 03:00 备份」，容器默认 UTC 会变成北京时间 11:00 执行
+      - TZ=${TZ:-Asia/Shanghai}
       - SQLITE_JOURNAL_MODE=DELETE
       # .env 里的变量只用于本文件插值，不会自动进容器——README 承诺的
       # EXTRA_ALLOWED_HOSTS（NAS 主机名放行）必须在此显式透传
@@ -17,9 +19,4 @@ services:
     volumes:
       - ./data:/app/data
       - ./backups:/app/backups
-    healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5174/api/settings').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 30s
-      timeout: 5s
-      start_period: 10s
-      retries: 3
+    # 健康检查用镜像内置定义（Dockerfile，随 PORT 环境变量联动），此处不再重复声明以免漂移
