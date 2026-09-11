@@ -11,7 +11,28 @@ env:
   IMAGE_NAME: baoxinwen/renovation-expenses
 
 jobs:
+  # 回归测试必须先过（双算守卫/票据限额/zip 留痕/备份快照/导出口径等行为级断言），
+  # 否则破损代码会被直接构建发布为 :latest
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 使用 Node 22（与运行镜像一致）
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 运行回归测试
+        run: npm test
+
   build-and-push:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
