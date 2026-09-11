@@ -23,6 +23,14 @@ const winPath = (p) => p.replaceAll('\\', '/');
 // tar 是 GNU tar：C:/ 会被当作「远程主机:路径」，tar 面向的路径须用 MSYS 风格（/c/...）。
 // DATA_DIR 同时被 node（需 Windows 盘符路径）与 sh 消费，保持 C:/ 形式（MSYS 的 cp/test 均可识别）。
 const msysPath = (p) => '/' + winPath(p).replace(/^([A-Za-z]):\//, (_, d) => `${d.toLowerCase()}/`);
+
+// M10：backup.sh 依赖 POSIX shell（sh/tar）。Windows 未装 Git for Windows 时跳过——
+// 否则 spawnSync ENOENT 会让三个断言以 status=null 全败，报因模糊误导排查
+const shCheck = spawnSync('sh', ['-c', 'true'], { encoding: 'utf8' });
+if (shCheck.error || shCheck.status !== 0) {
+  console.log('跳过 backup.test.mjs：未找到可用的 sh（backup.sh 需要 POSIX shell，Windows 请安装 Git for Windows）');
+  process.exit(0);
+}
 const makeBackup = (tmpBase, { keep = '30' } = {}) => {
   const dataDir = path.join(tmpBase, 'data');
   const backupDir = path.join(tmpBase, 'backups');
@@ -42,6 +50,21 @@ const runBackup = (env) => spawnSync('sh', ['docker/backup.sh'], {
   env: { ...process.env, ...env },
   encoding: 'utf8',
 });
+
+// M9 失败注入需要给子进程传 POSIX 形式的 PATH（MSYS sh 不识别混合分隔符），
+// 同时 sh 本体须用绝对路径启动（覆盖 PATH 后按相对名查找会失败）
+const shExe = (() => {
+  for (const d of process.env.PATH.split(';').filter(Boolean)) {
+    for (const name of ['sh.exe', 'sh']) {
+      const candidate = path.join(d, name);
+      if (fs.existsSync(candidate)) return candidate;
+    }
+  }
+  return 'sh';
+})();
+const posixPath = () => process.env.PATH.split(';').filter(Boolean)
+  .map((p) => (/^[A-Za-z]:/.test(p) ? msysPath(p) : p.replaceAll('\\', '/')))
+  .join(':');
 
 const extract = (tarGz, dest) => {
   fs.mkdirSync(dest, { recursive: true });
@@ -82,6 +105,47 @@ try {
   check('backup.log 留痕失败', fs.existsSync(logPath) && fs.readFileSync(logPath, 'utf8').includes('失败'),
     `log=${fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : '(无)'}`);
   fs.rmSync(base2, { recursive: true, force: true });
+
+  console.log('== 打包失败不残留残档（M9） ==');
+  const base4 = fs.mkdtempSync(path.join(os.tmpdir(), 'renovation-backup-tarfail-'));
+  const { dataDir: d4, backupDir: b4 } = makeBackup(base4);
+  // PATH shim：假 tar 直接失败，模拟打包中途的文件系统错误（备份盘写满等）——
+  // 恰是备份最该可靠的场景；残档不得以正式备份之名留在目录里参与保留轮换
+  const shimDir = path.join(base4, 'shim');
+  fs.mkdirSync(shimDir);
+  const shimTar = path.join(shimDir, 'tar');
+  // 模拟真实 GNU tar 的中途失败：输出文件已创建并写入部分数据后退出非零。
+  // 注意 tar 的 czf 是合并短选项（f 的值跟在选项串后），解析须按「含 f 的选项 → 下一参数是输出」
+  fs.writeFileSync(shimTar, `#!/bin/sh
+out=""
+need_out=0
+for arg in "$@"; do
+  if [ "$need_out" = "1" ]; then out="$arg"; break; fi
+  case "$arg" in
+    *f*) need_out=1 ;;
+  esac
+done
+[ -n "$out" ] && printf 'partial-archive' > "$out"
+exit 2
+`);
+  fs.chmodSync(shimTar, 0o755);
+  const r4 = spawnSync(shExe, ['docker/backup.sh'], {
+    cwd: repoRoot,
+    env: {
+      ...process.env,
+      PATH: `${msysPath(shimDir)}:${posixPath()}`,
+      DATA_DIR: winPath(d4),
+      BACKUP_DIR: msysPath(b4),
+      APP_DIR: winPath(repoRoot),
+      KEEP: '30',
+    },
+    encoding: 'utf8',
+  });
+  check('tar 中途失败 → 非零退出', r4.status !== 0, `status=${r4.status} stderr=${r4.stderr?.slice(0, 200)}`);
+  check('失败后无 .part 残档', !fs.readdirSync(b4).some((f) => f.endsWith('.part')), `files=${fs.readdirSync(b4)}`);
+  check('失败后无正式归档（不得以备份之名参与保留轮换）',
+    !fs.readdirSync(b4).some((f) => f.endsWith('.tar.gz')), `files=${fs.readdirSync(b4)}`);
+  fs.rmSync(base4, { recursive: true, force: true });
 
   console.log('== 保留策略 ==');
   const base3 = fs.mkdtempSync(path.join(os.tmpdir(), 'renovation-backup-keep-'));

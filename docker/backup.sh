@@ -35,8 +35,15 @@ backup() {
       cp -r "$DATA_DIR/$d" "$TMP/data/" || return 1
     fi
   done
-  # 3) 打包（快照库 + 附件，绝不含运行中库的 -journal/-wal/-shm）
-  tar czf "$OUT" -C "$TMP" data || return 1
+  # 3) 打包（快照库 + 附件，绝不含运行中库的 -journal/-wal/-shm）。
+  #    原子写入：先写 .part 成功后 mv——失败时清理残档，
+  #    否则截断的 tar.gz 会以正式备份之名留在目录里参与保留轮换，恢复时才发现损坏
+  if tar czf "$OUT.part" -C "$TMP" data; then
+    mv "$OUT.part" "$OUT" || return 1
+  else
+    rm -f "$OUT.part"
+    return 1
+  fi
 }
 
 if backup; then
