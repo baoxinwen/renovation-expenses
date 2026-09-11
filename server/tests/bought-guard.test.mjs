@@ -1,4 +1,4 @@
-// I5 回归测试：建单挂「已买」项目的双算守卫（API 级，与 PUT /items 的 needForce 模式一致）。
+// 回归测试：建单挂「已买」项目的双算守卫（API 级，与 PUT /items 的 needForce 模式一致）。
 // 未带 force → 409 + needForce；确认后带 force → 放行；未买项目不受影响。
 // 隔离运行：自带临时数据库，不触碰生产库。
 import { spawn } from 'node:child_process';
@@ -26,9 +26,9 @@ async function req(method, p, body) {
   return { status: res.status, json: await res.json().catch(() => null) };
 }
 
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reno-i5-'));
-const child = spawn(process.execPath, [path.join(__dirname, 'index.js')], {
-  env: { ...process.env, PORT: String(PORT), RENO_DATA_DIR: tmpDir },
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'renovation-bought-guard-test-'));
+const child = spawn(process.execPath, [path.join(__dirname, '..', 'index.js')], {
+  env: { ...process.env, PORT: String(PORT), RENOVATION_DATA_DIR: tmpDir },
   stdio: 'ignore',
 });
 const cleanup = () => {
@@ -46,8 +46,8 @@ for (let i = 0; i < 30; i++) {
 if (!ready) { console.error('隔离测试服务启动失败'); cleanup(); process.exit(1); }
 
 try {
-  console.log('== I5 建单双算守卫 ==');
-  const sec = await req('POST', '/sections', { name: 'I5板块' });
+  console.log('== 建单双算守卫 ==');
+  const sec = await req('POST', '/sections', { name: '测试板块' });
   const boughtItem = await req('POST', `/sections/${sec.json.id}/items`,
     { name: '已买项目', quantity: 1, unit_price: 500, bought: true });
   const normalItem = await req('POST', `/sections/${sec.json.id}/items`,
@@ -77,5 +77,5 @@ try {
   cleanup();
 }
 
-console.log(`\nI5 结果: ${passed} 通过, ${failed} 失败`);
+console.log(`\n结果: ${passed} 通过, ${failed} 失败`);
 process.exit(failed ? 1 : 0);

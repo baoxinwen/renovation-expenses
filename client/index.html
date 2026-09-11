@@ -9,7 +9,7 @@
       // 首帧前应用暗色（与 useThemeMode 同规则），避免深色用户闪白屏
       (function () {
         try {
-          var mode = localStorage.getItem('reno-theme-mode');
+          var mode = localStorage.getItem('renovation-expenses.theme-mode');
           var dark = mode === 'dark'
             || ((!mode || mode === 'system') && window.matchMedia('(prefers-color-scheme: dark)').matches);
           if (dark) document.documentElement.classList.add('dark');

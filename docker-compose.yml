@@ -1,10 +1,10 @@
-name: renovation
+name: renovation-expenses
 
 services:
-  reno:
-    image: ghcr.io/baoxinwen/renovation:latest
+  app:
+    image: ghcr.io/baoxinwen/renovation-expenses:latest
     build: .
-    container_name: renovation
+    container_name: renovation-expenses
     restart: unless-stopped
     ports:
       - "${PORT:-5174}:5174"

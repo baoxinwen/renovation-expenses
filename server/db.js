@@ -4,14 +4,21 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// RENO_DATA_DIR 供测试隔离使用（默认为项目内 data/）
-export const DATA_DIR = process.env.RENO_DATA_DIR
-  ? path.resolve(process.env.RENO_DATA_DIR)
+// RENOVATION_DATA_DIR 供测试隔离使用（默认为项目内 data/）
+export const DATA_DIR = process.env.RENOVATION_DATA_DIR
+  ? path.resolve(process.env.RENOVATION_DATA_DIR)
   : path.join(__dirname, '..', 'data');
 export const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-const db = new Database(path.join(DATA_DIR, 'reno.db'));
+// 旧版数据库名为 reno.db：首次用新命名启动时自动改名，兼容旧数据目录与旧备份还原
+const DB_FILE = path.join(DATA_DIR, 'renovation-expenses.db');
+const LEGACY_DB_FILE = path.join(DATA_DIR, 'reno.db');
+if (!fs.existsSync(DB_FILE) && fs.existsSync(LEGACY_DB_FILE)) {
+  fs.renameSync(LEGACY_DB_FILE, DB_FILE);
+}
+
+const db = new Database(DB_FILE);
 // WAL 需要 mmap 共享内存，Windows Docker Desktop 的 bind mount 不支持（IOERR_SHMOPEN），
 // 容器环境通过 SQLITE_JOURNAL_MODE=DELETE 规避；裸机默认 WAL（读并发更好）
 db.pragma(`journal_mode = ${process.env.SQLITE_JOURNAL_MODE || 'WAL'}`);

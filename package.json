@@ -1,5 +1,5 @@
 {
-  "name": "renovation-budget",
+  "name": "renovation-expenses",
   "version": "1.0.0",
   "description": "装修记账与预算管理工具",
   "license": "MIT",
@@ -11,7 +11,7 @@
     "dev": "concurrently -k -n server,client -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
     "build": "tsc --noEmit -p client/tsconfig.json && vite build",
     "start": "node server/index.js",
-    "test": "node server/test-api-v2.mjs && node server/test-i1-export-actual.mjs && node server/test-i2-compose-env.mjs && node server/test-i3-receipt-limits.mjs && node server/test-i4-backup.mjs && node server/test-i5-bought-guard.mjs && node server/test-m7-zip-missing-file.mjs"
+    "test": "node server/tests/api.test.mjs && node server/tests/export-actual.test.mjs && node server/tests/compose-env.test.mjs && node server/tests/receipt-limits.test.mjs && node server/tests/backup.test.mjs && node server/tests/bought-guard.test.mjs && node server/tests/zip-missing-file.test.mjs"
   },
   "dependencies": {
     "@fastify/multipart": "^10.1.1",

@@ -1,4 +1,4 @@
-// I1 回归测试：导出 Excel Sheet1「实际已花」必须与应用口径一致（已买 + 挂有效项目的付款）。
+// 回归测试：导出 Excel Sheet1「实际已花」必须与应用口径一致（已买 + 挂有效项目的付款）。
 // 隔离运行：自带临时数据库，不触碰生产库。修复前该单元格写入的是全部付款总额（totalSpent）。
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -26,9 +26,9 @@ async function req(method, p, body) {
   return { status: res.status, json: await res.json().catch(() => null) };
 }
 
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reno-i1-'));
-const child = spawn(process.execPath, [path.join(__dirname, 'index.js')], {
-  env: { ...process.env, PORT: String(PORT), RENO_DATA_DIR: tmpDir },
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'renovation-export-test-'));
+const child = spawn(process.execPath, [path.join(__dirname, '..', 'index.js')], {
+  env: { ...process.env, PORT: String(PORT), RENOVATION_DATA_DIR: tmpDir },
   stdio: 'ignore',
 });
 const cleanup = () => {
@@ -46,17 +46,17 @@ for (let i = 0; i < 30; i++) {
 if (!ready) { console.error('隔离测试服务启动失败'); cleanup(); process.exit(1); }
 
 try {
-  console.log('== I1 导出口径 ==');
+  console.log('== 导出口径 ==');
   // 造数：已买项目总价 100；挂单付款 30；未关联订单付款 5
   // 应用口径 actual = 100 + 30 = 130；全部付款合计 totalSpent = 35（两者必须可区分）
-  const sec = await req('POST', '/sections', { name: 'I1测试板块' });
+  const sec = await req('POST', '/sections', { name: '测试板块' });
   const item = await req('POST', `/sections/${sec.json.id}/items`,
     { name: '已买大件', quantity: 1, unit_price: 100, bought: true });
   check('造数：已买项目', item.status === 200 && item.json.bought === 1);
   const linked = await req('POST', '/orders', {
     title: '挂单订单', item_id: item.json.id, total_amount: 30,
     paid_now: { amount: 30, pay_date: '2026-09-01' },
-    force: true, // 已买项目挂单触发 I5 双算守卫，测试场景即「确认后显式双算」
+    force: true, // 已买项目挂单触发建单双算守卫，测试场景即「确认后显式双算」
   });
   check('造数：挂单付款 30', linked.status === 200, `status=${linked.status}`);
   const loose = await req('POST', '/orders', {
@@ -90,5 +90,5 @@ try {
   cleanup();
 }
 
-console.log(`\nI1 结果: ${passed} 通过, ${failed} 失败`);
+console.log(`\n结果: ${passed} 通过, ${failed} 失败`);
 process.exit(failed ? 1 : 0);

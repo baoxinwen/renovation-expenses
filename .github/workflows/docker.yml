@@ -7,8 +7,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  # ghcr 镜像名必须全小写（仓库名 Renovation → renovation）
-  IMAGE_NAME: baoxinwen/renovation
+  # ghcr 镜像名必须全小写（仓库名 renovation-expenses）
+  IMAGE_NAME: baoxinwen/renovation-expenses
 
 jobs:
   build-and-push:

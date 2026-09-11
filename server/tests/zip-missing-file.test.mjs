@@ -1,4 +1,4 @@
-// M7 回归测试：票据 zip 导出对磁盘缺失的票据文件跳过而非产出残缺包。
+// 回归测试：票据 zip 导出对磁盘缺失的票据文件跳过而非产出残缺包。
 // 注：HTTP 层先发头再流式打包，缺失文件时状态码仍是 200——可区分的是 zip 完整性
 //（中央目录条目数）：修复前 archiver 读文件报错中断流，包残缺。
 // 隔离运行：自带临时数据库，不触碰生产库。
@@ -48,9 +48,9 @@ function zipEntryText(buf, name) {
   return null;
 }
 
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reno-m7-'));
-const child = spawn(process.execPath, [path.join(__dirname, 'index.js')], {
-  env: { ...process.env, PORT: String(PORT), RENO_DATA_DIR: tmpDir },
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'renovation-zip-test-'));
+const child = spawn(process.execPath, [path.join(__dirname, '..', 'index.js')], {
+  env: { ...process.env, PORT: String(PORT), RENOVATION_DATA_DIR: tmpDir },
   stdio: 'ignore',
 });
 const cleanup = () => {
@@ -68,10 +68,10 @@ for (let i = 0; i < 30; i++) {
 if (!ready) { console.error('隔离测试服务启动失败'); cleanup(); process.exit(1); }
 
 try {
-  console.log('== M7 缺失票据跳过 ==');
+  console.log('== 缺失票据跳过 ==');
   const order = await fetch(`${BASE}/orders`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: 'M7订单', total_amount: 10, paid_now: { amount: 10, pay_date: '2026-09-01' } }),
+    body: JSON.stringify({ title: '测试订单', total_amount: 10, paid_now: { amount: 10, pay_date: '2026-09-01' } }),
   });
   const paymentId = (await order.json()).payments[0].id;
 
@@ -107,5 +107,5 @@ try {
   cleanup();
 }
 
-console.log(`\nM7 结果: ${passed} 通过, ${failed} 失败`);
+console.log(`\n结果: ${passed} 通过, ${failed} 失败`);
 process.exit(failed ? 1 : 0);

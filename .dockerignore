@@ -17,4 +17,4 @@ README.md
 .env.example
 
 # Windows 专用启动脚本（镜像内无用）
-启动.bat
+start.bat

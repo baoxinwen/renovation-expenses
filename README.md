@@ -21,7 +21,7 @@
 
 ## 日常使用
 
-**双击项目目录下的 `启动.bat`**，浏览器自动打开 `http://localhost:5174`。
+**双击项目目录下的 `start.bat`**，浏览器自动打开 `http://localhost:5174`。
 
 - 使用期间不要关闭弹出的命令行窗口；用完关窗即可，数据实时保存
 - 提示端口被占用 = 账本已在运行，直接访问 `http://localhost:5174`
@@ -49,12 +49,12 @@ docker compose up -d --build
 
 # 3. 查看状态与日志
 docker compose ps
-docker compose logs -f reno
+docker compose logs -f app
 ```
 
 - **数据持久化**：SQLite、票据、日志全部落在宿主 `./data/`（bind mount），升级镜像/重建容器数据不丢
-- **自动备份**：主容器内置 cron 每天 03:00 把 `data/` 打包到 `./backups/reno-时间戳.tar.gz`（reno.db 先经 SQLite 在线备份做一致性快照，运行中备份也安全），保留最近 30 份；失败会写入 `backups/backup.log`。手动触发：`docker exec renovation /app/backup.sh`
-- **恢复备份**：停容器 → 清空 `data/` → 解包备份覆盖（`tar xzf backups/reno-xxxx.tar.gz -C data`）→ 重启
+- **自动备份**：主容器内置 cron 每天 03:00 把 `data/` 打包到 `./backups/renovation-expenses-时间戳.tar.gz`（renovation-expenses.db 先经 SQLite 在线备份做一致性快照，运行中备份也安全），保留最近 30 份；失败会写入 `backups/backup.log`。手动触发：`docker exec renovation-expenses /app/backup.sh`
+- **恢复备份**：停容器 → 清空 `data/` → 解包备份覆盖（`tar xzf backups/renovation-expenses-xxxx.tar.gz -C data`）→ 重启
 - **端口/主机名**：复制 `.env.example` 为 `.env` 可改宿主端口、追加放行的主机名（`EXTRA_ALLOWED_HOSTS`，通过 NAS 主机名或域名访问时需要）
 - **权限**：Linux 上若容器写数据报 EACCES，执行 `sudo chown -R 1000:1000 ./data`
 
@@ -62,7 +62,7 @@ docker compose logs -f reno
 
 ```
 data/
-├── reno.db        # 全部数据（清单/订单/付款/票据记录）
+├── renovation-expenses.db  # 全部数据（清单/订单/付款/票据记录）
 ├── uploads/       # 全部票据照片
 └── logs/          # 运行日志（按天轮转，保留 14 天）
 ```
@@ -77,7 +77,7 @@ data/
 npm run dev        # 开发模式（前端 5173 + 后端 5174 热重载）
 npm run build      # 构建前端到 dist/
 npm start          # 单进程启动（托管前端+API，端口 5174）
-node server/test-api-v2.mjs   # 后端场景测试（自隔离运行：临时库+独立端口，无需先启动服务）
+node server/tests/api.test.mjs   # 后端场景测试（自隔离运行：临时库+独立端口，无需先启动服务）
 ```
 
 技术栈：Fastify + better-sqlite3 + ExcelJS（后端）· React + Vite + TypeScript + Ant Design + ECharts（前端）。

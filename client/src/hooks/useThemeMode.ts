@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 
-const STORAGE_KEY = 'reno-theme-mode';
+const STORAGE_KEY = 'renovation-expenses.theme-mode';
 
 function readStored(): ThemeMode {
   const v = localStorage.getItem(STORAGE_KEY);

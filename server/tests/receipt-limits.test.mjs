@@ -1,6 +1,6 @@
-// I3/M2 回归测试：票据上传限制与落盘正确性。
-// I3 —— 张数/总量限制必须在流内生效（内存有界），超限请求被拒且不落任何文件；
-// M2 —— 两张同名不同内容的图片落盘后内容不得串写。
+// 回归测试：票据上传限制与落盘正确性。
+// 限制 —— 张数/总量限制必须在流内生效（内存有界），超限请求被拒且不落任何文件；
+// 同名 —— 两张同名不同内容的图片落盘后内容不得串写。
 // 隔离运行：自带临时数据库，不触碰生产库。
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -18,9 +18,9 @@ const check = (name, cond, detail = '') => {
   else { failed++; console.log(`  ✗ ${name} ${detail}`); }
 };
 
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reno-i3-'));
-const child = spawn(process.execPath, [path.join(__dirname, 'index.js')], {
-  env: { ...process.env, PORT: String(PORT), RENO_DATA_DIR: tmpDir },
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'renovation-receipt-test-'));
+const child = spawn(process.execPath, [path.join(__dirname, '..', 'index.js')], {
+  env: { ...process.env, PORT: String(PORT), RENOVATION_DATA_DIR: tmpDir },
   stdio: 'ignore',
 });
 const cleanup = () => {
@@ -46,13 +46,13 @@ const upload = async (paymentId, files) => {
 };
 
 try {
-  console.log('== I3 票据上传限制 ==');
+  console.log('== 票据上传限制 ==');
   // 造一个一次付清订单拿首笔付款
-  const sec = await fetch(`${BASE}/sections`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'I3板块' }) });
+  const sec = await fetch(`${BASE}/sections`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: '测试板块' }) });
   const secId = (await sec.json()).id;
   const order = await fetch(`${BASE}/orders`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title: 'I3订单', total_amount: 10, paid_now: { amount: 10, pay_date: '2026-09-01' } }),
+    body: JSON.stringify({ title: '测试订单', total_amount: 10, paid_now: { amount: 10, pay_date: '2026-09-01' } }),
   });
   const paymentId = (await order.json()).payments[0].id;
   const uploadsDir = path.join(tmpDir, 'uploads');
@@ -70,7 +70,7 @@ try {
   check('正常 2 张上传成功', r.status === 200 && r.json.length === 2, JSON.stringify(r.json?.message ?? r.status));
   check('落盘 2 个文件', diskFiles().length === 2, `落盘=${diskFiles().length}`);
 
-  console.log('== M2 同名票据不串写 ==');
+  console.log('== 同名票据不串写 ==');
   // 3) 两张同名不同内容：落盘内容必须与各自上传内容一致（修复前后者被写成前者的内容）
   const contentA = png(0xaa);
   const contentB = png(0xbb);
@@ -92,5 +92,5 @@ try {
   cleanup();
 }
 
-console.log(`\nI3/M2 结果: ${passed} 通过, ${failed} 失败`);
+console.log(`\n结果: ${passed} 通过, ${failed} 失败`);
 process.exit(failed ? 1 : 0);

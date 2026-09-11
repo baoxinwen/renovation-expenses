@@ -37,7 +37,7 @@
 - 统计图表：板块预算 vs 实际、月度付款趋势、最近付款流水、项目排行
 - 打印样式、加载骨架屏、深浅双主题（可跟随系统）
 - GitHub Actions 自动构建双架构镜像并推送 ghcr.io，NAS 拉取即更新
-- 一键启动脚本（Windows 双击 `启动.bat`），Docker Compose 部署支持
+- 一键启动脚本（Windows 双击 `start.bat`），Docker Compose 部署支持
 
 ### 修复
 
@@ -58,4 +58,4 @@
 - 已知遗留 moderate：echarts（XSS，待升级 v6）、uuid 依赖
   （经 exceljs，待上游兼容）
 
-[1.0.0]: https://github.com/baoxinwen/Renovation/releases/tag/v1.0.0
+[1.0.0]: https://github.com/baoxinwen/renovation-expenses/releases/tag/v1.0.0

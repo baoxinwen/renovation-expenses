@@ -1,5 +1,5 @@
-// V2 场景测试（隔离运行）：自带临时数据库 + 自建 Excel fixture，绝不触碰生产库
-// 用法：node server/test-api-v2.mjs
+// API 场景测试（隔离运行）：自带临时数据库 + 自建 Excel fixture，绝不触碰生产库
+// 用法：node server/tests/api.test.mjs
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -64,12 +64,12 @@ const PLAN_TOTAL = 100000 + 3684.02 + 2166.77 + 19999 + 2447.2 + 0 + 2580 + 5158
 const BOUGHT = 3684.02 + 2166.77 + 19999; // 25849.79
 
 // ---------- 启动隔离服务 ----------
-const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'reno-test-'));
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'renovation-api-test-'));
 const fixturePath = path.join(tmpDir, 'fixture.xlsx');
 await buildFixture(fixturePath);
 
-const child = spawn(process.execPath, [path.join(__dirname, 'index.js')], {
-  env: { ...process.env, PORT: String(PORT), RENO_DATA_DIR: tmpDir },
+const child = spawn(process.execPath, [path.join(__dirname, '..', 'index.js')], {
+  env: { ...process.env, PORT: String(PORT), RENOVATION_DATA_DIR: tmpDir },
   stdio: 'ignore',
 });
 const cleanup = () => {

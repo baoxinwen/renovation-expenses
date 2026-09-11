@@ -48,7 +48,7 @@ export default function Plan() {
   // 清单搜索 / 板块折叠 / 待付尾款摘要展开
   const [search, setSearch] = useState('');
   const [collapsed, setCollapsed] = useState<Set<number>>(() => {
-    try { return new Set<number>(JSON.parse(localStorage.getItem('reno-collapsed') ?? '[]')); }
+    try { return new Set<number>(JSON.parse(localStorage.getItem('renovation-expenses.collapsed') ?? '[]')); }
     catch { return new Set(); }
   });
   const [unpaid, setUnpaid] = useState<Order[]>([]);
@@ -189,7 +189,7 @@ export default function Plan() {
   };
   // 折叠状态持久化：effect 里写回（幂等，StrictMode 双执行无害），刷新后恢复
   useEffect(() => {
-    localStorage.setItem('reno-collapsed', JSON.stringify([...collapsed]));
+    localStorage.setItem('renovation-expenses.collapsed', JSON.stringify([...collapsed]));
   }, [collapsed]);
 
   // 板块拖拽排序
