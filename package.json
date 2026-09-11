@@ -11,7 +11,7 @@
     "dev": "concurrently -k -n server,client -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
     "build": "tsc --noEmit -p client/tsconfig.json && vite build",
     "start": "node server/index.js",
-    "test": "node server/tests/api.test.mjs && node server/tests/export-actual.test.mjs && node server/tests/compose-env.test.mjs && node server/tests/receipt-limits.test.mjs && node server/tests/backup.test.mjs && node server/tests/bought-guard.test.mjs && node server/tests/zip-missing-file.test.mjs"
+    "test": "node server/tests/legacy-wal-migration.test.mjs && node server/tests/api.test.mjs && node server/tests/export-actual.test.mjs && node server/tests/compose-env.test.mjs && node server/tests/docker-config.test.mjs && node server/tests/export-finalize.test.mjs && node server/tests/receipt-limits.test.mjs && node server/tests/backup.test.mjs && node server/tests/bought-guard.test.mjs && node server/tests/zip-missing-file.test.mjs && node server/tests/spawn-server.test.mjs"
   },
   "dependencies": {
     "@fastify/multipart": "^10.1.1",
