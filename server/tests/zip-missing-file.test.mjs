@@ -2,12 +2,12 @@
 // 注：HTTP 层先发头再流式打包，缺失文件时状态码仍是 200——可区分的是 zip 完整性
 //（中央目录条目数）：修复前 archiver 读文件报错中断流，包残缺。
 // 隔离运行：自带临时数据库，不触碰生产库。
-import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
+import { startTestServer, cleanupTestServer } from './helpers/spawn-server.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = 5214;
@@ -49,23 +49,12 @@ function zipEntryText(buf, name) {
 }
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'renovation-zip-test-'));
-const child = spawn(process.execPath, [path.join(__dirname, '..', 'index.js')], {
-  env: { ...process.env, PORT: String(PORT), RENOVATION_DATA_DIR: tmpDir },
-  stdio: 'ignore',
-});
-const cleanup = () => {
-  try { child.kill(); } catch { /* 已退出 */ }
-  try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* Windows 文件占用时忽略 */ }
-};
+// 就绪判定凭就绪标记 + 子进程存活（端口被外部实例占用时快速失败，不误测外部实例）
+const { child, ready } = await startTestServer({ port: PORT, dataDir: tmpDir });
+const cleanup = () => cleanupTestServer(child, tmpDir);
 process.on('exit', cleanup);
 process.on('SIGINT', () => { cleanup(); process.exit(1); });
-
-let ready = false;
-for (let i = 0; i < 30; i++) {
-  try { if ((await fetch(`${BASE}/settings`)).ok) { ready = true; break; } } catch { /* 尚未启动 */ }
-  await new Promise((r) => setTimeout(r, 300));
-}
-if (!ready) { console.error('隔离测试服务启动失败'); cleanup(); process.exit(1); }
+if (!ready) { console.error('隔离测试服务启动失败（端口可能被占用）'); cleanup(); process.exit(1); }
 
 try {
   console.log('== 缺失票据跳过 ==');

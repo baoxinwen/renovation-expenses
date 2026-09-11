@@ -114,6 +114,11 @@ app.setErrorHandler((err, req, reply) => {
 
 app.listen({ port: PORT, host: '0.0.0.0' })
   .then(() => {
+    // 测试专用：就绪标记。端口被外部实例占用时，测试凭此文件确认响应者就是本进程
+    //（仅探测 /api/settings 会把占用端口的外部服务误当被测对象）
+    if (process.env.RENOVATION_READY_FILE) {
+      fs.writeFileSync(process.env.RENOVATION_READY_FILE, String(process.pid));
+    }
     app.log.info({ port: PORT }, '装修账本已启动');
     console.log('');
     console.log('  装修账本已启动');

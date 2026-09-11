@@ -1,12 +1,12 @@
 // API 场景测试（隔离运行）：自带临时数据库 + 自建 Excel fixture，绝不触碰生产库
 // 用法：node server/tests/api.test.mjs
-import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ExcelJS from 'exceljs';
+import { startTestServer, cleanupTestServer } from './helpers/spawn-server.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = 5199;
@@ -68,28 +68,14 @@ const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'renovation-api-test-'));
 const fixturePath = path.join(tmpDir, 'fixture.xlsx');
 await buildFixture(fixturePath);
 
-const child = spawn(process.execPath, [path.join(__dirname, '..', 'index.js')], {
-  env: { ...process.env, PORT: String(PORT), RENOVATION_DATA_DIR: tmpDir },
-  stdio: 'ignore',
-});
-const cleanup = () => {
-  try { child.kill(); } catch { /* 已退出 */ }
-  try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* Windows 文件占用时忽略 */ }
-};
+// 就绪判定凭就绪标记 + 子进程存活（端口被外部实例占用时快速失败，不误测外部实例——
+// api.test 含 mode=replace 全量导入，误测外部实例会破坏其真实数据）
+const { child, ready } = await startTestServer({ port: PORT, dataDir: tmpDir });
+const cleanup = () => cleanupTestServer(child, tmpDir);
 process.on('exit', cleanup);
 process.on('SIGINT', () => { cleanup(); process.exit(1); });
-
-// 等待就绪
-let ready = false;
-for (let i = 0; i < 30; i++) {
-  try {
-    const r = await fetch(`${BASE}/settings`);
-    if (r.ok) { ready = true; break; }
-  } catch { /* 尚未启动 */ }
-  await new Promise((r) => setTimeout(r, 300));
-}
 if (!ready) {
-  console.error('隔离测试服务启动失败');
+  console.error('隔离测试服务启动失败（端口可能被占用）');
   cleanup();
   process.exit(1);
 }
