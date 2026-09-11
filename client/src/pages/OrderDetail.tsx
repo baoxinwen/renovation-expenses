@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import { api } from '../api';
 import type { Order, Payment, Receipt, Section, OrderFormValues } from '../api';
 import { fmtMoney, PAY_METHODS } from '../format';
-import { undoableDelete } from '../utils/domain';
+import { undoableDelete, confirmOrderOnBoughtItem } from '../utils/domain';
 import { useIsMobile } from '../hooks/useIsMobile';
 import OrderFormModal from '../components/OrderFormModal';
 
@@ -66,30 +66,40 @@ export default function OrderDetail() {
 
   // 编辑模式不提供「一次付清」（付款在详情页管理），files 恒为空
   const saveOrder = async (values: OrderFormValues, _files: File[]) => {
-    // 双算校验：挂到已勾「已买」的项目会重复计入实际
+    // 双算校验：挂到已勾「已买」的项目会重复计入实际（确认后带 force）
     const target = values.item_id
       ? sections.flatMap((s) => s.items ?? []).find((it) => it.id === values.item_id)
       : null;
-    if (target?.bought) {
-      const proceed = await new Promise<boolean>((resolve) => {
-        Modal.confirm({
-          title: '该项目已勾选「已买」',
-          content: `「${target.name}」的总价已计入实际，再把订单付款挂上去会重复计入。通常二选一即可，仍要关联吗？`,
-          okText: '仍要关联',
-          onOk: () => resolve(true),
-          onCancel: () => resolve(false),
-        });
-      });
-      if (!proceed) return;
-    }
-    setSavingEdit(true);
-    try {
-      await api.updateOrder(order.id, values);
+    if (target?.bought && !(await confirmOrderOnBoughtItem(target))) return;
+    const submit = async (force?: boolean) => {
+      await api.updateOrder(order.id, force ? { ...values, force: true } : values);
       toast.success('订单已更新');
       setEditOpen(false);
       load();
+    };
+    setSavingEdit(true);
+    try {
+      await submit();
     } catch (e) {
-      toast.error((e as Error).message);
+      const err = e as Error & { needForce?: boolean };
+      if (!err.needForce) {
+        toast.error(err.message);
+        return;
+      }
+      // 服务端守卫兜底：本地 sections 是挂载时的快照，多端场景可能已过期——
+      // 取最新项目名确认后带 force 重试（与新建订单页同一链路）
+      let name = target?.name;
+      if (!name && values.item_id) {
+        try {
+          name = (await api.getPlan()).sections.flatMap((s) => s.items ?? []).find((it) => it.id === values.item_id)?.name;
+        } catch { /* 拿不到最新清单就用兜底文案 */ }
+      }
+      if (!(await confirmOrderOnBoughtItem({ name: name ?? '该项目' }))) return;
+      try {
+        await submit(true);
+      } catch (e2) {
+        toast.error((e2 as Error).message);
+      }
     } finally {
       setSavingEdit(false);
     }

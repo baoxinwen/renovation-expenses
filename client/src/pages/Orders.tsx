@@ -70,9 +70,8 @@ export default function Orders() {
       });
       if (!ok) return;
     }
-    setSaving(true);
-    try {
-      const order = await api.addOrder({ ...values, ...(target?.bought ? { force: true } : {}) });
+    const submit = async (force: boolean) => {
+      const order = await api.addOrder({ ...values, ...(force ? { force: true } : {}) });
       // 一次付清：把选好的票据直接传到首笔付款上
       const pay = order.payments?.[0];
       if (pay && files.length) {
@@ -85,8 +84,30 @@ export default function Orders() {
       toast.success(values.paid_now ? '购买已记录（订单+付款+票据）' : '订单已创建');
       setModalOpen(false);
       nav(`/orders/${order.id}`);
+    };
+    setSaving(true);
+    try {
+      await submit(target?.bought === 1);
     } catch (e) {
-      toast.error((e as Error).message);
+      const err = e as Error & { needForce?: boolean };
+      if (!err.needForce) {
+        toast.error(err.message);
+        return;
+      }
+      // 服务端守卫兜底：本地 sections 是挂载时的快照，多端场景可能已过期——
+      // 取最新项目名确认后带 force 重试（复用 Plan 页的 409→确认→force 链路）
+      let name = target?.name;
+      if (!name && values.item_id) {
+        try {
+          name = (await api.getPlan()).sections.flatMap((s) => s.items ?? []).find((it) => it.id === values.item_id)?.name;
+        } catch { /* 拿不到最新清单就用兜底文案 */ }
+      }
+      if (!(await confirmOrderOnBoughtItem({ name: name ?? '该项目' }))) return;
+      try {
+        await submit(true);
+      } catch (e2) {
+        toast.error((e2 as Error).message);
+      }
     } finally {
       setSaving(false);
     }
