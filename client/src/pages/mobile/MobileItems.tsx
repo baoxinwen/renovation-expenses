@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, Collapse, Empty, Input, Skeleton, Tag } from 'antd';
+import { Button, Card, Collapse, Empty, Input, Skeleton, Tag } from 'antd';
 import { toast } from 'sonner';
 import { api } from '../../api';
 import type { Item, PlanData } from '../../api';
@@ -14,11 +14,14 @@ export default function MobileItems() {
   const [plan, setPlan] = useState<PlanData | null>(null);
   const [search, setSearch] = useState('');
   const [buyTarget, setBuyTarget] = useState<Item | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    setLoadError(null);
     try {
       setPlan(await api.getPlan());
     } catch (e) {
+      setLoadError((e as Error).message);
       toast.error((e as Error).message);
     }
   }, []);
@@ -38,7 +41,18 @@ export default function MobileItems() {
       .filter((sec) => (sec.items ?? []).length > 0);
   }, [plan, q]);
 
-  if (!plan) return <Card><Skeleton active paragraph={{ rows: 8 }} /></Card>;
+  if (!plan) {
+    // 加载失败必须给重试入口，不能停在无限骨架屏（桌面端有对应错误卡）
+    if (loadError) {
+      return (
+        <Card>
+          <Empty description={`加载失败：${loadError}`} image={Empty.PRESENTED_IMAGE_SIMPLE} style={{ padding: 20 }} />
+          <Button block onClick={load}>重试</Button>
+        </Card>
+      );
+    }
+    return <Card><Skeleton active paragraph={{ rows: 8 }} /></Card>;
+  }
 
   return (
     <div>

@@ -16,21 +16,35 @@ export default function MobileHome() {
   const [unpaid, setUnpaid] = useState<Order[]>([]);
   const [charts, setCharts] = useState<Charts | null>(null);
   const [payTarget, setPayTarget] = useState<Order | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    setLoadError(null);
     try {
       const [p, orders, c] = await Promise.all([api.getPlan(), api.getOrders({ status: 'open' }), api.getCharts()]);
       setPlan(p);
       setCharts(c);
       setUnpaid(orders.filter((o) => (o.paid ?? 0) < o.total_amount && o.total_amount > 0));
     } catch (e) {
+      setLoadError((e as Error).message);
       toast.error((e as Error).message);
     }
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
-  if (!plan) return <Card><Skeleton active paragraph={{ rows: 6 }} /></Card>;
+  if (!plan) {
+    // 加载失败必须给重试入口，不能停在无限骨架屏（桌面端有对应错误卡）
+    if (loadError) {
+      return (
+        <Card>
+          <Empty description={`加载失败：${loadError}`} image={Empty.PRESENTED_IMAGE_SIMPLE} style={{ padding: 20 }} />
+          <Button block onClick={load}>重试</Button>
+        </Card>
+      );
+    }
+    return <Card><Skeleton active paragraph={{ rows: 6 }} /></Card>;
+  }
 
   const diff = plan.plan_total - plan.total_budget;
   const overBudget = plan.total_budget > 0 && diff > 0;
