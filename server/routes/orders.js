@@ -161,8 +161,16 @@ export default async function (app) {
     if (!['open', 'closed'].includes(status)) return reply.status(400).send({ message: '状态不合法' });
     const itemId = 'item_id' in b ? (b.item_id ? Number(b.item_id) : null) : order.item_id;
     if (itemId != null) {
-      const targetItem = db.prepare('SELECT id FROM items WHERE id = ? AND deleted = 0').get(itemId);
+      const targetItem = db.prepare('SELECT id, name, bought FROM items WHERE id = ? AND deleted = 0').get(itemId);
       if (!targetItem) return reply.status(400).send({ message: '关联的预算项目不存在（或已删除）' });
+      // 双算守卫（API 级）：换绑到已勾「已买」的项目会重复计入实际（与 POST /orders 守卫一致）。
+      // 只拦换绑跃迁：订单本就挂在该项目上时改标题/金额不需要 force
+      if (targetItem.bought && targetItem.id !== order.item_id && !b.force) {
+        return reply.status(409).send({
+          message: `「${targetItem.name}」已勾「已买」，再挂订单付款会重复计入实际合计`,
+          needForce: true,
+        });
+      }
     }
     try {
       db.prepare(`UPDATE orders SET title = ?, vendor = ?, item_id = ?, total_amount = ?, note = ?, status = ?

@@ -160,9 +160,10 @@ export default async function (app) {
     if (unitPrice === null) return reply.status(400).send({ message: '单价必须是非负数字' });
 
     const bought = b.bought !== undefined ? (b.bought ? 1 : 0) : item.bought;
-    // 双算守卫（API 级）：勾已买且项目下已有有效订单付款 → 409；
-    // 前端确认后带 force:true 可通过（此时双计是用户显式选择，见 PRD 口径说明）
-    if (bought === 1 && !b.force) {
+    // 双算守卫（API 级）：把未买项目勾成「已买」（0→1 跃迁）且项目下已有有效订单付款 → 409；
+    // 前端确认后带 force:true 可通过（此时双计是用户显式选择，见 PRD 口径说明）。
+    // 守卫只拦跃迁：本就已买的项目做普通编辑（改备注/名称/单价）不带 bought 字段，不触发
+    if (bought === 1 && item.bought !== 1 && !b.force) {
       const orderPaid = db.prepare(`
         SELECT COALESCE(SUM(p.amount), 0) AS s FROM payments p JOIN orders o ON o.id = p.order_id
         WHERE o.item_id = ? AND o.deleted = 0`).get(id).s;
