@@ -197,7 +197,7 @@ export default function Analysis() {
         <Col xs={24} lg={11}>
           <Card title="项目排行" size="small" styles={{ body: { paddingTop: 8 } }}>
             <Table
-              rowKey={(r) => r.name}
+              rowKey="id"
               size="small"
               dataSource={charts?.top_items ?? []}
               pagination={false}
