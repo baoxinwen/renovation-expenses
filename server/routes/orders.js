@@ -280,7 +280,11 @@ export default async function (app) {
       }
     };
     for await (const file of files) {
-      if (file.fieldname !== 'files') continue;
+      if (file.fieldname !== 'files') {
+        // 不消费当前流 busboy 会因 fileHwm 反压暂停解析，next() 永不产出 → 请求悬挂到超时
+        for await (const _ of file.file) { void _; }
+        continue;
+      }
       received += 1;
       if (received > LIMITS.RECEIPT_MAX_FILES) {
         badRequest = `单次最多上传 ${LIMITS.RECEIPT_MAX_FILES} 张`;

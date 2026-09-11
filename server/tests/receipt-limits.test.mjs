@@ -2,11 +2,11 @@
 // 限制 —— 张数/总量限制必须在流内生效（内存有界），超限请求被拒且不落任何文件；
 // 同名 —— 两张同名不同内容的图片落盘后内容不得串写。
 // 隔离运行：自带临时数据库，不触碰生产库。
-import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { startTestServer, cleanupTestServer } from './helpers/spawn-server.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = 5212;
@@ -19,23 +19,12 @@ const check = (name, cond, detail = '') => {
 };
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'renovation-receipt-test-'));
-const child = spawn(process.execPath, [path.join(__dirname, '..', 'index.js')], {
-  env: { ...process.env, PORT: String(PORT), RENOVATION_DATA_DIR: tmpDir },
-  stdio: 'ignore',
-});
-const cleanup = () => {
-  try { child.kill(); } catch { /* 已退出 */ }
-  try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* Windows 文件占用时忽略 */ }
-};
+// 就绪判定凭就绪标记 + 子进程存活（端口被外部实例占用时快速失败，不误测外部实例）
+const { child, ready } = await startTestServer({ port: PORT, dataDir: tmpDir });
+const cleanup = () => cleanupTestServer(child, tmpDir);
 process.on('exit', cleanup);
 process.on('SIGINT', () => { cleanup(); process.exit(1); });
-
-let ready = false;
-for (let i = 0; i < 30; i++) {
-  try { if ((await fetch(`${BASE}/settings`)).ok) { ready = true; break; } } catch { /* 尚未启动 */ }
-  await new Promise((r) => setTimeout(r, 300));
-}
-if (!ready) { console.error('隔离测试服务启动失败'); cleanup(); process.exit(1); }
+if (!ready) { console.error('隔离测试服务启动失败（端口可能被占用）'); cleanup(); process.exit(1); }
 
 const png = (byte) => new Blob([new Uint8Array([0x89, 0x50, byte, 0x4e, 0x47])], { type: 'image/png' });
 const upload = async (paymentId, files) => {
@@ -88,6 +77,39 @@ try {
       && (disks[0][2] === 0xaa || disks[0][2] === 0xbb);
     check('内容为上传的两份之一', inputsDiffer);
   }
+  console.log('== 早退路径不悬挂（I1） ==');
+  // 早退（格式/张数/字段名不符）时必须先消费当前 part 的流再回包：
+  // 修复前 busboy 因默认 fileHwm(16KB) 反压暂停解析，请求悬挂到 requestTimeout(~300s)
+  const blobOf = (bytes) => new Blob([Buffer.alloc(bytes, 0xff)], { type: 'image/png' });
+  const timedUpload = async (fd) => {
+    const t0 = Date.now();
+    const res = await fetch(`${BASE}/payments/${paymentId}/receipts`, {
+      method: 'POST', body: fd, signal: AbortSignal.timeout(15000),
+    });
+    return { res, ms: Date.now() - t0 };
+  };
+
+  // 1) 不支持的格式（HEIC，>16KB）
+  const fdHeic = new FormData();
+  fdHeic.append('files', blobOf(64 * 1024), 'IMG_0001.HEIC');
+  const heic = await timedUpload(fdHeic);
+  check('不支持格式快速返回 400（不悬挂至超时）', heic.res.status === 400 && heic.ms < 10000, `status=${heic.res.status} ms=${heic.ms}`);
+  check('返回设计的中文提示', ((await heic.res.json().catch(() => null))?.message ?? '').includes('不支持的图片格式'));
+
+  // 2) 超张数（12 张大图）
+  const fdMany = new FormData();
+  for (let i = 0; i < 12; i++) fdMany.append('files', blobOf(64 * 1024), `${i}.png`);
+  const many = await timedUpload(fdMany);
+  check('超张数快速返回 400（不悬挂至超时）', many.res.status === 400 && many.ms < 10000, `status=${many.res.status} ms=${many.ms}`);
+  check('超张数返回中文提示', ((await many.res.json().catch(() => null))?.message ?? '').includes('最多上传'));
+
+  // 3) 文件字段名不符
+  const fdWrong = new FormData();
+  fdWrong.append('photo', blobOf(64 * 1024), 'x.png');
+  const wrong = await timedUpload(fdWrong);
+  check('字段名不符快速返回 400', wrong.res.status === 400 && wrong.ms < 10000, `status=${wrong.res.status} ms=${wrong.ms}`);
+
+  check('服务仍存活', (await fetch(`${BASE}/settings`)).ok);
 } finally {
   cleanup();
 }
