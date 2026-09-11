@@ -193,14 +193,22 @@ export default function OrderDetail() {
     }
   };
 
-  const removeReceipt = async (r: Receipt) => {
-    try {
-      await api.deleteReceipt(r.id);
-      load();
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
-  };
+  // 票据是维权凭证且物理删除不可恢复（服务端直接 unlink），误触代价高——必须二次确认
+  const removeReceipt = (r: Receipt) =>
+    Modal.confirm({
+      title: `删除票据「${r.original_name}」？`,
+      content: '记录与照片文件将被永久删除，不可撤销。',
+      okText: '删除',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          await api.deleteReceipt(r.id);
+          load();
+        } catch (e) {
+          toast.error((e as Error).message);
+        }
+      },
+    });
 
   const payments = order.payments ?? [];
 
