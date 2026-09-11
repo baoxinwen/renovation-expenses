@@ -122,6 +122,29 @@ try {
   r = await req('DELETE', `/items/${newItemId}`);
   check('删除项目', r.status === 200);
 
+  console.log('== 3b. 添加项目边界（UI 添加入口走同一 API） ==');
+  r = await req('POST', `/sections/${sec1.id}/items`, { name: '   ' });
+  check('纯空白名称被拒绝', r.status === 400, `status=${r.status}`);
+  r = await req('POST', `/sections/${sec1.id}/items`, { name: '负数量项目', quantity: -0.5 });
+  check('负数量被拒绝', r.status === 400, `status=${r.status}`);
+  r = await req('POST', `/sections/${sec1.id}/items`, { name: '负单价项目', unit_price: -1 });
+  check('负单价被拒绝', r.status === 400, `status=${r.status}`);
+  r = await req('POST', `/sections/${sec1.id}/items`, { name: '零值项目', quantity: 0, unit_price: 0 });
+  check('数量/单价为 0 合法（未买先登记）', r.status === 200 && r.json.quantity === 0 && r.json.unit_price === 0,
+    `status=${r.status}`);
+  const zeroItemId = r.json.id;
+  r = await req('POST', '/sections/999999/items', { name: '孤儿项目' });
+  check('不存在的板块 → 404', r.status === 404, `status=${r.status}`);
+  r = await req('POST', `/sections/${sec1.id}/items`, { name: '边界项目', spec: '规格', unit: '件', quantity: 2.5, unit_price: 12.34, note: '备注' });
+  check('全字段添加成功且数量单价如实返回', r.status === 200 && r.json.quantity === 2.5 && Math.abs(r.json.unit_price - 12.34) < 0.001,
+    `status=${r.status}`);
+  r = (await req('GET', '/plan')).json;
+  const boundaryItem = r.sections.flatMap((s) => s.items).find((i) => i.name === '边界项目');
+  check('清单可见且预算 = 数量×单价（2.5×12.34=30.85）',
+    !!boundaryItem && Math.abs(boundaryItem.budget_amount - 30.85) < 0.001, `budget=${boundaryItem?.budget_amount}`);
+  await req('DELETE', `/items/${boundaryItem.id}`);
+  await req('DELETE', `/items/${zeroItemId}`);
+
   console.log('== 4. 订单挂项目 ==');
   r = (await req('GET', '/plan')).json;
   const tile = r.sections.flatMap((s) => s.items).find((i) => i.name === '硬装施工总价');

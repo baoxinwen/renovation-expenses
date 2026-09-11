@@ -25,7 +25,13 @@ export default function ItemFormModal({ open, confirmLoading, onOk, onCancel }: 
       confirmLoading={confirmLoading}
       destroyOnClose
     >
-      <Form form={form} layout="vertical" initialValues={{ quantity: 1, unit_price: 0 }}>
+      {/* onOk 由 Form.onFinish 驱动：form.submit() 校验通过后才会触发，校验失败由表单内红字提示 */}
+      <Form
+        form={form}
+        layout="vertical"
+        initialValues={{ quantity: 1, unit_price: 0 }}
+        onFinish={(values) => onOk(values as ItemFormValues)}
+      >
         <Form.Item name="name" label="项目名称" rules={[{ required: true, message: '请输入项目名称' }]}>
           <Input placeholder="如：抽油烟机、电视柜" maxLength={60} />
         </Form.Item>
