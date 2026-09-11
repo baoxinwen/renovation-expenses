@@ -6,6 +6,12 @@ import db, { itemActualSQL, UPLOAD_DIR, getTotalBudget } from '../db.js';
 
 const MONEY = '#,##0.00';
 
+// finalize() 返回的 Promise 必须接住：打包中 zip 模块读流出错时，error 事件侧已有监听记日志，
+// 但该 Promise 若无消费者会以 unhandledRejection 终止整个进程（Node ≥15 默认 throw）
+export function finalizeArchive(archive, log) {
+  archive.finalize().catch((err) => log.error({ err }, '票据打包 finalize 失败'));
+}
+
 function styleHeader(ws) {
   const row = ws.getRow(1);
   row.font = { bold: true };
@@ -201,7 +207,7 @@ export default async function (app) {
       `${r.title}（${r.vendor || '商家未填'}）｜${r.pay_date}｜${r.amount} 元｜${r.method || '方式未填'}｜票据：${r.original_name}${r.pay_note ? `｜${r.pay_note}` : ''}`
     ).join('\n');
     archive.append(`票据清单（${existing.length} 张${missing ? `，另有 ${missing} 张文件缺失未打包` : ''}）\n生成时间：${new Date().toLocaleString('zh-CN')}\n\n${manifest}\n`, { name: '票据清单.txt' });
-    archive.finalize();
+    finalizeArchive(archive, req.log);
 
     const label = orderId ? safe(existing[0].title) : '全部订单';
     reply.header('Content-Type', 'application/zip');
