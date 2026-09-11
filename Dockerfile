@@ -41,6 +41,8 @@ RUN chmod +x /usr/local/bin/entrypoint.sh /app/backup.sh
 
 # 数据卷：SQLite 库 + 票据 + 日志（compose 里 bind mount 到宿主 ./data）
 VOLUME /app/data
+# 备份卷：裸 docker run（不经 compose）升级容器时备份不随容器可写层丢失
+VOLUME /app/backups
 # 以 root 进入 entrypoint（自动修正数据目录属主后降权 node 运行，见 entrypoint.sh）
 EXPOSE 5174
 
