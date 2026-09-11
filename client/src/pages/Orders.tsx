@@ -49,6 +49,16 @@ export default function Orders() {
 
   useEffect(() => { load(); }, [load]);
 
+  // 搜索防抖：输入停顿 250ms 才触发查询（回车立即查）；避免每键一请求，
+  // 服务不可达时逐键弹错误 toast
+  const [searchInput, setSearchInput] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setFilters((f) => (f.q === searchInput ? f : { ...f, q: searchInput }));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
   // 从清单页带 new=1 跳转过来时直接打开新建弹窗
   useEffect(() => {
     if (searchParams.get('new') === '1') setModalOpen(true);
@@ -190,8 +200,9 @@ export default function Orders() {
             style={{ width: 220 }}
             placeholder="搜订单 / 商家 / 项目"
             allowClear
-            value={filters.q}
-            onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            onSearch={(v) => { setSearchInput(v); setFilters((f) => (f.q === v ? f : { ...f, q: v })); }}
           />
           <Button icon={<ReloadOutlined />} onClick={load} />
         </Space>
