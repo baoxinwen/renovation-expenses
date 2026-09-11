@@ -11,11 +11,17 @@ export const DATA_DIR = process.env.RENOVATION_DATA_DIR
 export const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-// 旧版数据库名为 reno.db：首次用新命名启动时自动改名，兼容旧数据目录与旧备份还原
+// 旧版数据库名为 reno.db：首次用新命名启动时自动改名，兼容旧数据目录与旧备份还原。
+// -wal/-shm 必须随主库一起改名：旧进程非干净退出（本项目从不主动关库）时，
+// 未 checkpoint 的事务只存在于 reno.db-wal，落在旧名下会被新库弃用造成数据丢失
 const DB_FILE = path.join(DATA_DIR, 'renovation-expenses.db');
 const LEGACY_DB_FILE = path.join(DATA_DIR, 'reno.db');
 if (!fs.existsSync(DB_FILE) && fs.existsSync(LEGACY_DB_FILE)) {
   fs.renameSync(LEGACY_DB_FILE, DB_FILE);
+  for (const suffix of ['-wal', '-shm']) {
+    const legacySidecar = LEGACY_DB_FILE + suffix;
+    if (fs.existsSync(legacySidecar)) fs.renameSync(legacySidecar, DB_FILE + suffix);
+  }
 }
 
 const db = new Database(DB_FILE);
