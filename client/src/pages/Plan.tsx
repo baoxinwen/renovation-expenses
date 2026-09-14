@@ -347,7 +347,8 @@ export default function Plan() {
       render: () => (searching ? null : <DragHandle />),
     },
     {
-      title: '项目名称', dataIndex: 'name', width: 160, fixed: 'left' as const,
+      title: '项目名称', dataIndex: 'name', width: 110, fixed: 'left' as const,
+      ellipsis: { showTitle: true },
     },
     {
       title: '规格 / 品牌', dataIndex: 'spec',
