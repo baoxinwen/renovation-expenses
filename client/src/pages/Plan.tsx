@@ -21,6 +21,7 @@ import { fmtMoney } from '../format';
 import ItemFormModal from '../components/ItemFormModal';
 import { confirmAsync } from '../utils/confirm';
 import { EditableText, EditableNum, SortableRow, DragHandle, SectionDragHandle, SortableSectionCard } from '../components/plan/PlanEditing';
+import type { ItemFormResult } from '../components/ItemFormModal';
 import BuyModal from '../components/BuyModal';
 import QuickPayModal from '../components/QuickPayModal';
 import WoodProgress from '../components/WoodProgress';
@@ -39,6 +40,9 @@ export default function Plan() {
   const [sectionName, setSectionName] = useState('');
   const [itemModal, setItemModal] = useState<{ sectionId: number } | null>(null);
   const [savingItem, setSavingItem] = useState(false);
+  // 整行编辑弹窗：点击行打开，可修改全部字段（含已买项目的实付金额）
+  const [editItem, setEditItem] = useState<Item | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   // 购买登记弹窗 / 待付尾款行内付款弹窗
   const [buyTarget, setBuyTarget] = useState<Item | null>(null);
@@ -105,6 +109,22 @@ export default function Plan() {
     } catch (e) {
       toast.error((e as Error).message);
       return false;
+    }
+  };
+
+  // 整行编辑：提交全部可改字段；已买项目带实付金额（null = 清除，实际回退数量×单价）
+  const saveEdit = async (values: ItemFormResult) => {
+    if (!editItem) return;
+    setSavingEdit(true);
+    try {
+      const updated = await api.updateItem(editItem.id, values);
+      patchItem(updated);
+      toast.success('项目已更新');
+      setEditItem(null);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -331,6 +351,10 @@ export default function Plan() {
       title: '', key: 'drag', width: 32, align: 'center' as const, fixed: 'left' as const,
       className: 'no-print',
       onHeaderCell: () => ({ className: 'no-print' }),
+      onCell: () => ({
+        // 拖拽柄点击不触发行编辑弹窗
+        onClick: (e: React.MouseEvent) => e.stopPropagation(),
+      }),
       render: () => (searching ? null : <DragHandle />),
     },
     {
@@ -590,6 +614,16 @@ export default function Plan() {
                         components={{ body: { row: SortableRow } }}
                         locale={{ emptyText: '该板块还没有项目，点右上角「添加项目」开始' }}
                         columns={itemColumns}
+                        onRow={(it) => ({
+                          // 点击行打开整行编辑弹窗；行内单元格/勾选框/按钮自带的
+                          // stopPropagation 或 closest 守卫会先拦下，不触发
+                          onClick: (e) => {
+                            const t = e.target as HTMLElement;
+                            if (t.closest('input, button, .ant-checkbox-wrapper, .drag-handle, a')) return;
+                            setEditItem(it);
+                          },
+                          style: { cursor: 'pointer' },
+                        })}
                         summary={() => {
                           if (searching) return null;
                           const items = sec.items ?? [];
@@ -629,7 +663,7 @@ export default function Plan() {
       )}
 
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        买完的小件：点「已买」登记实际支付金额（预算保持不变，支持抹零）；分定金/尾款的大件用「订单」挂在项目下。退货退款在订单付款里记负数自动冲抵。统计图表见「分析」页。
+        点行的空白处可整行编辑全部信息；点「已买」登记实际支付（预算保持不变，支持抹零）；分定金/尾款的大件用「订单」挂在项目下，退货退款记负数自动冲抵。统计图表见「分析」页。
       </Typography.Text>
 
       {/* 目标编辑弹窗 */}
@@ -689,6 +723,15 @@ export default function Plan() {
             setSavingItem(false);
           }
         }}
+      />
+
+      {/* 整行编辑弹窗：点击行任意空白处打开 */}
+      <ItemFormModal
+        initial={editItem}
+        open={editItem != null}
+        confirmLoading={savingEdit}
+        onCancel={() => setEditItem(null)}
+        onOk={saveEdit}
       />
 
       {/* 购买登记：勾「已买」时登记实际支付金额与日期 */}
