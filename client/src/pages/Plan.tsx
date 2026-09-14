@@ -20,7 +20,7 @@ import type { Item, Order, PlanData, Section } from '../api';
 import { fmtMoney } from '../format';
 import ItemFormModal from '../components/ItemFormModal';
 import { confirmAsync } from '../utils/confirm';
-import { EditableText, EditableNum, SortableRow, DragHandle, SectionDragHandle, SortableSectionCard } from '../components/plan/PlanEditing';
+import { SortableRow, DragHandle, SectionDragHandle, SortableSectionCard } from '../components/plan/PlanEditing';
 import type { ItemFormResult } from '../components/ItemFormModal';
 import BuyModal from '../components/BuyModal';
 import QuickPayModal from '../components/QuickPayModal';
@@ -100,17 +100,6 @@ export default function Plan() {
       };
     });
   }, []);
-
-  const saveItem = async (item: Item, patch: Record<string, unknown>): Promise<boolean> => {
-    try {
-      const updated = await api.updateItem(item.id, patch);
-      patchItem(updated);
-      return true;
-    } catch (e) {
-      toast.error((e as Error).message);
-      return false;
-    }
-  };
 
   // 整行编辑：提交全部可改字段；已买项目带实付金额（null = 清除，实际回退数量×单价）
   const saveEdit = async (values: ItemFormResult) => {
@@ -359,24 +348,21 @@ export default function Plan() {
     },
     {
       title: '项目名称', dataIndex: 'name', width: 160, fixed: 'left' as const,
-      render: (_, it: Item) => <EditableText value={it.name} onCommit={(v) => saveItem(it, { name: v })} placeholder="项目名" />,
     },
     {
       title: '规格 / 品牌', dataIndex: 'spec',
-      render: (_, it: Item) => <EditableText value={it.spec} onCommit={(v) => saveItem(it, { spec: v })} placeholder="品牌型号" />,
     },
     {
       title: '单位', dataIndex: 'unit', width: 56,
-      render: (_, it: Item) => <EditableText value={it.unit} onCommit={(v) => saveItem(it, { unit: v })} placeholder="项" />,
     },
     {
       title: '数量', dataIndex: 'quantity', width: 72, align: 'right' as const,
-      render: (_, it: Item) => <EditableNum value={it.quantity} onCommit={(v) => saveItem(it, { quantity: v ?? 0 })} />,
+      render: (v: number) => <span className="tabular">{v}</span>,
     },
     {
-      // 语义为「预算单价」：购买登记写的是实付金额，不再覆盖此列（改这里改的是计划）
+      // 预算单价：点击行在弹窗中修改；购买登记写的是实付金额，不影响此列
       title: '单价', dataIndex: 'unit_price', width: 104, align: 'right' as const,
-      render: (_, it: Item) => <EditableNum value={it.unit_price} onCommit={(v) => saveItem(it, { unit_price: v ?? 0 })} />,
+      render: (v: number) => <span className="tabular">{fmtMoney(v)}</span>,
     },
     {
       title: '总预算', dataIndex: 'budget_amount', width: 110, align: 'right' as const,
@@ -406,7 +392,6 @@ export default function Plan() {
     },
     {
       title: '备注', dataIndex: 'note', width: 150, ellipsis: true,
-      render: (_, it: Item) => <EditableText value={it.note} onCommit={(v) => saveItem(it, { note: v })} placeholder="" />,
     },
     {
       title: '操作', width: 96, className: 'no-print',
@@ -663,7 +648,7 @@ export default function Plan() {
       )}
 
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        点行的空白处可整行编辑全部信息；点「已买」登记实际支付（预算保持不变，支持抹零）；分定金/尾款的大件用「订单」挂在项目下，退货退款记负数自动冲抵。统计图表见「分析」页。
+        点击行即可修改项目信息（名称 / 规格 / 数量 / 单价 / 备注）；点「已买」登记实际支付（预算保持不变，支持抹零）；分定金/尾款的大件用「订单」挂在项目下，退货退款记负数自动冲抵。统计图表见「分析」页。
       </Typography.Text>
 
       {/* 目标编辑弹窗 */}

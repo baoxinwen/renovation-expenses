@@ -1,86 +1,13 @@
 /**
- * 预算清单的可编辑单元格与拖拽包装组件。
- * 从 Plan.tsx 拆出（该页原 660 行职责过载），仅服务清单表格场景。
+ * 预算清单的拖拽包装组件。
+ * 从 Plan.tsx 拆出，仅服务清单表格场景；项目信息编辑统一走行点击弹窗。
  */
-import { createContext, useContext, useState } from 'react';
-import { Input, InputNumber } from 'antd';
+import { createContext, useContext } from 'react';
 import { HolderOutlined } from '@ant-design/icons';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { SyntheticListenerMap } from '@dnd-kit/core/dist/hooks/utilities';
 import type { Section } from '../../api';
-
-// ---------- 行内编辑单元格：失焦提交；成功闪光 / 失败回滚 ----------
-export function EditableText({ value, onCommit, placeholder }: {
-  value: string; onCommit: (v: string) => Promise<boolean>; placeholder?: string;
-}) {
-  const [flash, setFlash] = useState(false);
-  const [resetKey, setResetKey] = useState(0); // 保存失败时强制回滚显示
-  return (
-    <div className={`editable-cell ${flash ? 'flash-saved' : ''}`}>
-      <Input
-        key={`${value}-${resetKey}`}
-        size="small"
-        variant="borderless"
-        defaultValue={value}
-        placeholder={placeholder}
-        onClick={(e) => e.stopPropagation()}
-        onBlur={async (e) => {
-          const v = e.target.value.trim();
-          if (v === value) return;
-          if (await onCommit(v)) {
-            setFlash(true);
-            setTimeout(() => setFlash(false), 650);
-          } else {
-            setResetKey((k) => k + 1);
-          }
-        }}
-      />
-    </div>
-  );
-}
-
-export function EditableNum({ value, onCommit }: {
-  value: number | null; onCommit: (v: number | null) => Promise<boolean>;
-}) {
-  const [flash, setFlash] = useState(false);
-  const [resetKey, setResetKey] = useState(0);
-  return (
-    <div className={`editable-cell num ${flash ? 'flash-saved' : ''}`}>
-      <InputNumber
-        key={`${String(value)}-${resetKey}`}
-        size="small"
-        variant="borderless"
-        defaultValue={value ?? undefined}
-        min={0}
-        formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-        parser={(t) => Number(String(t).replace(/,/g, '')) as number}
-        style={{ width: '100%' }}
-        onClick={(e) => e.stopPropagation()}
-        onBlur={async (e) => {
-          const raw = e.target.value.trim().replace(/,/g, '');
-          let next: number | null;
-          if (raw === '') next = 0;
-          else {
-            const n = Number(raw);
-            if (!Number.isFinite(n)) {
-              setResetKey((k) => k + 1); // 非法输入回滚显示为服务器值
-              return;
-            }
-            next = n;
-          }
-          if (next === value) return;
-          if (await onCommit(next)) {
-            setFlash(true);
-            setTimeout(() => setFlash(false), 650);
-          } else {
-            setResetKey((k) => k + 1);
-          }
-        }}
-      />
-    </div>
-  );
-}
 
 // ---------- dnd-kit：项目行拖拽（拖手柄列） ----------
 const RowListenersContext = createContext<{ listeners?: SyntheticListenerMap }>({});

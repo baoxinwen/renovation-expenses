@@ -124,14 +124,6 @@ body {
 }
 
 /* ============ 工具类 ============ */
-/* 保存成功反馈：单元格背景闪一下鼠尾草绿 */
-@keyframes flash-saved {
-  0% { background-color: var(--sage-100); }
-  100% { background-color: transparent; }
-}
-.flash-saved {
-  animation: flash-saved 600ms var(--ease-out);
-}
 
 /* 板块卡片入场：轻微上移淡入，错落 40ms */
 @keyframes rise-in {
@@ -147,17 +139,6 @@ body {
 .rise-in {
   opacity: 0;
   animation: rise-in 280ms var(--ease-out) forwards;
-}
-
-/* 可编辑单元格：hover 浅木底提示可编辑 */
-.editable-cell .ant-input,
-.editable-cell .ant-input-number,
-.editable-cell .ant-input-number .ant-input-number-input {
-  transition: background-color var(--dur-hover) var(--ease-out);
-}
-.editable-cell:hover .ant-input,
-.editable-cell:hover .ant-input-number {
-  background: var(--wood-50);
 }
 
 /* 拖拽手柄：默认隐身，悬停板块卡片时浮现（降低标题区图标密度） */
@@ -255,17 +236,6 @@ body {
 }
 .ant-table-tbody > tr > td {
   border-color: var(--line);
-}
-
-/* 数字列：可编辑输入框内部文字右对齐，与只读数字一致 */
-.editable-cell.num .ant-input-number-input {
-  text-align: right;
-}
-
-/* 无边框输入（行内编辑）对齐暖色 */
-.ant-input-borderless,
-.ant-input-number-borderless {
-  color: var(--ink);
 }
 
 /* 侧栏菜单：浅色亚麻材质 */
