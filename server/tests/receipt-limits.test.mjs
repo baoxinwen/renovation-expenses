@@ -2,6 +2,7 @@
 // 限制 —— 张数/总量限制必须在流内生效（内存有界），超限请求被拒且不落任何文件；
 // 同名 —— 两张同名不同内容的图片落盘后内容不得串写。
 // 隔离运行：自带临时数据库，不触碰生产库。
+import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -109,7 +110,13 @@ try {
   const wrong = await timedUpload(fdWrong);
   check('字段名不符快速返回 400', wrong.res.status === 400 && wrong.ms < 10000, `status=${wrong.res.status} ms=${wrong.ms}`);
 
-  check('服务仍存活', (await fetch(`${BASE}/settings`)).ok);
+  // 存活探针走 node:http 独立新连接：早退场景服务端会在客户端仍在上传时提前回 400
+  // 并截断连接，被重置的 socket 残留在 fetch(undici) 连接池里，复用会误报 ECONNRESET
+  const alive = await new Promise((resolve) => {
+    const probe = http.get(`${BASE}/settings`, (res) => { res.resume(); resolve(res.statusCode === 200); });
+    probe.on('error', () => resolve(false));
+  });
+  check('服务仍存活', alive);
 } finally {
   cleanup();
 }
