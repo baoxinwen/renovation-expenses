@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Button, DatePicker, Form, InputNumber, Modal, Typography } from 'antd';
+import { Button, DatePicker, Form, InputNumber, Modal } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import type { Item } from '../api';
 import { fmtMoney } from '../format';
@@ -11,8 +11,8 @@ interface Values {
 
 /**
  * 购买登记：勾「已买」时的确认弹窗
- * - 未买：确认成交价与日期后标记（改价自动保存，原价由后端存为预算基线）
- * - 已买：编辑成交价/日期，或「取消已买」
+ * - 未买：登记实际支付金额（预算保持不变）与日期
+ * - 已买：修正实付金额/日期，或「取消已买」（实付与日期一并清除）
  */
 export default function BuyModal({ item, open, onClose, onConfirm, onUnmark, confirmLoading }: {
   item: Item | null;
@@ -24,15 +24,17 @@ export default function BuyModal({ item, open, onClose, onConfirm, onUnmark, con
 }) {
   const [form] = Form.useForm();
   const isBought = !!item?.bought;
+  // 参考值：数量 × 预算单价（抹零/打包价在此基础上直接改）
+  const budgetTotal = item ? Number((item.quantity * item.unit_price).toFixed(2)) : 0;
 
   useEffect(() => {
     if (open && item) {
       form.setFieldsValue({
-        price: item.unit_price,
+        price: item.paid_amount ?? budgetTotal,
         date: dayjs(item.bought_date || new Date()),
       });
     }
-  }, [open, item, form]);
+  }, [open, item, form, budgetTotal]);
 
   if (!item) return null;
 
@@ -46,16 +48,12 @@ export default function BuyModal({ item, open, onClose, onConfirm, onUnmark, con
       destroyOnClose
       okText={isBought ? '保存' : '记为已买'}
     >
-      {item.init_unit_price != null && item.init_unit_price !== item.unit_price && (
-        <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
-          预算价 {fmtMoney(item.init_unit_price)} → 成交价改后，预算基线已自动记录（分析页可看漂移）
-        </Typography.Text>
-      )}
       <Form form={form} layout="vertical" onFinish={(v: Values) => onConfirm(item.id, v.price, v.date.format('YYYY-MM-DD'))}>
         <Form.Item
           name="price"
-          label={`成交单价（数量 ${item.quantity}，总价将变为 数量×成交价）`}
-          rules={[{ required: true, message: '请输入成交单价' }]}
+          label="实际支付（元）"
+          extra={`预算 ${item.quantity} × ${fmtMoney(item.unit_price)} = ${fmtMoney(budgetTotal)}，登记后预算不变；抹零/打包价直接改数字`}
+          rules={[{ required: true, message: '请输入实际支付金额' }]}
         >
           <InputNumber min={0} precision={2} style={{ width: '100%' }} />
         </Form.Item>
@@ -65,7 +63,7 @@ export default function BuyModal({ item, open, onClose, onConfirm, onUnmark, con
       </Form>
       {isBought && (
         <Button type="link" danger style={{ padding: 0 }} onClick={() => onUnmark(item.id)}>
-          取消已买（保留当前价格）
+          取消已买（清除实付金额与日期）
         </Button>
       )}
     </Modal>

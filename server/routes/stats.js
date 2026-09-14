@@ -4,10 +4,6 @@ export default async function (app) {
   app.get('/stats/summary', async () => {
     const totalBudget = getTotalBudget();
     const planTotal = db.prepare('SELECT COALESCE(SUM(quantity * unit_price), 0) AS s FROM items WHERE deleted = 0').get().s;
-    // 预算基线：首次改价前的单价（未改过的用现价），用于展示"预算漂移"
-    const initPlanTotal = db.prepare(
-      'SELECT COALESCE(SUM(quantity * COALESCE(init_unit_price, unit_price)), 0) AS s FROM items WHERE deleted = 0'
-    ).get().s;
     const actualTotal = db.prepare(
       `SELECT COALESCE(SUM(${itemActualSQL('items').trim()}), 0) AS s FROM items WHERE items.deleted = 0`
     ).get().s;
@@ -23,7 +19,6 @@ export default async function (app) {
     return {
       total_budget: totalBudget,
       plan_total: planTotal,
-      init_plan_total: initPlanTotal,
       actual_total: actualTotal,
       unassigned_paid: unassignedPaid,
       sections,

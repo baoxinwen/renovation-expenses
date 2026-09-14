@@ -197,27 +197,42 @@ try {
   r = await req('POST', '/orders', { title: 'x', total_amount: 100, paid_now: { amount: 50, pay_date: '2026-13-01' } });
   check('一次付清非法日期被拒绝', r.status === 400);
 
-  console.log('== 5c. 购买登记（基线/日期/漂移/月度含已买） ==');
-  // 改价前基线自动记录
+  console.log('== 5c. 购买登记（预算/实付分离：预算不动，实付单记） ==');
   const lamp2 = (await req('GET', '/plan')).json.sections.flatMap((s) => s.items).find((i) => i.name === '智能开关面板');
+  // 调整预算单价：纯预算行为，无任何基线/漂移副作用
   r = await req('PUT', `/items/${lamp2.id}`, { unit_price: 150 });  // 129 → 150
-  check('首次改价自动记录预算基线 129', r.json.init_unit_price === 129, JSON.stringify(r.json.init_unit_price));
-  r = await req('PUT', `/items/${lamp2.id}`, { unit_price: 160 });
-  check('再次改价基线保持 129 不变', r.json.init_unit_price === 129);
-  r = (await req('GET', '/stats/summary')).json;
-  check('漂移统计 = +620（20 个开关 ×(160-129)）', Math.abs((r.plan_total - r.init_plan_total) - 620) < 0.5, `=${r.plan_total - r.init_plan_total}`);
-  // 购买登记：勾已买带日期
-  r = await req('PUT', `/items/${lamp2.id}`, { bought: true, unit_price: 150, bought_date: '2026-08-26' });
-  check('购买登记成功（bought+日期）', r.json.bought === 1 && r.json.bought_date === '2026-08-26');
+  check('调整预算单价 → 单价与预算合计随之更新', r.json.unit_price === 150 && r.json.budget_amount === 3000,
+    `=${r.json.unit_price}/${r.json.budget_amount}`);
+  // 购买登记：登记实付金额，预算合计不受影响
+  r = await req('PUT', `/items/${lamp2.id}`, { bought: true, paid_amount: 3000, bought_date: '2026-08-26' });
+  check('购买登记成功（已买+日期）', r.json.bought === 1 && r.json.bought_date === '2026-08-26');
+  check('实付金额如实记录', r.json.paid_amount === 3000, JSON.stringify(r.json.paid_amount));
+  check('预算合计不受购买影响（仍 20×150=3000）', r.json.budget_amount === 3000, `=${r.json.budget_amount}`);
+  check('实际 = 登记实付 3000（而非单价×数量）', Math.abs(r.json.actual_amount - 3000) < 0.5, `=${r.json.actual_amount}`);
   r = await req('PUT', `/items/${lamp2.id}`, { bought_date: '2026-13-01' });
   check('非法购买日期被拒绝', r.status === 400);
+  // 实付可单独修正（抹零/砍价后补记），预算依旧不动
+  r = await req('PUT', `/items/${lamp2.id}`, { paid_amount: 2300 });
+  check('实付金额可单独修正', r.json.paid_amount === 2300 && Math.abs(r.json.actual_amount - 2300) < 0.5,
+    `=${r.json.paid_amount}/${r.json.actual_amount}`);
+  r = await req('PUT', `/items/${lamp2.id}`, { paid_amount: -1 });
+  check('负实付金额被拒绝', r.status === 400, `status=${r.status}`);
+  // 未填实付 → 实际回退 数量×单价（兼容只勾已买不填金额的用法）
+  r = await req('POST', `/sections/${sec1.id}/items`, { name: '回退校验项目', quantity: 2, unit_price: 100 });
+  const fallbackId = r.json.id;
+  r = await req('PUT', `/items/${fallbackId}`, { bought: true, bought_date: '2026-08-27' });
+  check('未填实付 → 实际回退 数量×单价 = 200', Math.abs(r.json.actual_amount - 200) < 0.5, `=${r.json.actual_amount}`);
   // 月度趋势含已买：2026-08 应有已买支出（基线测试中硬装订单付款 30000 也在 08）
   r = (await req('GET', '/stats/charts')).json;
   const aug = r.by_month.find((m) => m.month === '2026-08');
-  // 此时 08 = 已买三件fixture(25849.79，无日期不计) + 开关 150*20=3000 + 一次付清抽油烟机(已软删) + 硬装 30000
+  // 此时 08 = 已买三件fixture(25849.79，无日期不计) + 开关实付 3000 + 一次付清抽油烟机(已软删) + 硬装 30000
   check('月度趋势含已买支出（08 月 ≥ 33000）', aug && aug.amount >= 33000, JSON.stringify(aug));
+  // 取消已买：实付与日期一并清空，状态回滚干净
   r = await req('PUT', `/items/${lamp2.id}`, { bought: false });
-  check('取消已买', r.json.bought === 0 && r.json.actual_amount === 0);
+  check('取消已买 → 实付/日期清空、实际归 0',
+    r.json.bought === 0 && r.json.paid_amount === null && r.json.bought_date === null && r.json.actual_amount === 0,
+    JSON.stringify({ p: r.json.paid_amount, d: r.json.bought_date, a: r.json.actual_amount }));
+  await req('DELETE', `/items/${fallbackId}`);
   await req('PUT', `/items/${lamp2.id}`, { unit_price: 129 }); // 还原
 
   console.log('== 5c+. 双算 force 守卫 ==');

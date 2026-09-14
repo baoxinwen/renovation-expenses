@@ -122,14 +122,6 @@ export default function Analysis() {
           <Card size="small">
             <div className="label-caption">清单总计</div>
             <AnimatedMoney value={summary?.plan_total ?? 0} style={{ fontSize: 22, display: 'block', marginTop: 8 }} />
-            {summary && summary.init_plan_total > 0 && Math.abs(summary.plan_total - summary.init_plan_total) > 0.5 && (
-              <div className="label-caption" style={{ marginTop: 6 }}>
-                初始预算 {fmtMoney(summary.init_plan_total)}
-                <span style={{ color: summary.plan_total > summary.init_plan_total ? 'var(--clay)' : 'var(--sage)', marginLeft: 6 }}>
-                  漂移 {summary.plan_total > summary.init_plan_total ? '+' : ''}{fmtMoney(summary.plan_total - summary.init_plan_total)}
-                </span>
-              </div>
-            )}
           </Card>
         </Col>
         <Col xs={12} md={6}>

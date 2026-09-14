@@ -70,7 +70,23 @@ try {
   const cellValue = Number(ws.getCell(`D${spentRow}`).value);
   check(`Sheet1 实际已花 = 应用口径 130（而非付款合计 35）`, Math.abs(cellValue - 130) < 0.01, `实际值=${cellValue}`);
 
-  const wsp = wb.getWorksheet('付款明细');
+  // 实付金额优先于预算单价：登记实付 88（数量×单价=100）→ 实际已花 = 88 + 30 = 118
+  const paid = await req('PUT', `/items/${item.json.id}`, { paid_amount: 88 });
+  check('登记实付 88', paid.status === 200 && paid.json.paid_amount === 88, `status=${paid.status}`);
+  check('预算合计不受实付影响（仍 100）', paid.json.budget_amount === 100, `=${paid.json.budget_amount}`);
+  const res2 = await fetch(`${BASE}/export/excel`);
+  const wb2 = new ExcelJS.Workbook();
+  await wb2.xlsx.load(await res2.arrayBuffer());
+  const ws2 = wb2.getWorksheet('预算评估表');
+  let spentRow2 = 0;
+  ws2.eachRow((row) => {
+    const label = String(row.getCell('B').value ?? '');
+    if (label.startsWith('实际已花')) spentRow2 = row.number;
+  });
+  const cellValue2 = Number(ws2.getCell(`D${spentRow2}`).value);
+  check('Sheet1 实际已花随实付修正为 118（预算口径 100 不参与）', Math.abs(cellValue2 - 118) < 0.01, `实际值=${cellValue2}`);
+
+  const wsp = wb2.getWorksheet('付款明细');
   let sumRow = 0;
   wsp.eachRow((row) => { if (String(row.getCell('A').value ?? '') === '合计') sumRow = row.number; });
   const sheet2Sum = Number(wsp.getCell(`F${sumRow}`).value);

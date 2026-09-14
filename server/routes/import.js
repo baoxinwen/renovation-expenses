@@ -1,7 +1,7 @@
 import db, { LIMITS } from '../db.js';
 import ExcelJS from 'exceljs';
 
-// 在工作表中定位表头行与关键列（项目名称/规格/单位/数量/单价/备注）
+// 在工作表中定位表头行与关键列（项目名称/规格/单位/数量/单价/实际支付/备注）
 function findHeader(ws) {
   let headerRow = -1;
   const col = {};
@@ -21,6 +21,7 @@ function findHeader(ws) {
         else if (t.includes('单位')) col.unit = Number(cn);
         else if (t.includes('数量')) col.quantity = Number(cn);
         else if (t.includes('单价')) col.unitPrice = Number(cn);
+        else if (t.includes('实际支付')) col.paidAmount = Number(cn);
         else if (t.includes('备注')) col.note = Number(cn);
       }
     }
@@ -128,6 +129,7 @@ function parseWorkbook(wb) {
     const bought = note.includes('已买') || spec.includes('已买');
     // 数量/单价与非负校验对齐（plan.js 的 validNum 语义）：负数与异常值一律按 0 处理
     const safeNum = (x, fallback) => (x == null ? fallback : (Number.isFinite(x) && x >= 0 ? x : 0));
+    const paidRaw = col.paidAmount ? cellNum(row.getCell(col.paidAmount).value) : null;
     sections[sections.length - 1].items.push({
       seq,
       name,
@@ -135,6 +137,8 @@ function parseWorkbook(wb) {
       unit,
       quantity: safeNum(quantityRaw, 1),
       unit_price: safeNum(priceRaw, 0),
+      // 实付金额仅随「已买」入库；未填/未买为 null（实际回退 数量×单价）
+      paid_amount: bought && paidRaw != null && paidRaw >= 0 ? paidRaw : null,
       note,
       bought: bought ? 1 : 0,
     });
@@ -179,8 +183,8 @@ export default async function (app) {
     }
 
     const insertSection = db.prepare('INSERT INTO sections (name, sort_order) VALUES (?, ?)');
-    const insertItem = db.prepare(`INSERT INTO items (section_id, name, spec, unit, quantity, unit_price, bought, note, sort_order)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    const insertItem = db.prepare(`INSERT INTO items (section_id, name, spec, unit, quantity, unit_price, bought, paid_amount, note, sort_order)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     let itemCount = 0;
 
     try {
@@ -200,7 +204,7 @@ export default async function (app) {
           }
           const info = insertSection.run(name, baseOrder + si);
           sec.items.forEach((it, ii) => {
-            insertItem.run(info.lastInsertRowid, it.name, it.spec, it.unit, it.quantity, it.unit_price, it.bought, it.note, ii);
+            insertItem.run(info.lastInsertRowid, it.name, it.spec, it.unit, it.quantity, it.unit_price, it.bought, it.paid_amount, it.note, ii);
             itemCount++;
           });
         });

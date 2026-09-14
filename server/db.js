@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS items (
   unit_price   REAL NOT NULL DEFAULT 0,
   bought       INTEGER NOT NULL DEFAULT 0,
   bought_date  TEXT,
-  init_unit_price REAL,  -- 预算基线：首次改价前的单价（回看“当初预算多少”）
+  paid_amount  REAL,     -- 实际支付金额：登记「已买」时填写（抹零/打包价不受单价×数量约束）；空则实际回退数量×单价
   note         TEXT NOT NULL DEFAULT '',
   sort_order   INTEGER NOT NULL DEFAULT 0,
   deleted      INTEGER NOT NULL DEFAULT 0,
@@ -126,12 +126,16 @@ const sectionCols = db.prepare('PRAGMA table_info(sections)').all().map((c) => c
 if (!sectionCols.includes('deleted')) {
   db.exec('ALTER TABLE sections ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0');
 }
-// v2.4：购买登记（bought_date）与预算基线（init_unit_price）
+// v2.4：购买登记（bought_date）；v2.6：实付金额（paid_amount），预算/实付语义分离，
+// 旧基线字段 init_unit_price 随漂移机制一并退役
 if (!itemCols.includes('bought_date')) {
   db.exec('ALTER TABLE items ADD COLUMN bought_date TEXT');
 }
-if (!itemCols.includes('init_unit_price')) {
-  db.exec('ALTER TABLE items ADD COLUMN init_unit_price REAL');
+if (!itemCols.includes('paid_amount')) {
+  db.exec('ALTER TABLE items ADD COLUMN paid_amount REAL');
+}
+if (itemCols.includes('init_unit_price')) {
+  db.exec('ALTER TABLE items DROP COLUMN init_unit_price');
 }
 
 // 首次初始化：写入 seeded 标记 + 预置板块（之后清空板块/重导不会再触发预置）
@@ -175,7 +179,7 @@ export function getTotalBudget() {
 // 注：既勾「已买」又挂订单付款时两路都会计入——前端有双算确认，此为显式选择的口径。
 export function itemActualSQL(alias = 'i') {
   return `
-  (CASE WHEN ${alias}.bought = 1 THEN ${alias}.quantity * ${alias}.unit_price ELSE 0 END
+  (CASE WHEN ${alias}.bought = 1 THEN COALESCE(${alias}.paid_amount, ${alias}.quantity * ${alias}.unit_price) ELSE 0 END
    + COALESCE((SELECT SUM(p.amount) FROM payments p JOIN orders o ON o.id = p.order_id
                WHERE o.item_id = ${alias}.id AND o.deleted = 0), 0))`;
 }

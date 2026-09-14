@@ -34,7 +34,8 @@ function buildBudgetSheet(wb, { sections, itemsBySection, totalBudget, actualLik
     { header: '单位', key: 'unit', width: 6 },
     { header: '数量', key: 'quantity', width: 7 },
     { header: '单价（元）', key: 'unit_price', width: 11, style: { numFmt: MONEY } },
-    { header: '总价（元）', key: 'total_formula', width: 13, style: { numFmt: MONEY } },
+    { header: '总预算（元）', key: 'total_formula', width: 13, style: { numFmt: MONEY } },
+    { header: '实际支付（元）', key: 'paid_amount', width: 13, style: { numFmt: MONEY } },
     { header: '已买', key: 'bought_cn', width: 6 },
     { header: '备注', key: 'note', width: 28 },
   ];
@@ -54,8 +55,11 @@ function buildBudgetSheet(wb, { sections, itemsBySection, totalBudget, actualLik
     items.forEach((it) => {
       ++r;
       seq += 1;
+      // 实付金额：已买填登记值（未登记回退数量×单价），未买留空
+      const paidVal = it.bought ? (it.paid_amount ?? Number((it.quantity * it.unit_price).toFixed(2))) : '';
       ws.getRow(r).values = [seq, it.name, it.spec, it.unit, it.quantity, it.unit_price,
         { formula: `E${r}*F${r}` },
+        paidVal,
         it.bought ? '✓' : '',
         it.note];
     });
@@ -136,7 +140,7 @@ export default async function (app) {
       ORDER BY p.pay_date, p.id`).all();
     const totalSpent = payments.reduce((s, p) => s + p.amount, 0);
     // 「实际已花」与应用首页口径对齐：已买项总价 + 有效订单(挂有效项目)付款（口径唯一出处见 db.js itemActualSQL）
-    const boughtTotal = db.prepare('SELECT COALESCE(SUM(quantity * unit_price), 0) AS s FROM items WHERE deleted = 0 AND bought = 1').get().s;
+    const boughtTotal = db.prepare('SELECT COALESCE(SUM(COALESCE(paid_amount, quantity * unit_price)), 0) AS s FROM items WHERE deleted = 0 AND bought = 1').get().s;
     const linkedPaid = db.prepare(`
       SELECT COALESCE(SUM(p.amount), 0) AS s FROM payments p
       JOIN orders o ON o.id = p.order_id

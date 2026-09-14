@@ -174,6 +174,17 @@ export default async function (app) {
         });
       }
     }
+    // 实付金额：登记「已买」时填写（抹零/打包价不受单价×数量约束）；
+    // 不填则实际支出回退 数量×单价；传 null/空串表示清除
+    let paidAmount = item.paid_amount;
+    if ('paid_amount' in b) {
+      if (b.paid_amount == null || b.paid_amount === '') {
+        paidAmount = null;
+      } else {
+        paidAmount = validNum(b.paid_amount);
+        if (paidAmount === null) return reply.status(400).send({ message: '实付金额必须是非负数字' });
+      }
+    }
     let boughtDate = item.bought_date;
     if ('bought_date' in b) {
       if (b.bought_date == null || b.bought_date === '') boughtDate = null;
@@ -186,19 +197,18 @@ export default async function (app) {
         boughtDate = d;
       }
     }
-
-    // 预算基线：首次改价前把原单价存档，保留“当初预算多少”
-    let initPrice = item.init_unit_price;
-    if (initPrice == null && unitPrice !== item.unit_price) {
-      initPrice = item.unit_price;
+    // 取消已买：实付与日期一并清空，状态回滚干净
+    if (bought === 0 && item.bought === 1) {
+      paidAmount = null;
+      boughtDate = null;
     }
 
     db.prepare(`UPDATE items SET name = ?, spec = ?, unit = ?, quantity = ?, unit_price = ?,
-                bought = ?, bought_date = ?, init_unit_price = ?, note = ? WHERE id = ?`)
+                bought = ?, bought_date = ?, paid_amount = ?, note = ? WHERE id = ?`)
       .run(name,
            b.spec !== undefined ? String(b.spec) : item.spec,
            b.unit !== undefined ? String(b.unit) : item.unit,
-           quantity, unitPrice, bought, boughtDate, initPrice,
+           quantity, unitPrice, bought, boughtDate, paidAmount,
            b.note !== undefined ? String(b.note) : item.note,
            id);
     return db.prepare(`${ITEM_SELECT} WHERE i.id = ?`).get(id);

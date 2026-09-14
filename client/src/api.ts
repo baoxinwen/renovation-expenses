@@ -17,7 +17,8 @@ export interface Item {
   unit_price: number;
   bought: number;
   bought_date: string | null;
-  init_unit_price: number | null;
+  /** 实际支付金额：登记「已买」时填写；null 时实际支出回退 数量×单价 */
+  paid_amount: number | null;
   note: string;
   sort_order: number;
   budget_amount: number;
@@ -74,7 +75,6 @@ export interface Order {
 export interface Summary {
   total_budget: number;
   plan_total: number;
-  init_plan_total: number;
   actual_total: number;
   unassigned_paid: number;
   sections: {
@@ -159,6 +159,8 @@ export const api = {
   updateItem: (id: number, patch: Partial<{
     name: string; spec: string; unit: string; quantity: number;
     unit_price: number; bought: boolean; bought_date: string | null; note: string;
+    /** 实际支付金额：购买登记/修正时填写；null 清除 */
+    paid_amount: number | null;
   }> & { force?: boolean }) => req<Item>(`/api/items/${id}`, 'PUT', patch),
   deleteItem: (id: number) => req<{ ok: boolean; deleted: boolean }>(`/api/items/${id}`, 'DELETE'),
   restoreItem: (id: number) => req<Item>(`/api/items/${id}/restore`, 'POST'),

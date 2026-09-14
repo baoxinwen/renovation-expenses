@@ -134,13 +134,14 @@ export default function Plan() {
       },
     });
 
-  // 勾「已买」→ 打开购买登记弹窗（确认成交价与日期；原价由后端存为预算基线）
+  // 勾「已买」→ 打开购买登记弹窗（登记实际支付金额与日期；预算保持不变）
   const confirmBuy = async (itemId: number, price: number, date: string) => {
     setBuySaving(true);
     try {
-      // 后端 409（项目下已有订单付款）时弹确认，用户坚持则带 force 重试
+      // 后端 409（项目下已有订单付款）时弹确认，用户坚持则带 force 重试；
+      // 登记的是「实际支付金额」，预算单价/总预算不动
       const submit = (force: boolean) =>
-        api.updateItem(itemId, { bought: true, unit_price: price, bought_date: date, ...(force ? { force } : {}) });
+        api.updateItem(itemId, { bought: true, paid_amount: price, bought_date: date, ...(force ? { force } : {}) });
       let updated: Awaited<ReturnType<typeof api.updateItem>>;
       try {
         updated = await submit(false);
@@ -349,12 +350,20 @@ export default function Plan() {
       render: (_, it: Item) => <EditableNum value={it.quantity} onCommit={(v) => saveItem(it, { quantity: v ?? 0 })} />,
     },
     {
+      // 语义为「预算单价」：购买登记写的是实付金额，不再覆盖此列（改这里改的是计划）
       title: '单价', dataIndex: 'unit_price', width: 104, align: 'right' as const,
       render: (_, it: Item) => <EditableNum value={it.unit_price} onCommit={(v) => saveItem(it, { unit_price: v ?? 0 })} />,
     },
     {
-      title: '总价', dataIndex: 'budget_amount', width: 110, align: 'right' as const,
+      title: '总预算', dataIndex: 'budget_amount', width: 110, align: 'right' as const,
       render: (v: number) => <Typography.Text strong className="tabular">{fmtMoney(v)}</Typography.Text>,
+    },
+    {
+      // 该项目实际支出合计：已买 = 实付金额（未登记回退数量×单价）+ 挂单付款；未买 = 挂单付款
+      title: '实际支付', dataIndex: 'actual_amount', width: 110, align: 'right' as const,
+      render: (_, it: Item) => (it.bought || it.order_count > 0)
+        ? <Typography.Text className="tabular" style={{ color: it.actual_amount > it.budget_amount ? 'var(--clay)' : undefined }}>{fmtMoney(it.actual_amount)}</Typography.Text>
+        : <span style={{ color: 'var(--ink-3)' }}>—</span>,
     },
     {
       title: '已买', dataIndex: 'bought', width: 56, align: 'center' as const,
@@ -590,7 +599,8 @@ export default function Plan() {
                             <Table.Summary.Row style={{ fontWeight: 600, background: 'var(--surface-2)' }}>
                               <Table.Summary.Cell index={0} colSpan={6}>小计（{items.length} 项，已落实 {secBought}）</Table.Summary.Cell>
                               <Table.Summary.Cell index={6} align="right">{fmtMoney(sec.budget_subtotal ?? 0)}</Table.Summary.Cell>
-                              <Table.Summary.Cell index={7} colSpan={3} />
+                              <Table.Summary.Cell index={7} align="right">{fmtMoney(sec.actual_subtotal ?? 0)}</Table.Summary.Cell>
+                              <Table.Summary.Cell index={8} colSpan={3} />
                             </Table.Summary.Row>
                           );
                         }}
@@ -619,7 +629,7 @@ export default function Plan() {
       )}
 
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        买完的小件：把单价改成成交价、勾上「已买」；分定金/尾款的大件用「订单」挂在项目下。退货退款在订单付款里记负数自动冲抵。统计图表见「分析」页。
+        买完的小件：点「已买」登记实际支付金额（预算保持不变，支持抹零）；分定金/尾款的大件用「订单」挂在项目下。退货退款在订单付款里记负数自动冲抵。统计图表见「分析」页。
       </Typography.Text>
 
       {/* 目标编辑弹窗 */}
@@ -681,7 +691,7 @@ export default function Plan() {
         }}
       />
 
-      {/* 购买登记：勾「已买」时确认成交价与日期 */}
+      {/* 购买登记：勾「已买」时登记实际支付金额与日期 */}
       <BuyModal
         item={buyTarget}
         open={!!buyTarget}

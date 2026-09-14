@@ -111,7 +111,9 @@ export default function MobileItems() {
                         {it.order_count > 0 && <Tag style={{ marginRight: 0, lineHeight: '16px' }}>{it.order_count} 单</Tag>}
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--ink-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {it.spec || '—'} · {it.quantity} × {fmtMoney(it.unit_price)}
+                        {it.spec || '—'} · {it.bought
+                          ? `实付 ${fmtMoney(it.paid_amount ?? it.quantity * it.unit_price)}`
+                          : `${it.quantity} × ${fmtMoney(it.unit_price)}`}
                         {it.bought_date ? ` · ${it.bought_date} 买` : ''}
                       </div>
                     </div>
@@ -135,8 +137,9 @@ export default function MobileItems() {
             if (!ok) return;
           }
           try {
-            // 前置确认已通过 → 直接带 force（后端 409 守卫已由确认满足）
-            await api.updateItem(itemId, { bought: true, unit_price: price, bought_date: date, force: true });
+            // 前置确认已通过 → 直接带 force（后端 409 守卫已由确认满足）；
+            // 登记的是实际支付金额，预算不动
+            await api.updateItem(itemId, { bought: true, paid_amount: price, bought_date: date, force: true });
             setBuyTarget(null);
             toast.success('已记录购买');
             load();

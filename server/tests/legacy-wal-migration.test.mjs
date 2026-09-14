@@ -42,6 +42,11 @@ try {
   check('reno.db 已迁移走', !fs.existsSync(path.join(dataDir, 'reno.db')));
   const row = db.prepare('SELECT v FROM legacy_note').get();
   check('WAL 中未 checkpoint 的旧数据可见（不丢失）', row?.v === '只存在于 WAL 的数据', `row=${JSON.stringify(row)}`);
+
+  console.log('== items 表结构（预算/实付分离） ==');
+  const cols = db.prepare('PRAGMA table_info(items)').all().map((c) => c.name);
+  check('items 表含 paid_amount（实际支付金额）', cols.includes('paid_amount'));
+  check('init_unit_price 预算基线字段已退役', !cols.includes('init_unit_price'));
 } finally {
   try { db.close(); } catch { /* 已关闭 */ }
   try { fs.rmSync(dataDir, { recursive: true, force: true }); } catch { /* Windows 文件占用时忽略 */ }

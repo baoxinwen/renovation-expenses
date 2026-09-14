@@ -94,7 +94,7 @@ export default function MobileRecord() {
     try {
       await api.updateItem(item.id, {
         bought: true,
-        unit_price: v.price,
+        paid_amount: v.price,
         bought_date: v.date.format('YYYY-MM-DD'),
         ...(doubleCount ? { force: true } : {}),
       });
@@ -208,7 +208,7 @@ export default function MobileRecord() {
       {mode === 'bought' && (
         <Card styles={{ body: { padding: 16 } }}>
           <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 12 }}>
-            小件买完直接登记：选项目 → 填成交价（默认预算价），总价自动计入
+            小件买完直接登记：选项目 → 填实际支付（预填预算金额，可抹零），预算保持不变
           </Typography.Paragraph>
           <Form form={boughtForm} layout="vertical" onFinish={submitBought} initialValues={{ date: dayjs() }}>
             <Form.Item name="item_id" label="选择清单项目" rules={[{ required: true, message: '请选择项目' }]}>
@@ -230,7 +230,7 @@ export default function MobileRecord() {
                 <span className="tabular" style={{ float: 'right', fontWeight: 650 }}>{fmtMoney(boughtItem.budget_amount)}</span>
               </div>
             )}
-            <Form.Item name="price" label="成交单价" rules={[{ required: true, message: '请输入成交价' }]}>
+            <Form.Item name="price" label="实际支付（元）" rules={[{ required: true, message: '请输入实际支付金额' }]}>
               <InputNumber min={0} precision={2} style={{ width: '100%' }} inputMode="decimal" />
             </Form.Item>
             <Form.Item name="date" label="购买日期" rules={[{ required: true }]}>
