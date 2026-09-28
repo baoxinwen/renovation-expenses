@@ -25,9 +25,10 @@ function styleHeader(ws) {
 // ===== Sheet 构建函数（导出主流程拆分）=====
 
 // Sheet1 预算评估表：与用户评估表同构，公式联动
-function buildBudgetSheet(wb, { sections, itemsBySection, totalBudget, actualLikeApp }) {
+// single（单板块模式）：保留板块标记行、裁掉全案总计与预算目标区块；includePrice：价格开关
+function buildBudgetSheet(wb, { sections, itemsBySection, totalBudget, actualLikeApp, single = false, includePrice = true }) {
   const ws = wb.addWorksheet('预算评估表');
-  ws.columns = [
+  ws.columns = includePrice ? [
     { header: '序号', key: 'seq', width: 6 },
     { header: '项目名称', key: 'name', width: 22 },
     { header: '规格 / 品牌', key: 'spec', width: 34 },
@@ -38,6 +39,13 @@ function buildBudgetSheet(wb, { sections, itemsBySection, totalBudget, actualLik
     { header: '实际支付（元）', key: 'paid_amount', width: 13, style: { numFmt: MONEY } },
     { header: '已买', key: 'bought_cn', width: 6 },
     { header: '备注', key: 'note', width: 28 },
+  ] : [
+    { header: '序号', key: 'seq', width: 6 },
+    { header: '项目名称', key: 'name', width: 22 },
+    { header: '规格 / 品牌', key: 'spec', width: 34 },
+    { header: '单位', key: 'unit', width: 6 },
+    { header: '数量', key: 'quantity', width: 7 },
+    { header: '备注', key: 'note', width: 28 },
   ];
   styleHeader(ws);
 
@@ -46,7 +54,8 @@ function buildBudgetSheet(wb, { sections, itemsBySection, totalBudget, actualLik
   const subtotalCells = [];
   sections.forEach((sec) => {
     const items = itemsBySection.all(sec.id);
-    if (!items.length) return;
+    // 单板块模式保留板块标记行：空板块导出也有标题，文件不至莫名只有表头
+    if (!items.length && !single) return;
     const secRow = ++r;
     // 板块名写在第 1 列（与用户评估表一致），保证导出文件可再导入还原板块结构
     const secCell = ws.getCell(`A${r}`);
@@ -55,6 +64,10 @@ function buildBudgetSheet(wb, { sections, itemsBySection, totalBudget, actualLik
     items.forEach((it) => {
       ++r;
       seq += 1;
+      if (!includePrice) {
+        ws.getRow(r).values = [seq, it.name, it.spec, it.unit, it.quantity, it.note];
+        return;
+      }
       // 实付金额：已买填登记值（未登记回退数量×单价），未买留空
       const paidVal = it.bought ? (it.paid_amount ?? Number((it.quantity * it.unit_price).toFixed(2))) : '';
       ws.getRow(r).values = [seq, it.name, it.spec, it.unit, it.quantity, it.unit_price,
@@ -63,12 +76,14 @@ function buildBudgetSheet(wb, { sections, itemsBySection, totalBudget, actualLik
         it.bought ? '✓' : '',
         it.note];
     });
+    if (!includePrice) return;
     const subRow = ++r;
     ws.getCell(`B${subRow}`).value = `${sec.name} 小计`;
     ws.getCell(`G${subRow}`).value = { formula: `SUM(G${secRow + 1}:G${subRow - 1})` };
     subtotalCells.push(`G${subRow}`);
     ws.getRow(subRow).font = { bold: true };
   });
+  if (single) return; // 单板块：全案总计/预算目标是全案口径，随板块导出会误导接收方
   const totalRow = ++r;
   ws.getCell(`B${totalRow}`).value = '全案预算总计';
   ws.getCell(`G${totalRow}`).value = subtotalCells.length
@@ -124,47 +139,77 @@ function buildSectionSheet(wb, sectionStats) {
 }
 
 export default async function (app) {
-  app.get('/export/excel', async (_req, reply) => {
+  app.get('/export/excel', async (req, reply) => {
     const totalBudget = getTotalBudget();
-    const sections = db.prepare('SELECT * FROM sections WHERE deleted = 0 ORDER BY sort_order, id').all();
+
+    // 单板块模式参数：section_id 必须为正整数；include_price 仅认 '0'/'1'（缺省含价）
+    const rawSectionId = req.query.section_id;
+    let sectionId = null;
+    if (rawSectionId != null && rawSectionId !== '') {
+      sectionId = Number(rawSectionId);
+      if (!Number.isInteger(sectionId) || sectionId <= 0) {
+        return reply.status(400).send({ message: 'section_id 无效' });
+      }
+    }
+    const rawIncludePrice = req.query.include_price;
+    if (rawIncludePrice != null && rawIncludePrice !== '' && rawIncludePrice !== '0' && rawIncludePrice !== '1') {
+      return reply.status(400).send({ message: 'include_price 仅支持 0 或 1' });
+    }
+    const includePrice = rawIncludePrice !== '0';
+
+    let sections = db.prepare('SELECT * FROM sections WHERE deleted = 0 ORDER BY sort_order, id').all();
+    if (sectionId != null) {
+      sections = sections.filter((s) => s.id === sectionId);
+      if (!sections.length) return reply.status(404).send({ message: '板块不存在' });
+    }
     const itemsBySection = db.prepare('SELECT * FROM items WHERE section_id = ? AND deleted = 0 ORDER BY sort_order, id');
-    const payments = db.prepare(`
-      SELECT p.pay_date, p.amount, p.method, p.note,
-             o.title AS order_title, o.vendor,
-             i.name AS item_name, s.name AS section_name
-      FROM payments p
-      JOIN orders o ON o.id = p.order_id
-      LEFT JOIN items i ON i.id = o.item_id
-      LEFT JOIN sections s ON s.id = i.section_id
-      WHERE o.deleted = 0
-      ORDER BY p.pay_date, p.id`).all();
-    const totalSpent = payments.reduce((s, p) => s + p.amount, 0);
-    // 「实际已花」与应用首页口径对齐：已买项总价 + 有效订单(挂有效项目)付款（口径唯一出处见 db.js itemActualSQL）
-    const boughtTotal = db.prepare('SELECT COALESCE(SUM(COALESCE(paid_amount, quantity * unit_price)), 0) AS s FROM items WHERE deleted = 0 AND bought = 1').get().s;
-    const linkedPaid = db.prepare(`
-      SELECT COALESCE(SUM(p.amount), 0) AS s FROM payments p
-      JOIN orders o ON o.id = p.order_id
-      JOIN items i ON i.id = o.item_id
-      WHERE o.deleted = 0 AND i.deleted = 0`).get().s;
-    const actualLikeApp = boughtTotal + linkedPaid;
 
     const wb = new ExcelJS.Workbook();
     wb.creator = '装修账本';
-
-    buildBudgetSheet(wb, { sections, itemsBySection, totalBudget, actualLikeApp });
-
-    buildPaymentSheet(wb, { payments, totalSpent });
-
-    const sectionStats = db.prepare(`
-      SELECT s.name,
-             (SELECT COUNT(*) FROM items i WHERE i.section_id = s.id AND i.deleted = 0) AS item_count,
-             COALESCE((SELECT SUM(i.quantity * i.unit_price) FROM items i WHERE i.section_id = s.id AND i.deleted = 0), 0) AS budget,
-             COALESCE((SELECT SUM(${itemActualSQL('i')}) FROM items i WHERE i.section_id = s.id AND i.deleted = 0), 0) AS actual
-      FROM sections s WHERE s.deleted = 0 ORDER BY s.sort_order, s.id`).all();
-    buildSectionSheet(wb, sectionStats);
-
     const date = new Date().toLocaleDateString('sv-SE');
-    const filename = encodeURIComponent(`装修预算清单_${date}.xlsx`);
+    let filename;
+
+    if (sectionId != null) {
+      // ===== 单板块导出：裁掉全案区块；付款明细仅在该板块有付款时附带 =====
+      buildBudgetSheet(wb, { sections, itemsBySection, totalBudget, actualLikeApp: 0, single: true, includePrice });
+      filename = encodeURIComponent(`装修预算清单_${sections[0].name}_${date}.xlsx`);
+    } else {
+      // ===== 全案导出（不带参数时的既有行为，原样保留）=====
+      const payments = db.prepare(`
+        SELECT p.pay_date, p.amount, p.method, p.note,
+               o.title AS order_title, o.vendor,
+               i.name AS item_name, s.name AS section_name
+        FROM payments p
+        JOIN orders o ON o.id = p.order_id
+        LEFT JOIN items i ON i.id = o.item_id
+        LEFT JOIN sections s ON s.id = i.section_id
+        WHERE o.deleted = 0
+        ORDER BY p.pay_date, p.id`).all();
+      const totalSpent = payments.reduce((s, p) => s + p.amount, 0);
+      // 「实际已花」与应用首页口径对齐：已买项总价 + 有效订单(挂有效项目)付款（口径唯一出处见 db.js itemActualSQL）
+      const boughtTotal = db.prepare('SELECT COALESCE(SUM(COALESCE(paid_amount, quantity * unit_price)), 0) AS s FROM items WHERE deleted = 0 AND bought = 1').get().s;
+      const linkedPaid = db.prepare(`
+        SELECT COALESCE(SUM(p.amount), 0) AS s FROM payments p
+        JOIN orders o ON o.id = p.order_id
+        JOIN items i ON i.id = o.item_id
+        WHERE o.deleted = 0 AND i.deleted = 0`).get().s;
+      const actualLikeApp = boughtTotal + linkedPaid;
+
+      buildBudgetSheet(wb, { sections, itemsBySection, totalBudget, actualLikeApp });
+
+      buildPaymentSheet(wb, { payments, totalSpent });
+
+      const sectionStats = db.prepare(`
+        SELECT s.name,
+               (SELECT COUNT(*) FROM items i WHERE i.section_id = s.id AND i.deleted = 0) AS item_count,
+               COALESCE((SELECT SUM(i.quantity * i.unit_price) FROM items i WHERE i.section_id = s.id AND i.deleted = 0), 0) AS budget,
+               COALESCE((SELECT SUM(${itemActualSQL('i')}) FROM items i WHERE i.section_id = s.id AND i.deleted = 0), 0) AS actual
+        FROM sections s WHERE s.deleted = 0 ORDER BY s.sort_order, s.id`).all();
+      buildSectionSheet(wb, sectionStats);
+
+      filename = encodeURIComponent(`装修预算清单_${date}.xlsx`);
+    }
+
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', `attachment; filename*=UTF-8''${filename}`);
     return reply.send(Buffer.from(await wb.xlsx.writeBuffer()));
