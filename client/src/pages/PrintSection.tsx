@@ -38,9 +38,11 @@ export default function PrintSection() {
   if (notFound || !section) return <div style={{ padding: 40, textAlign: 'center' }}>板块不存在或已被删除</div>;
 
   const money = (n: number) => n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const paid = (it: Item) => (it.bought ? (it.paid_amount ?? it.quantity * it.unit_price) : null);
+  // 实付口径与应用一致：actual_amount 由后端 itemActualSQL 预计算（已买成交 + 挂单付款），
+  // 前端不复算；无成交内容（未买且无订单付款）的项不显示实付
+  const paid = (it: Item) => (it.bought || it.order_count > 0 ? it.actual_amount : null);
   const budgetSubtotal = items.reduce((s, it) => s + it.quantity * it.unit_price, 0);
-  const actualSubtotal = items.reduce((s, it) => s + (paid(it) ?? 0), 0);
+  const actualSubtotal = items.reduce((s, it) => s + it.actual_amount, 0);
 
   return (
     <div className="print-page">
