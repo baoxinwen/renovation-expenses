@@ -1,6 +1,6 @@
 {
   "name": "renovation-expenses",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "装修记账与预算管理工具",
   "license": "MIT",
   "type": "module",
