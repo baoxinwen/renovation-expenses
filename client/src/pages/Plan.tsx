@@ -568,9 +568,19 @@ export default function Plan() {
                       <Dropdown
                         menu={{
                           items: [
+                            { key: 'xlsx-price', label: '导出 Excel（含价格）', disabled: !sec.items?.length },
+                            { key: 'xlsx-plain', label: '导出 Excel（不含价格）', disabled: !sec.items?.length },
+                            { key: 'print', label: '打印 / PDF', disabled: !sec.items?.length },
+                            { type: 'divider' },
                             { key: 'delete', label: '删除板块', danger: true },
                           ],
-                          onClick: ({ key }) => { if (key === 'delete') deleteSection(sec); },
+                          onClick: ({ key }) => {
+                            // location.href 下载依赖后端 Content-Disposition: attachment，不发生页面跳转
+                            if (key === 'xlsx-price') location.href = `/api/export/excel?section_id=${sec.id}&include_price=1`;
+                            else if (key === 'xlsx-plain') location.href = `/api/export/excel?section_id=${sec.id}&include_price=0`;
+                            else if (key === 'print') nav(`/print/section/${sec.id}`);
+                            else if (key === 'delete') deleteSection(sec);
+                          },
                         }}
                         trigger={['click']}
                       >
