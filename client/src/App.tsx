@@ -17,6 +17,7 @@ import Analysis from './pages/Analysis';
 import Orders from './pages/Orders';
 import OrderDetail from './pages/OrderDetail';
 import Settings from './pages/Settings';
+import PrintSection from './pages/PrintSection';
 
 dayjs.locale('zh-cn');
 
@@ -63,15 +64,20 @@ function SideMenu() {  const nav = useNavigate();
   );
 }
 
-export default function App() {
-  const { mode, isDark, setMode } = useThemeMode();
-  const isMobile = useIsMobile();
-
+/** 路由分发：打印视图游离于移动/桌面布局之外（无侧边栏、无 TabBar），其余走常规布局 */
+function AppRoutes({ isMobile }: { isMobile: boolean }) {
+  const location = useLocation();
+  if (location.pathname.startsWith('/print/')) {
+    return (
+      <Routes>
+        <Route path="/print/section/:id" element={<PrintSection />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    );
+  }
   return (
-    <ThemeModeContext.Provider value={{ mode, isDark, setMode }}>
-      <ConfigProvider locale={zhCN} theme={woodTheme(isDark)}>
-        <BrowserRouter>
-          {isMobile ? (
+    <>
+      {isMobile ? (
             /* ============ 移动布局：顶部标题栏 + 内容 + 底部 TabBar ============ */
             <div style={{ minHeight: '100vh', background: 'var(--bg-linen)' }}>
               <header
@@ -156,6 +162,19 @@ export default function App() {
             </Layout>
           </Layout>
           )}
+    </>
+  );
+}
+
+export default function App() {
+  const { mode, isDark, setMode } = useThemeMode();
+  const isMobile = useIsMobile();
+
+  return (
+    <ThemeModeContext.Provider value={{ mode, isDark, setMode }}>
+      <ConfigProvider locale={zhCN} theme={woodTheme(isDark)}>
+        <BrowserRouter>
+          <AppRoutes isMobile={isMobile} />
         </BrowserRouter>
         <Toaster
           position="top-center"

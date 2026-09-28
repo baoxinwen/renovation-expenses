@@ -1,0 +1,51 @@
+/* 板块打印视图：屏幕上带工具条，打印时只留干净黑白表格 */
+.print-page {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 24px;
+  color: #111;
+  background: #fff;
+  font-size: 13px;
+}
+.print-toolbar {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.print-caption {
+  color: #666;
+  margin-bottom: 12px;
+}
+.print-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.print-table th,
+.print-table td {
+  border: 1px solid #999;
+  padding: 4px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+.print-table th {
+  background: #f0f0f0;
+}
+.print-table .num {
+  text-align: right;
+  white-space: nowrap;
+}
+.print-table tr.subtotal td {
+  font-weight: 650;
+  background: #fafafa;
+}
+
+@media print {
+  .print-toolbar {
+    display: none !important;
+  }
+  .print-page {
+    max-width: none;
+    padding: 0;
+  }
+}
