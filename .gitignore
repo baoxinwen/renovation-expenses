@@ -6,3 +6,4 @@ dist/
 backups/
 .env
 docs/
+.worktrees/
