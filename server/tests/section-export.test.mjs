@@ -89,6 +89,32 @@ try {
   check('明细行数量/公式总价正确', r1?.getCell(5).value === 10 && typeof r1?.getCell(7).formula === 'string');
   const r2 = findRow(ws1, 2, '甲2');
   check('已买行实付取登记值 48、已买 ✓', r2?.getCell(8).value === 48 && r2?.getCell(9).value === '✓');
+
+  console.log('== 单板块导出（不含价格） ==');
+  const noPrice = await exportWb(`?section_id=${secA.json.id}&include_price=0`);
+  const ws2 = noPrice.wb.getWorksheet('预算评估表');
+  check('不含价表头 6 列', JSON.stringify(ws2.getRow(1).values.slice(1)) === JSON.stringify(
+    ['序号', '项目名称', '规格 / 品牌', '单位', '数量', '备注']),
+    `header=${JSON.stringify(ws2.getRow(1).values)}`);
+  check('不含价无小计行', !colTexts(ws2, 2).some((t) => t.includes('小计')));
+  const np1 = findRow(ws2, 2, '甲1');
+  check('不含价行无价格单元格', np1?.getCell(1).value === 1 && np1?.getCell(2).value === '甲1'
+    && np1?.getCell(5).value === 10 && (np1?.getCell(6).value ?? '') === '');
+
+  console.log('== 参数校验与边界 ==');
+  check('section_id 非数字 → 400', (await fetch(`${BASE}/export/excel?section_id=abc`)).status === 400);
+  check('section_id 负数 → 400', (await fetch(`${BASE}/export/excel?section_id=-1`)).status === 400);
+  check('include_price 非法 → 400',
+    (await fetch(`${BASE}/export/excel?section_id=${secA.json.id}&include_price=abc`)).status === 400);
+  check('板块不存在 → 404', (await exportWb('?section_id=999999')).status === 404);
+  const del = await req('POST', '/sections', { name: '待删板块' });
+  await req('DELETE', `/sections/${del.json.id}`);
+  check('软删板块 → 404', (await exportWb(`?section_id=${del.json.id}`)).status === 404);
+  const emptySec = await req('POST', '/sections', { name: '空板块' });
+  const emptyRes = await exportWb(`?section_id=${emptySec.json.id}`);
+  check('空板块导出成功', emptyRes.status === 200, `status=${emptyRes.status}`);
+  check('空板块仅表头+板块行（2 行）', emptyRes.wb.getWorksheet('预算评估表').rowCount === 2,
+    `rows=${emptyRes.wb.getWorksheet('预算评估表')?.rowCount}`);
 } finally {
   // 清理由 exit 钩子完成，无常驻进程
 }

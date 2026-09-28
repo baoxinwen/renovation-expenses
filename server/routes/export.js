@@ -76,7 +76,8 @@ function buildBudgetSheet(wb, { sections, itemsBySection, totalBudget, actualLik
         it.bought ? '✓' : '',
         it.note];
     });
-    if (!includePrice) return;
+    // 无项板块没有可小计的内容（单板块模式下空板块跳过小计，只留标题行）
+    if (!includePrice || !items.length) return;
     const subRow = ++r;
     ws.getCell(`B${subRow}`).value = `${sec.name} 小计`;
     ws.getCell(`G${subRow}`).value = { formula: `SUM(G${secRow + 1}:G${subRow - 1})` };
