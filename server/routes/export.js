@@ -173,6 +173,23 @@ export default async function (app) {
     if (sectionId != null) {
       // ===== 单板块导出：裁掉全案区块；付款明细仅在该板块有付款时附带 =====
       buildBudgetSheet(wb, { sections, itemsBySection, totalBudget, actualLikeApp: 0, single: true, includePrice });
+      // 口径与全案付款 SQL 一致，仅过滤到本板块（未挂项目的付款不属于任何板块）
+      const sectionPayments = db.prepare(`
+        SELECT p.pay_date, p.amount, p.method, p.note,
+               o.title AS order_title, o.vendor,
+               i.name AS item_name, s.name AS section_name
+        FROM payments p
+        JOIN orders o ON o.id = p.order_id
+        LEFT JOIN items i ON i.id = o.item_id
+        LEFT JOIN sections s ON s.id = i.section_id
+        WHERE o.deleted = 0 AND i.section_id = ?
+        ORDER BY p.pay_date, p.id`).all(sectionId);
+      if (sectionPayments.length) {
+        buildPaymentSheet(wb, {
+          payments: sectionPayments,
+          totalSpent: sectionPayments.reduce((s, p) => s + p.amount, 0),
+        });
+      }
       filename = encodeURIComponent(`装修预算清单_${sections[0].name}_${date}.xlsx`);
     } else {
       // ===== 全案导出（不带参数时的既有行为，原样保留）=====

@@ -115,6 +115,29 @@ try {
   check('空板块导出成功', emptyRes.status === 200, `status=${emptyRes.status}`);
   check('空板块仅表头+板块行（2 行）', emptyRes.wb.getWorksheet('预算评估表').rowCount === 2,
     `rows=${emptyRes.wb.getWorksheet('预算评估表')?.rowCount}`);
+
+  console.log('== 付款明细条件带 ==');
+  const withPay = await exportWb(`?section_id=${secB.json.id}&include_price=1`);
+  check('有付款板块 2 个工作表', withPay.wb.worksheets.length === 2,
+    `sheets=${withPay.wb.worksheets.map((w) => w.name)}`);
+  const payWs = withPay.wb.getWorksheet('付款明细');
+  const payRows = [];
+  if (payWs) {
+    payWs.eachRow((row, i) => { if (i > 1) payRows.push([row.getCell(1).text, row.getCell(3).text]); });
+  }
+  check('付款明细仅本板块一笔+合计行', payRows.length === 2 && payRows[0][1] === '乙1' && payRows[1][0] === '合计',
+    `rows=${JSON.stringify(payRows)}`);
+
+  console.log('== 全案向后兼容 ==');
+  const full = await exportWb('');
+  check('全案导出 3 个工作表', full.wb.worksheets.length === 3,
+    `sheets=${full.wb.worksheets.map((w) => w.name)}`);
+  const fullWs = full.wb.getWorksheet('预算评估表');
+  const fullCol = colTexts(fullWs, 2);
+  check('全案仍含总计与预算目标块', fullCol.some((t) => t.includes('全案预算总计')) && fullCol.some((t) => t.includes('预算目标')));
+  check('全案含两个板块项目', fullCol.includes('甲1') && fullCol.includes('乙1'));
+  check('含价单板块表头与全案 Sheet1 完全一致（round-trip 同构）',
+    JSON.stringify(ws1.getRow(1).values) === JSON.stringify(fullWs.getRow(1).values));
 } finally {
   // 清理由 exit 钩子完成，无常驻进程
 }
