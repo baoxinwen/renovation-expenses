@@ -168,6 +168,22 @@ try {
   r = (await req('GET', '/stats/summary')).json;
   check('summary 板块数 5', r.sections.length === 5);
   check('清单/实际一致', Math.abs(r.plan_total - PLAN_TOTAL) < 0.5 && Math.abs(r.actual_total - (BOUGHT + 30000)) < 0.5);
+  // 板块小计契约字段必须是 budget_subtotal/actual_subtotal（分析页表格 dataIndex 依赖；
+  // 曾经的重构把 SQL 别名改成 budget/actual 导致前端小计全为 0）
+  const sumHard = r.sections.find((s) => s.name.includes('硬装'));
+  check('硬装板块 budget_subtotal = 10 万', Math.abs(sumHard.budget_subtotal - 100000) < 1, `=${sumHard.budget_subtotal}`);
+  check('硬装板块 actual_subtotal = 订单付款 3 万', Math.abs(sumHard.actual_subtotal - 30000) < 0.5, `=${sumHard.actual_subtotal}`);
+  const sumElec = r.sections.find((s) => s.name.includes('电器'));
+  check('电器板块 budget_subtotal = 28296.99', Math.abs(sumElec.budget_subtotal - 28296.99) < 0.5, `=${sumElec.budget_subtotal}`);
+  check('电器板块 actual_subtotal = 已买三件（实付回退数量×单价）',
+    Math.abs(sumElec.actual_subtotal - BOUGHT) < 0.5, `=${sumElec.actual_subtotal}`);
+  const sumMisc = r.sections.find((s) => s.name.includes('其他'));
+  check('零价板块小计为数字 0（字段存在，非 undefined）',
+    sumMisc.budget_subtotal === 0 && sumMisc.actual_subtotal === 0,
+    JSON.stringify({ b: sumMisc.budget_subtotal, a: sumMisc.actual_subtotal }));
+  check('板块小计之和 = 清单/实际总计（口径一致）',
+    Math.abs(r.sections.reduce((s, x) => s + x.budget_subtotal, 0) - r.plan_total) < 0.5
+    && Math.abs(r.sections.reduce((s, x) => s + x.actual_subtotal, 0) - r.actual_total) < 0.5);
   r = (await req('GET', '/stats/charts')).json;
   check('板块数据', r.by_section.length === 5 && r.by_section[0].budget > 0);
   check('月度趋势 2026-08 = 30000', r.by_month.some((m) => m.month === '2026-08' && m.amount === 30000));

@@ -184,12 +184,13 @@ export function itemActualSQL(alias = 'i') {
                WHERE o.item_id = ${alias}.id AND o.deleted = 0), 0))`;
 }
 
-// 板块预算/实际小计（plan、stats、export 三处统一出处）
+// 板块预算/实际小计（stats/summary 板块表数据源）。别名是 API 契约，
+// 须与 /plan 端点的板块小计同名（budget_subtotal/actual_subtotal）——前端表格按名取值
 export function sectionAggregatesSQL() {
   const actual = itemActualSQL('i');
   return `
-    COALESCE((SELECT SUM(i.quantity * i.unit_price) FROM items i WHERE i.section_id = s.id AND i.deleted = 0), 0) AS budget,
-    COALESCE((SELECT SUM(${actual}) FROM items i WHERE i.section_id = s.id AND i.deleted = 0), 0) AS actual`;
+    COALESCE((SELECT SUM(i.quantity * i.unit_price) FROM items i WHERE i.section_id = s.id AND i.deleted = 0), 0) AS budget_subtotal,
+    COALESCE((SELECT SUM(${actual}) FROM items i WHERE i.section_id = s.id AND i.deleted = 0), 0) AS actual_subtotal`;
 }
 
 // 清单总计 / 实际合计（items 全表口径）
