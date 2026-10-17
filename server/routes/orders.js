@@ -64,9 +64,19 @@ function receiptFilesOfPayment(paymentId) {
 }
 
 function removeFiles(filenames) {
-  filenames.forEach((f) => fs.unlink(path.join(UPLOAD_DIR, f), (err) => {
-    if (err) console.warn('清理文件失败（可能已不存在）:', f, err.message);
-  }));
+  // 纵深防御：filename 取自 DB，库被篡改/恶意备份恢复时可能携带 ../ 穿越或绝对路径，
+  // 归一化后必须仍位于上传目录内才允许删除；越界名跳过并告警，不让单条脏数据挂掉删除接口
+  const root = path.resolve(UPLOAD_DIR);
+  filenames.forEach((f) => {
+    const target = typeof f === 'string' ? path.resolve(root, f) : null;
+    if (target === null || !target.startsWith(root + path.sep)) {
+      console.warn('跳过越界票据文件名（不在上传目录内）:', JSON.stringify(f));
+      return;
+    }
+    fs.unlink(target, (err) => {
+      if (err) console.warn('清理文件失败（可能已不存在）:', f, err.message);
+    });
+  });
 }
 
 export default async function (app) {
