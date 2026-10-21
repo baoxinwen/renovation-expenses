@@ -13,7 +13,7 @@ import MobileHome from './pages/mobile/MobileHome';
 import MobileItems from './pages/mobile/MobileItems';
 import MobileRecord from './pages/mobile/MobileRecord';
 import Plan from './pages/Plan';
-import Analysis from './pages/Analysis';
+import Analysis from './pages/analysis';
 import Orders from './pages/Orders';
 import OrderDetail from './pages/OrderDetail';
 import Settings from './pages/Settings';
