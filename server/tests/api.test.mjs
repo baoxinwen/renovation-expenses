@@ -82,6 +82,10 @@ if (!ready) {
 
 let r;
 try {
+  console.log('== 0. 空库统计边界 ==');
+  r = (await req('GET', '/stats/charts')).json;
+  check('空库 by_day 为空数组', Array.isArray(r.by_day) && r.by_day.length === 0, JSON.stringify(r.by_day));
+
   console.log('== 1. 导入 fixture ==');
   const fd = new FormData();
   fd.append('file', new Blob([fs.readFileSync(fixturePath)]), 'fixture.xlsx');
@@ -188,6 +192,24 @@ try {
   check('板块数据', r.by_section.length === 5 && r.by_section[0].budget > 0);
   check('月度趋势 2026-08 = 30000', r.by_month.some((m) => m.month === '2026-08' && m.amount === 30000));
   check('最近付款含项目名', r.recent_payments[0]?.item_name === '硬装施工总价');
+  // by_day：热力图数据源，与 by_month 同源同口径仅按日分组（契约先行，2026-10 分析页增强）
+  check('by_day 按 2026-08-25 聚合硬装付款 30000',
+    r.by_day.some((d) => d.date === '2026-08-25' && d.amount === 30000), JSON.stringify(r.by_day));
+  const daySumByMonth = {};
+  r.by_day.forEach((d) => { daySumByMonth[d.date.slice(0, 7)] = (daySumByMonth[d.date.slice(0, 7)] ?? 0) + d.amount; });
+  check('by_day 按月聚合与 by_month 逐月一致（口径互检）',
+    r.by_month.every((m) => Math.abs((daySumByMonth[m.month] ?? 0) - m.amount) < 0.01)
+    && Object.keys(daySumByMonth).length === r.by_month.length,
+    JSON.stringify({ day: daySumByMonth, month: r.by_month }));
+  // 退款负数冲抵（spec 第 7 章点名的 by_day 口径断言；验完即删，不污染后续 paid 断言）
+  r = await req('POST', `/orders/${orderId}/payments`, { amount: -200, pay_date: '2026-08-25', note: '测试退款' });
+  check('记退款 -200', r.status === 200);
+  const refundId = r.json.id;
+  r = (await req('GET', '/stats/charts')).json;
+  check('by_day 退款当日冲抵为 29800',
+    r.by_day.some((d) => d.date === '2026-08-25' && Math.abs(d.amount - 29800) < 0.01), JSON.stringify(r.by_day));
+  r = await req('DELETE', `/payments/${refundId}`);
+  check('清理测试退款', r.status === 200);
 
   console.log('== 5b. 一次付清（快速购买） ==');
   const hood0 = (await req('GET', '/plan')).json.sections.flatMap((s) => s.items).find((i) => i.name === '抽油烟机');
@@ -392,18 +414,21 @@ try {
   check('所属板块连带恢复（无孤儿，5 板块）', r.sections.length === 5, `=${r.sections.length}`);
   check('床回到清单', r.sections.flatMap((s) => s.items).some((i) => i.name === '床'));
 
-  // by_month 口径：软删项目的挂单付款不计入月度趋势
+  // by_month 口径：软删项目的挂单付款不计入月度趋势（by_day 与 by_month 同口径，一并断言）
   r = await req('POST', '/orders', { title: '口径测试单', item_id: bed.id, total_amount: 500 });
   const kjOrderId = r.json.id;
   await req('POST', `/orders/${kjOrderId}/payments`, { amount: 500, pay_date: '2026-07-01' });
   let charts1 = (await req('GET', '/stats/charts')).json;
   check('口径基准：07 月含 500', charts1.by_month.some((m) => m.month === '2026-07' && m.amount === 500), JSON.stringify(charts1.by_month));
+  check('口径基准：by_day 07-01 含 500', charts1.by_day.some((d) => d.date === '2026-07-01' && d.amount === 500), JSON.stringify(charts1.by_day));
   await req('DELETE', `/items/${bed.id}`);
   let charts2 = (await req('GET', '/stats/charts')).json;
   check('软删项目后 07 月付款剔除（M1 口径统一）', !charts2.by_month.some((m) => m.month === '2026-07'), JSON.stringify(charts2.by_month));
+  check('软删项目后 by_day 07-01 同步剔除', !charts2.by_day.some((d) => d.date === '2026-07-01'), JSON.stringify(charts2.by_day));
   await req('POST', `/items/${bed.id}/restore`);
   let charts3 = (await req('GET', '/stats/charts')).json;
   check('恢复项目后 07 月回来', charts3.by_month.some((m) => m.month === '2026-07' && m.amount === 500));
+  check('恢复项目后 by_day 07-01 回来', charts3.by_day.some((d) => d.date === '2026-07-01' && d.amount === 500));
   await req('DELETE', `/orders/${kjOrderId}`);
   await req('POST', `/items/${bed.id}/restore`);
 

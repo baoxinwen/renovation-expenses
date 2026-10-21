@@ -54,6 +54,19 @@ export default async function (app) {
              (${actual}) AS actual
       FROM items i WHERE i.deleted = 0 ORDER BY budget DESC LIMIT 10`).all();
 
+    // 日粒度现金流（分析页热力图数据源）：与 by_month 同源同口径，仅按日分组
+    const byDay = db.prepare(`
+      SELECT date, ROUND(SUM(amount), 2) AS amount FROM (
+        SELECT substr(p.pay_date, 1, 10) AS date, p.amount AS amount
+        FROM payments p
+        JOIN orders o ON o.id = p.order_id
+        LEFT JOIN items di ON di.id = o.item_id
+        WHERE o.deleted = 0 AND (o.item_id IS NULL OR di.deleted = 0)
+        UNION ALL
+        SELECT bought_date AS date, quantity * unit_price AS amount
+        FROM items WHERE deleted = 0 AND bought = 1 AND bought_date IS NOT NULL
+      ) GROUP BY date ORDER BY date`).all();
+
     const recentPayments = db.prepare(`
       SELECT p.id, p.amount, p.pay_date, p.method, p.note,
              o.id AS order_id, o.title AS order_title,
@@ -65,6 +78,6 @@ export default async function (app) {
       WHERE o.deleted = 0 AND (o.item_id IS NULL OR i.deleted = 0)
       ORDER BY p.pay_date DESC, p.id DESC LIMIT 10`).all();
 
-    return { by_section: bySection, by_month: byMonth, top_items: topItems, recent_payments: recentPayments };
+    return { by_section: bySection, by_month: byMonth, by_day: byDay, top_items: topItems, recent_payments: recentPayments };
   });
 }

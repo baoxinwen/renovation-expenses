@@ -86,6 +86,8 @@ export interface Summary {
 export interface Charts {
   by_section: { name: string; budget: number; actual: number }[];
   by_month: { month: string; amount: number }[];
+  /** 日粒度现金流（热力图数据源）：与 by_month 同源同口径，仅按日分组 */
+  by_day: { date: string; amount: number }[];
   top_items: { id: number; name: string; budget: number; actual: number }[];
   recent_payments: {
     id: number; amount: number; pay_date: string; method: string; note: string;
