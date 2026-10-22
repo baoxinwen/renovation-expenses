@@ -41,20 +41,24 @@ export default function BudgetGauge({ summary }: { summary: Summary | null }) {
   // 未设预算：引导态，不出现除零（spec C-2）；option 的 useMemo 须在早退前执行（hook 顺序）
   if (pct === null) {
     return (
-      <Card title="预算健康度" size="small">
+      <Card title="预算健康度" size="small" style={CARD_FILL} styles={{ body: CARD_BODY_CENTER }}>
         <Empty description="先到设置里填预算目标" style={{ padding: 24 }} />
       </Card>
     );
   }
 
   return (
-    <Card title="预算健康度" size="small">
+    <Card title="预算健康度" size="small" style={CARD_FILL} styles={{ body: CARD_BODY_CENTER }}>
       <div style={{ textAlign: 'center', color: 'var(--ink-3)', fontSize: 12, marginBottom: -8 }}>
         已花 {Math.round(cashSpent)} / 目标 {Math.round(budget)}（含未挂项目付款）
       </div>
       <div data-testid="budget-gauge-chart">
-        <ReactECharts option={option} theme={themeName} notMerge style={{ height: 200 }} />
+        <ReactECharts option={option} theme={themeName} notMerge style={{ height: 148 }} />
       </div>
     </Card>
   );
 }
+
+// 与同行缺口卡等高：Card 拉满 Col 高度，body 弹性撑满并垂直居中（行高由较高一方决定）
+const CARD_FILL: React.CSSProperties = { height: '100%', display: 'flex', flexDirection: 'column' };
+const CARD_BODY_CENTER: React.CSSProperties = { flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' };

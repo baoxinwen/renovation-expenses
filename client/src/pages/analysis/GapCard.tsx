@@ -15,7 +15,7 @@ export default function GapCard({ summary }: { summary: Summary | null }) {
 
   if (budget === 0) {
     return (
-      <Card title="剩余预算缺口" size="small">
+      <Card title="剩余预算缺口" size="small" style={CARD_FILL} styles={{ body: CARD_BODY_EVENLY }}>
         <Empty description="先设置预算目标后查看缺口分析" style={{ padding: 24 }} />
       </Card>
     );
@@ -24,7 +24,7 @@ export default function GapCard({ summary }: { summary: Summary | null }) {
   const gapColor = gap > 0 ? 'var(--clay)' : 'var(--sage)';
 
   return (
-    <Card title="剩余预算缺口" size="small">
+    <Card title="剩余预算缺口" size="small" style={CARD_FILL} styles={{ body: CARD_BODY_EVENLY }}>
       <GapRow label="剩余可用（预算 − 已花）" value={remainingBudget} />
       <GapRow label="剩余要花（未落实项目预算）" value={remainingToSpend} />
       <div style={{ borderTop: '1px dashed var(--line, #e8e1d8)', margin: '4px 0' }} />
@@ -32,6 +32,10 @@ export default function GapCard({ summary }: { summary: Summary | null }) {
     </Card>
   );
 }
+
+// 与同行健康度卡等高：Card 拉满 Col 高度，三行数字 space-evenly 均匀撑满卡身（不留大片空白）
+const CARD_FILL: React.CSSProperties = { height: '100%', display: 'flex', flexDirection: 'column' };
+const CARD_BODY_EVENLY: React.CSSProperties = { flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-evenly' };
 
 function GapRow({ label, value, color }: { label: string; value: number; color?: string }) {
   return (

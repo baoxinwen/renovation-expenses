@@ -68,7 +68,7 @@ export default function Analysis() {
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
       {/* ===== 总览区 ===== */}
       <OverviewCards summary={summary} />
-      <Row gutter={16}>
+      <Row gutter={16} align="stretch">
         <Col xs={24} md={12}>
           <BudgetGauge summary={summary} />
         </Col>
