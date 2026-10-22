@@ -365,6 +365,12 @@ try {
   r = (await req('GET', '/plan')).json;
   check(`round-trip 清单总计一致（${PLAN_TOTAL.toFixed(2)}）`, Math.abs(r.plan_total - PLAN_TOTAL) < 1, `=${r.plan_total}`);
   check('round-trip 已买语义保留（冰箱已勾）', r.sections.flatMap((s) => s.items).some((i) => i.name === '冰箱' && i.bought === 1));
+  // 契约面断言：导出前后已买项目集合一致（防"恰好备注带字样"的巧合覆盖——
+  // 2026-10 实测：备注无「已买」字样的 ✓ 专列项目导入即丢）
+  const boughtBefore = new Set((await req('GET', '/plan')).json.sections.flatMap((s) => s.items ?? []).filter((i) => i.bought === 1).map((i) => i.name));
+  const boughtAfter = new Set(r.sections.flatMap((s) => s.items ?? []).filter((i) => i.bought === 1).map((i) => i.name));
+  const sameSet = boughtBefore.size === boughtAfter.size && [...boughtBefore].every((n) => boughtAfter.has(n));
+  check(`round-trip 已买集合一致（${boughtBefore.size} 项）`, sameSet, `前[${[...boughtBefore]}] 后[${[...boughtAfter]}]`);
 
   console.log('== 10c. 文件内重名板块合并（M9） ==');
   const dupWb = new ExcelJS.Workbook();
@@ -388,6 +394,36 @@ try {
   // 还原现场：重新导入主 fixture
   const fdRestore = new FormData();
   fdRestore.append('file', new Blob([fs.readFileSync(fixturePath)]), 'fixture.xlsx');
+  await fetch(`${BASE}/plan/import?mode=replace`, { method: 'POST', body: fdRestore });
+
+  console.log('== 10e. 导入还原已买列（导出契约：已买专列 ✓，2026-10 用户实测丢已买） ==');
+  // 复现用户场景：已买写在独立「已买」列（本系统导出格式），备注/规格无「已买」字样。
+  // 修复前导入只认备注/规格文本，✓ 列被无视 → 已买状态与实付金额全部丢失。
+  const boughtWb = new ExcelJS.Workbook();
+  const boughtWs = boughtWb.addWorksheet('预算评估表');
+  boughtWs.addRow(['序号', '项目名称', '规格 / 品牌', '单位', '数量', '单价（元）', '总预算（元）', '实际支付（元）', '已买', '备注']);
+  boughtWs.addRow(['【测试板块T】']);
+  boughtWs.addRow([1, '甲项（✓列已买）', '', '件', 1, 100, null, 50, '✓', '']);            // ✓ 列已买 + 备注无字样
+  boughtWs.addRow([2, '乙项（文本已买）', '', '件', 1, 200, null, 80, '', '二手已买']);      // ✓ 列空 + 备注含字样（旧表兼容）
+  boughtWs.addRow([3, '丙项（未买）', '', '件', 1, 300, null, null, '', '']);               // 全空：未买
+  boughtWs.addRow([4, '丁项（✓列未买但备注有字样）', '', '件', 1, 400, null, null, '', '还没买']); // 备注"还没买"不含"已买" → 未买
+  const boughtPath = path.join(tmpDir, 'bought-col.xlsx');
+  await boughtWb.xlsx.writeFile(boughtPath);
+  const bFd = new FormData();
+  bFd.append('file', new Blob([fs.readFileSync(boughtPath)]), 'bought-col.xlsx');
+  const bRes = await fetch(`${BASE}/plan/import?mode=replace`, { method: 'POST', body: bFd });
+  const bJson = await bRes.json();
+  check('已买列文件导入成功', bRes.status === 200, JSON.stringify(bJson));
+  r = (await req('GET', '/plan')).json;
+  const bItems = Object.fromEntries(r.sections.flatMap((s) => s.items ?? []).map((i) => [i.name.split('（')[0], i]));
+  check('✓ 列已买还原（甲项）', bItems['甲项']?.bought === 1, `bought=${bItems['甲项']?.bought}`);
+  check('✓ 列已买实付入库（甲项 50）', Math.abs(bItems['甲项']?.paid_amount - 50) < 0.01, `paid=${bItems['甲项']?.paid_amount}`);
+  check('备注文本已买兼容还原（乙项）', bItems['乙项']?.bought === 1, `bought=${bItems['乙项']?.bought}`);
+  check('文本已买实付入库（乙项 80）', Math.abs(bItems['乙项']?.paid_amount - 80) < 0.01, `paid=${bItems['乙项']?.paid_amount}`);
+  check('全空行未买（丙项）', bItems['丙项']?.bought === 0 && bItems['丙项']?.paid_amount === null,
+    `${bItems['丙项']?.bought}/${bItems['丙项']?.paid_amount}`);
+  check('「还没买」不误判为已买（丁项）', bItems['丁项']?.bought === 0, `bought=${bItems['丁项']?.bought}`);
+  // 还原现场（FormData 里的 Blob 不可变，可重复提交）
   await fetch(`${BASE}/plan/import?mode=replace`, { method: 'POST', body: fdRestore });
 
   console.log('== 10d. 软删边界（M10） ==');

@@ -23,6 +23,7 @@ function findHeader(ws) {
         else if (t.includes('单价')) col.unitPrice = Number(cn);
         else if (t.includes('实际支付')) col.paidAmount = Number(cn);
         else if (t.includes('备注')) col.note = Number(cn);
+        else if (t.includes('已买')) col.bought = Number(cn);
       }
     }
   });
@@ -125,8 +126,11 @@ function parseWorkbook(wb) {
     const priceRaw = col.unitPrice ? cellNum(row.getCell(col.unitPrice).value) : null;
     const note = cellText(col.note ? row.getCell(col.note).value : '').trim();
     if (!sections.length) sections.push({ name: '未分组', items: [] });
-    // 「已买」可能出现在规格或备注里（如"米家冰箱pro（已买）"），勾选已买
-    const bought = note.includes('已买') || spec.includes('已买');
+    // 「已买」还原：优先读导出文件的「已买」专列（✓），兼容旧表/手工表写在规格或备注文本的用法。
+    // 只认 ✓/√ 勾选符，「还没买」这类文本不会误判；专列与本系统导出格式一一对应（导入导出契约）
+    const boughtCell = col.bought ? cellText(row.getCell(col.bought).value).trim() : '';
+    const bought = boughtCell.includes('✓') || boughtCell.includes('√')
+      || note.includes('已买') || spec.includes('已买');
     // 数量/单价与非负校验对齐（plan.js 的 validNum 语义）：负数与异常值一律按 0 处理
     const safeNum = (x, fallback) => (x == null ? fallback : (Number.isFinite(x) && x >= 0 ? x : 0));
     const paidRaw = col.paidAmount ? cellNum(row.getCell(col.paidAmount).value) : null;
