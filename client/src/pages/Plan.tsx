@@ -354,10 +354,11 @@ export default function Plan() {
       title: '规格 / 品牌', dataIndex: 'spec',
     },
     {
-      title: '单位', dataIndex: 'unit', width: 56,
+      // 单位/数量实际内容只有 1-2 字符，压缩列宽把空间让给规格/品牌（减少其换行）
+      title: '单位', dataIndex: 'unit', width: 44,
     },
     {
-      title: '数量', dataIndex: 'quantity', width: 72, align: 'right' as const,
+      title: '数量', dataIndex: 'quantity', width: 56, align: 'right' as const,
       render: (v: number) => <span className="tabular">{v}</span>,
     },
     {
