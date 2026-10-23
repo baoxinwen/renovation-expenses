@@ -1,8 +1,9 @@
-/** 居家暖木 · 调色板（唯一出处：theme.ts / echartsTheme.ts / ErrorBoundary 兜底页共用） */
+/** 居家暖木 · 调色板（唯一出处：theme.ts / echartsTheme.ts / ErrorBoundary 兜底页共用）
+ *  底面分层色遵循大厂质感铁律 1：微明度分层、禁纯黑（与 tokens.css 同步） */
 export const PALETTE = {
-  linen: '#faf7f2',
-  darkBg: '#201c19',
-  darkSurface: '#2a2521',
+  linen: '#f5f5f3',
+  darkBg: '#0b0b0a',
+  darkSurface: '#151515',
   ink: '#2b2622',
   darkInk: '#ede7df',
   ink2: '#6b6259',
@@ -18,8 +19,8 @@ export const PALETTE = {
   sageDark: '#9bac8e',
   amber: '#c08a3e',
   amberDark: '#d9a55c',
-  line: '#e8e1d8',
-  darkLine: '#3a342e',
+  line: '#e8e8e6',
+  darkLine: '#262624',
 } as const;
 
 export function paletteFor(dark: boolean) {

@@ -3,10 +3,10 @@
    亮色 = 亚麻日间 / 暗色 = 暖木夜间（html.dark）
    ============================================================ */
 :root {
-  /* 色板（亮） */
-  --bg-linen: #faf7f2;
-  --surface: #ffffff;
-  --surface-2: #f5f0e9;
+  /* 色板（亮）——大厂质感铁律 1：底/面靠 1%-3% 微明度分层，去边框 */
+  --bg-linen: #f5f5f3;
+  --surface: #fcfcfb;
+  --surface-2: #f0f0ed;
   --ink: #2b2622;
   --ink-2: #6b6259;
   --ink-3: #a2978a;
@@ -20,7 +20,7 @@
   --sage: #7a8b6f;
   --sage-100: #e9eee5;
   --amber: #c08a3e;
-  --line: #e8e1d8;
+  --line: #e8e8e6;
   --shadow-card: 0 1px 2px rgba(43, 38, 34, 0.04), 0 2px 8px rgba(43, 38, 34, 0.04);
 
   /* 动效（emil 规范：反馈类、<300ms、禁 ease-in） */
@@ -33,9 +33,11 @@
 }
 
 html.dark {
-  --bg-linen: #201c19;
-  --surface: #2a2521;
-  --surface-2: #332d28;
+  /* 大厂质感铁律 1：暗色四档微明度分层（底/面/浮层材质/强浮层） */
+  --bg-linen: #0b0b0a;
+  --surface: #151515;
+  --surface-2: #1a1a19;
+  --surface-3: #20201e;
   --ink: #ede7df;
   --ink-2: #a79c90;
   --ink-3: #746a5f;
@@ -49,7 +51,7 @@ html.dark {
   --sage: #9bac8e;
   --sage-100: #33392f;
   --amber: #d9a55c;
-  --line: #3a342e;
+  --line: #262624;
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.2), 0 2px 8px rgba(0, 0, 0, 0.18);
 }
 
@@ -62,6 +64,8 @@ body {
   font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
+  /* 大厂质感铁律 8：防孤字（text-wrap 可继承） */
+  text-wrap: pretty;
 }
 
 /* 金额与数据：等宽数字，改动不跳动 */
@@ -99,11 +103,95 @@ body {
   }
 }
 
-/* 键盘焦点可见性 */
+/* 键盘焦点可见性（输入类控件走下方双环咬合，不走 outline） */
 :focus-visible {
   outline: 2px solid var(--wood-600);
   outline-offset: 2px;
   border-radius: 4px;
+}
+
+/* ============ 大厂质感铁律 ============ */
+
+/* 铁律 1：去边框——卡面与页面底靠微明度分层，不再描线 */
+.ant-card {
+  border: none;
+}
+
+/* 铁律 2：输入框聚焦不加 outline，加深双环 box-shadow 造咬合感
+   （双类提升特异性，压过 antd cssinjs 的默认聚焦光晕） */
+.ant-input.ant-input:focus,
+.ant-input-affix-wrapper.ant-input-affix-wrapper-focused,
+.ant-input-number.ant-input-number-focused,
+.ant-input-number.ant-input-number:focus-within {
+  outline: none;
+  border-color: var(--wood-600);
+  box-shadow:
+    inset 0 0 0 1px var(--wood-600),
+    0 0 0 3px color-mix(in srgb, var(--wood-600) 16%, transparent);
+}
+
+/* 铁律 3：暗色补偿——白字在深底上显胖，字重全线降 40 */
+html.dark body {
+  font-weight: 360;
+}
+html.dark .num-display {
+  font-weight: 610;
+}
+html.dark .ant-card-head-title {
+  font-weight: 560;
+}
+html.dark .ant-table-thead > tr > th {
+  font-weight: 560;
+}
+html.dark b,
+html.dark strong {
+  font-weight: 560;
+}
+html.dark .ant-btn {
+  font-weight: 460;
+}
+
+/* 铁律 4：流式打字——单字 90ms 从 blur(6px) 浮现，相邻字错开 30ms */
+.type-reveal-char {
+  display: inline-block;
+  opacity: 0;
+  filter: blur(6px);
+  animation: type-in 90ms cubic-bezier(0.215, 0.61, 0.355, 1) forwards;
+}
+@keyframes type-in {
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+/* 铁律 5：行内图标对齐文字视觉中心 */
+.anticon {
+  vertical-align: -0.125em;
+}
+
+/* 铁律 7：丝滑折叠——Grid 0fr→1fr 过渡，免 JS 算高 */
+.fold {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 240ms var(--ease-in-out);
+}
+.fold[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+.fold > .fold-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* 铁律 9b：对勾微弹——欠阻尼弹簧（380/18）近似，选中瞬间轻微过冲 */
+@keyframes check-pop {
+  0% { transform: scale(0.5); }
+  60% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+.ant-checkbox-checked .ant-checkbox-inner {
+  animation: check-pop 380ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 /* 暖色细滚动条 */

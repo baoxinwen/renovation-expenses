@@ -29,7 +29,8 @@ function register(dark: boolean) {
       borderColor: c.line,
       borderWidth: 1,
       textStyle: { color: c.ink, fontSize: 12, fontFamily: FONT },
-      extraCssText: 'box-shadow: 0 2px 8px rgba(43,38,34,0.08); border-radius: 8px;',
+      // 铁律 6：tooltip 金额数字锁等宽，hover 不跳动
+      extraCssText: 'box-shadow: 0 2px 8px rgba(43,38,34,0.08); border-radius: 8px; font-variant-numeric: tabular-nums;',
     },
     categoryAxis: {
       axisLine: { lineStyle: { color: c.line } },

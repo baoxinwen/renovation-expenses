@@ -12,14 +12,17 @@ import type { Section } from '../../api';
 // ---------- dnd-kit：项目行拖拽（拖手柄列） ----------
 const RowListenersContext = createContext<{ listeners?: SyntheticListenerMap }>({});
 
+// 铁律 9a：拖拽动效性格——落位用过阻尼弹簧近似（快速减速、零回弹咬死），不用 dnd-kit 默认 ease
+const DROP_TRANSITION = '480ms cubic-bezier(0.16, 1, 0.3, 1)';
+
 export function SortableRow(props: React.HTMLAttributes<HTMLTableRowElement> & { 'data-row-key'?: number }) {
   const id = props['data-row-key'];
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: id! });
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({ id: id! });
   const style: React.CSSProperties = {
     ...props.style,
     // 垂直排序：忽略水平位移，防止拖拽中行体超出容器出现横向滚动条
     transform: CSS.Transform.toString(transform ? { ...transform, x: 0 } : transform),
-    transition,
+    transition: isDragging ? undefined : DROP_TRANSITION,
     ...(isDragging ? { position: 'relative', zIndex: 2, background: 'var(--surface)', boxShadow: 'var(--shadow-card)' } : {}),
   };
   return (
@@ -45,7 +48,7 @@ export function SectionDragHandle() {
 export function SortableSectionCard({ section, index, children }: {
   section: Section; index: number; children: React.ReactNode;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: section.id });
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({ id: section.id });
   return (
     <SectionHandleContext.Provider value={{ listeners }}>
       <div
@@ -55,7 +58,7 @@ export function SortableSectionCard({ section, index, children }: {
         style={{
           animationDelay: `${Math.min(index, 6) * 40}ms`,
           transform: CSS.Transform.toString(transform ? { ...transform, x: 0 } : transform),
-          transition,
+          transition: isDragging ? undefined : DROP_TRANSITION,
           ...(isDragging ? { position: 'relative', zIndex: 3, opacity: 0.9 } : {}),
         }}
       >

@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { api } from '../../api';
 import type { Charts, PlanData, Summary } from '../../api';
 import { fmtMoney } from '../../format';
+import TypeReveal from '../../components/TypeReveal';
 import OverviewCards from './OverviewCards';
 import BudgetGauge from './BudgetGauge';
 import GapCard from './GapCard';
@@ -88,7 +89,7 @@ export default function Analysis() {
       </Row>
       <Row gutter={16}>
         <Col xs={24}>
-          <Card title="板块汇总：预算 vs 实际" size="small">
+          <Card title={<TypeReveal text="板块汇总：预算 vs 实际" />} size="small">
             <Table
               rowKey="id"
               size="small"

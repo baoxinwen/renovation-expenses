@@ -11,11 +11,12 @@ export const woodTheme = (dark: boolean): ThemeConfig => ({
     colorSuccess: dark ? PALETTE.sageDark : PALETTE.sage,
     colorError: dark ? PALETTE.clayDark : PALETTE.clay,
     colorWarning: dark ? PALETTE.amberDark : PALETTE.amber,
+    // 分层底色遵循大厂质感铁律 1（与 tokens.css 同步）：底/面/浮层靠微明度差分层
     colorBgLayout: dark ? PALETTE.darkBg : PALETTE.linen,
-    colorBgContainer: dark ? PALETTE.darkSurface : '#ffffff',
-    colorBgElevated: dark ? '#332d28' : '#ffffff',
+    colorBgContainer: dark ? PALETTE.darkSurface : '#fcfcfb',
+    colorBgElevated: dark ? '#20201e' : '#ffffff',
     colorBorder: dark ? PALETTE.darkLine : PALETTE.line,
-    colorBorderSecondary: dark ? '#332d28' : '#f0eae1',
+    colorBorderSecondary: dark ? '#20201e' : '#f0f0ee',
     colorText: dark ? PALETTE.darkInk : PALETTE.ink,
     colorTextSecondary: dark ? PALETTE.darkInk2 : PALETTE.ink2,
     borderRadius: 8,
@@ -24,9 +25,9 @@ export const woodTheme = (dark: boolean): ThemeConfig => ({
   },
   components: {
     Table: {
-      headerBg: dark ? '#332d28' : '#f5f0e9',
+      headerBg: dark ? '#1a1a19' : '#f0f0ed',
       headerColor: dark ? '#a79c90' : '#6b6259',
-      rowHoverBg: dark ? '#322b25' : '#f7f1ea',
+      rowHoverBg: dark ? '#20201e' : '#f7f1ea',
       cellPaddingBlockSM: 6,
       cellPaddingInlineSM: 10,
     },
@@ -51,7 +52,8 @@ export const woodTheme = (dark: boolean): ThemeConfig => ({
     },
     Button: {
       controlHeight: 32,
-      fontWeight: 500,
+      // 铁律 3：暗色白字发胖补偿，字重降 40
+      fontWeight: dark ? 460 : 500,
     },
   },
 });

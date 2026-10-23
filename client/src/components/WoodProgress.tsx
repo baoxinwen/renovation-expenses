@@ -46,7 +46,7 @@ export default function WoodProgress({ value, budget, size = 'md' }: {
           borderRadius: h / 2,
           transition: 'width 400ms var(--ease-out), background-color 240ms var(--ease-out)',
           background: over
-            ? 'repeating-linear-gradient(45deg, var(--clay) 0 6px, color-mix(in srgb, var(--clay) 88%, #000) 6px 12px)'
+            ? 'repeating-linear-gradient(45deg, var(--clay) 0 6px, color-mix(in srgb, var(--clay) 86%, var(--ink)) 6px 12px)'
             : 'repeating-linear-gradient(45deg, var(--wood-600) 0 6px, color-mix(in srgb, var(--wood-600) 86%, #fff) 6px 12px)',
         }}
       />

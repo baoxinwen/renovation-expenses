@@ -5,6 +5,7 @@ import ReactECharts from 'echarts-for-react';
 import type { Charts } from '../../api';
 import { fmtMoney } from '../../format';
 import { fmtAxisWan, useChartTheme } from './shared';
+import TypeReveal from '../../components/TypeReveal';
 
 // 明细区：TOP10 条形图 + 项目排行表 + 最近付款（自原 Analysis 迁入，口径与交互不变）。
 // 根用 Space 而非 fragment：容器 Space 只把本组件当一个子项，fragment 内部拿不到页面级间距
@@ -45,7 +46,7 @@ export default function DetailSection({ charts }: { charts: Charts | null }) {
       <Row gutter={16} align="stretch">
         <Col xs={24} lg={13}>
           <Card
-            title="花费 TOP10 项目（按预算）"
+            title={<TypeReveal text="花费 TOP10 项目（按预算）" />}
             size="small"
             style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
             styles={{ body: { flex: 1, minHeight: 0, paddingBottom: 0, display: 'flex', flexDirection: 'column' } }}
@@ -58,7 +59,7 @@ export default function DetailSection({ charts }: { charts: Charts | null }) {
           </Card>
         </Col>
         <Col xs={24} lg={11}>
-          <Card title="项目排行" size="small" style={{ height: '100%' }} styles={{ body: { paddingTop: 8 } }}>
+          <Card title={<TypeReveal text="项目排行" />} size="small" style={{ height: '100%' }} styles={{ body: { paddingTop: 8 } }}>
             <Table
               rowKey="id"
               size="small"
@@ -92,7 +93,7 @@ export default function DetailSection({ charts }: { charts: Charts | null }) {
         </Col>
       </Row>
 
-      <Card title="最近付款" size="small">
+      <Card title={<TypeReveal text="最近付款" />} size="small">
         <Table
           rowKey="id"
           size="small"

@@ -589,55 +589,58 @@ export default function Plan() {
                     </Space>
                   }
                 >
-                  {!collapsed.has(sec.id) && (<>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-                    <div style={{ flex: 1 }}>
-                      <WoodProgress value={sec.actual_subtotal ?? 0} budget={sec.budget_subtotal ?? 0} size="sm" />
+                  {/* 铁律 7：Grid 0fr→1fr 丝滑折叠，免 JS 算高；内容常驻，折叠不丢输入状态 */}
+                  <div className="fold" data-open={!collapsed.has(sec.id)}>
+                    <div className="fold-inner">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                        <div style={{ flex: 1 }}>
+                          <WoodProgress value={sec.actual_subtotal ?? 0} budget={sec.budget_subtotal ?? 0} size="sm" />
+                        </div>
+                        <span className="label-caption tabular" style={{ whiteSpace: 'nowrap' }}>
+                          预算 {fmtMoney(sec.budget_subtotal ?? 0)} · 实际 {fmtMoney(sec.actual_subtotal ?? 0)}
+                        </span>
+                      </div>
+                      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onItemDragEnd(sec)}>
+                        <SortableContext items={(sec.items ?? []).map((i) => i.id)} strategy={verticalListSortingStrategy}>
+                          <Table<Item>
+                            rowKey="id"
+                            size="small"
+                            dataSource={sec.items ?? []}
+                            rowClassName={(it) => (it.bought ? 'row-bought' : '')}
+                            pagination={false}
+                            scroll={{ x: 960 }}
+                            components={{ body: { row: SortableRow } }}
+                            locale={{ emptyText: '该板块还没有项目，点右上角「添加项目」开始' }}
+                            columns={itemColumns}
+                            onRow={(it) => ({
+                              // 点击行打开整行编辑弹窗；行内单元格/勾选框/按钮自带的
+                              // stopPropagation 或 closest 守卫会先拦下，不触发
+                              onClick: (e) => {
+                                const t = e.target as HTMLElement;
+                                if (t.closest('input, button, .ant-checkbox-wrapper, .drag-handle, a')) return;
+                                setEditItem(it);
+                              },
+                              style: { cursor: 'pointer' },
+                            })}
+                            summary={() => {
+                              if (searching) return null;
+                              const items = sec.items ?? [];
+                              if (!items.length) return null;
+                              const secBought = items.filter((i) => i.bought || i.actual_amount > 0).length;
+                              return (
+                                <Table.Summary.Row style={{ fontWeight: 600, background: 'var(--surface-2)' }}>
+                                  <Table.Summary.Cell index={0} colSpan={6}>小计（{items.length} 项，已落实 {secBought}）</Table.Summary.Cell>
+                                  <Table.Summary.Cell index={6} align="right">{fmtMoney(sec.budget_subtotal ?? 0)}</Table.Summary.Cell>
+                                  <Table.Summary.Cell index={7} align="right">{fmtMoney(sec.actual_subtotal ?? 0)}</Table.Summary.Cell>
+                                  <Table.Summary.Cell index={8} colSpan={3} />
+                                </Table.Summary.Row>
+                              );
+                            }}
+                          />
+                        </SortableContext>
+                      </DndContext>
                     </div>
-                    <span className="label-caption tabular" style={{ whiteSpace: 'nowrap' }}>
-                      预算 {fmtMoney(sec.budget_subtotal ?? 0)} · 实际 {fmtMoney(sec.actual_subtotal ?? 0)}
-                    </span>
                   </div>
-                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onItemDragEnd(sec)}>
-                    <SortableContext items={(sec.items ?? []).map((i) => i.id)} strategy={verticalListSortingStrategy}>
-                      <Table<Item>
-                        rowKey="id"
-                        size="small"
-                        dataSource={sec.items ?? []}
-                        rowClassName={(it) => (it.bought ? 'row-bought' : '')}
-                        pagination={false}
-                        scroll={{ x: 960 }}
-                        components={{ body: { row: SortableRow } }}
-                        locale={{ emptyText: '该板块还没有项目，点右上角「添加项目」开始' }}
-                        columns={itemColumns}
-                        onRow={(it) => ({
-                          // 点击行打开整行编辑弹窗；行内单元格/勾选框/按钮自带的
-                          // stopPropagation 或 closest 守卫会先拦下，不触发
-                          onClick: (e) => {
-                            const t = e.target as HTMLElement;
-                            if (t.closest('input, button, .ant-checkbox-wrapper, .drag-handle, a')) return;
-                            setEditItem(it);
-                          },
-                          style: { cursor: 'pointer' },
-                        })}
-                        summary={() => {
-                          if (searching) return null;
-                          const items = sec.items ?? [];
-                          if (!items.length) return null;
-                          const secBought = items.filter((i) => i.bought || i.actual_amount > 0).length;
-                          return (
-                            <Table.Summary.Row style={{ fontWeight: 600, background: 'var(--surface-2)' }}>
-                              <Table.Summary.Cell index={0} colSpan={6}>小计（{items.length} 项，已落实 {secBought}）</Table.Summary.Cell>
-                              <Table.Summary.Cell index={6} align="right">{fmtMoney(sec.budget_subtotal ?? 0)}</Table.Summary.Cell>
-                              <Table.Summary.Cell index={7} align="right">{fmtMoney(sec.actual_subtotal ?? 0)}</Table.Summary.Cell>
-                              <Table.Summary.Cell index={8} colSpan={3} />
-                            </Table.Summary.Row>
-                          );
-                        }}
-                      />
-                    </SortableContext>
-                  </DndContext>
-                  </>)}
                 </Card>
               </SortableSectionCard>
             ))}

@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { paletteFor } from '../../styles/palette';
 import { chartThemeName, chartColors } from '../../utils/echartsTheme';
 import { useThemeModeCtx } from '../../App';
+import TypeReveal from '../../components/TypeReveal';
 
 // 图表 Y 轴万元缩写（原 Analysis 内联函数迁入，多图共用）
 export const fmtAxisWan = (v: number) => (v >= 10000 ? v / 10000 + '万' : String(v));
@@ -38,15 +39,16 @@ export function useChartTheme() {
 }
 
 // 图表卡片统一包装：空态展示全站 Empty 风格，非空渲染 children（图高度由 children 自带 style 控制）。
-// title 支持 ReactNode：饼图卡片头内嵌预算/实际切换开关
+// title 支持 ReactNode；纯字符串标题走流式打字（铁律 4），复合节点（如饼图卡头含切换开关）原样渲染
 export function ChartCard({ title, isEmpty, emptyText, children }: {
   title: ReactNode;
   isEmpty: boolean;
   emptyText: string;
   children: ReactNode;
 }) {
+  const shown = typeof title === 'string' ? <TypeReveal text={title} /> : title;
   return (
-    <Card title={title} size="small">
+    <Card title={shown} size="small">
       {isEmpty ? <Empty description={emptyText} style={{ padding: 32 }} /> : children}
     </Card>
   );
