@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Alert, Button, Card, Checkbox, Col, Dropdown, Empty, Form, Input, InputNumber,
@@ -66,16 +66,21 @@ export default function Plan() {
     useSensor(KeyboardSensor),
   );
 
+  const loadSeq = useRef(0);
   const load = useCallback(async () => {
+    // 序号守卫（M7，对照 Orders 页 loadSeq 先例）：慢网下删除触发 load 未返回时
+    // 勾已买的乐观更新会被过期响应整体覆盖回退——后发先至时丢弃过期响应
+    const seq = ++loadSeq.current;
     setLoading(true);
     try {
       const [p, orders] = await Promise.all([api.getPlan(), api.getOrders({ status: 'open' })]);
+      if (seq !== loadSeq.current) return;
       setPlan(p);
       setUnpaid(orders.filter((o) => (o.paid ?? 0) < o.total_amount && o.total_amount > 0));
     } catch (e) {
-      toast.error((e as Error).message);
+      if (seq === loadSeq.current) toast.error((e as Error).message);
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
   }, []);
 

@@ -15,6 +15,7 @@ export default function PrintSection() {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [withPrice, setWithPrice] = useState(true);
 
   useEffect(() => {
@@ -30,11 +31,14 @@ export default function PrintSection() {
         setSection(sec);
         setItems(sec.items ?? []);
       })
-      .catch(() => setNotFound(true))
+      // 网络失败与「板块不存在」是两件事（M9）：把服务未启动显示成
+      // 「板块不存在」会误导用户去检查清单
+      .catch(() => setLoadError(true))
       .finally(() => setLoading(false));
   }, [sectionId]);
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center' }}><Spin /></div>;
+  if (loadError) return <div style={{ padding: 40, textAlign: 'center' }}>加载失败：请确认账本服务已启动后刷新重试</div>;
   if (notFound || !section) return <div style={{ padding: 40, textAlign: 'center' }}>板块不存在或已被删除</div>;
 
   const money = (n: number) => n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
