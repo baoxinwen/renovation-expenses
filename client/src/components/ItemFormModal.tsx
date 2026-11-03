@@ -84,16 +84,11 @@ export default function ItemFormModal({ open, initial, confirmLoading, onOk, onC
           name="unit_price"
           label="单价（元）"
           style={{ display: 'inline-block', width: '34%' }}
-          extra={isEdit ? '预算单价，改这里不影响已登记的实际支付' : undefined}
         >
           <InputNumber min={0} precision={2} style={{ width: '100%' }} />
         </Form.Item>
         {isEdit && initial?.bought === 1 && (
-          <Form.Item
-            name="paid_amount"
-            label="实际支付（元）"
-            extra={`清空并保存 = 清除实付，实际支出回退 数量×单价 = ${budgetTotal} 元`}
-          >
+          <Form.Item name="paid_amount" label="实际支付（元）">
             <InputNumber min={0} precision={2} style={{ width: '100%' }} placeholder="未登记" />
           </Form.Item>
         )}

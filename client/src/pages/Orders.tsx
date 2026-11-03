@@ -88,7 +88,7 @@ export default function Orders() {
         }
         if (fail) toast.warning(`${fail} 张票据未上传成功，可在订单详情里补传`);
       }
-      toast.success(values.paid_now ? '购买已记录（订单+付款+票据）' : '订单已创建');
+      toast.success(values.paid_now ? '购买已记录' : '订单已创建');
       setModalOpen(false);
       nav(`/orders/${order.id}`);
       return order;
@@ -116,7 +116,7 @@ export default function Orders() {
   const doDeleteOrder = (o: Order) =>
     Modal.confirm({
       title: '删除该订单？',
-      content: '付款与票据会隐藏保留（8 秒内可撤销）',
+      content: '删除后 8 秒内可撤销',
       okText: '删除',
       okType: 'danger',
       onOk: () => undoableDelete({
@@ -287,7 +287,7 @@ export default function Orders() {
                 )}
                 <Popconfirm
                   title="删除该订单？"
-                  description="付款与票据会隐藏保留（8 秒内可撤销）"
+                  description="删除后 8 秒内可撤销"
                   okText="删除"
                   okType="danger"
                   onConfirm={() => doDeleteOrder(o)}

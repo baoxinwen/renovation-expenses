@@ -27,7 +27,7 @@ export async function confirmDoubleCount(item: Item): Promise<boolean> {
 export async function confirmOrderOnBoughtItem(item: Pick<Item, 'name'>): Promise<boolean> {
   return confirmAsync({
     title: '该项目已勾选「已买」',
-    content: `「${item.name}」的总价已计入实际，再把订单付款挂上去会重复计入。通常二选一即可，仍要关联吗？`,
+    content: `「${item.name}」的实付已计入实际，再把订单付款挂上去会重复计入。通常二选一即可，仍要关联吗？`,
     okText: '仍要关联',
   });
 }

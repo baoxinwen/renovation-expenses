@@ -141,12 +141,6 @@ function AppRoutes({ isMobile }: { isMobile: boolean }) {
                 🏠 装修账本
               </div>
               <SideMenu />
-              <div
-                className="label-caption"
-                style={{ position: 'absolute', bottom: 16, left: 24, fontSize: 11 }}
-              >
-                数据在本机 · 离线可用
-              </div>
             </Sider>
             <Layout style={{ background: 'transparent' }}>
               <ContentShell>

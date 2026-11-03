@@ -277,7 +277,7 @@ export default function Plan() {
   const doImport = async (file: File) => {
     Modal.confirm({
       title: '导入 Excel 将替换当前清单',
-      content: '现有板块与项目会被清空后重建（订单与付款保留，但不再挂到项目上）。确定继续？',
+      content: '现有板块与项目会被清空后重建（订单与付款保留）。确定继续？',
       okText: '替换导入',
       okType: 'danger',
       onOk: async () => {
@@ -693,7 +693,7 @@ export default function Plan() {
       )}
 
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        点击行即可修改项目信息（名称 / 规格 / 数量 / 单价 / 备注）；点「已买」登记实际支付（预算保持不变，支持抹零）；分定金/尾款的大件用「订单」挂在项目下，退货退款记负数自动冲抵。统计图表见「分析」页。
+        点击行即可修改项目信息（名称 / 规格 / 数量 / 单价 / 备注）；点「已买」登记实际支付；分定金/尾款的大件用「订单」挂在项目下，退货退款记负数自动冲抵。统计图表见「分析」页。
       </Typography.Text>
 
       {/* 目标编辑弹窗 */}

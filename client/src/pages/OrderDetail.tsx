@@ -113,7 +113,7 @@ export default function OrderDetail() {
   const deleteOrder = () =>
     Modal.confirm({
       title: '删除订单',
-      content: '付款记录与票据会一并隐藏（不再计入统计），删除后 8 秒内可撤销。',
+      content: '删除后 8 秒内可撤销。',
       okType: 'danger',
       okText: '删除',
       onOk: () => undoableDelete({

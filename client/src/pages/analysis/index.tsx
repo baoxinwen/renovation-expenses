@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Button, Card, Col, Row, Skeleton, Space, Table, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Col, Row, Skeleton, Space, Table, Tag } from 'antd';
 import { toast } from 'sonner';
 import { api } from '../../api';
 import type { Charts, PlanData, Summary } from '../../api';
@@ -133,10 +133,6 @@ export default function Analysis() {
 
       {/* ===== 明细区 ===== */}
       <DetailSection charts={charts} />
-
-      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        图表颜色与全站一致：浅木 = 预算，深木 = 实际；执行率与日历热力按 80% 以下绿 / 90% 起橙 / 超支红分层，灰 = 无比率或无支出。
-      </Typography.Text>
     </Space>
   );
 }

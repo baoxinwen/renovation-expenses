@@ -145,7 +145,7 @@ export default function MobileRecord() {
           try { await api.uploadReceipt(pay.id, f); } catch { fail++; }
         }
       }
-      toast.success(fail ? '购买已记录，部分票据失败可在订单详情补传' : '购买已记录（订单+付款+票据）');
+      toast.success(fail ? '购买已记录，部分票据失败可在订单详情补传' : '购买已记录');
       newForm.resetFields();
       setNewFiles([]);
       load();
@@ -213,9 +213,6 @@ export default function MobileRecord() {
 
       {mode === 'bought' && (
         <Card styles={{ body: { padding: 16 } }}>
-          <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 12 }}>
-            小件买完直接登记：选项目 → 填实际支付（预填预算金额，可抹零），预算保持不变
-          </Typography.Paragraph>
           <Form form={boughtForm} layout="vertical" onFinish={submitBought} initialValues={{ date: dayjs() }}>
             <Form.Item name="item_id" label="选择清单项目" rules={[{ required: true, message: '请选择项目' }]}>
               <Select
@@ -249,9 +246,6 @@ export default function MobileRecord() {
 
       {mode === 'new' && (
         <Card styles={{ body: { padding: 16 } }}>
-          <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 12 }}>
-            一次性买齐（订单+付款+票据一步完成，自动结清）
-          </Typography.Paragraph>
           <Form form={newForm} layout="vertical" onFinish={submitNew} initialValues={{ pay_date: dayjs(), pay_method: '微信' }}>
             <Form.Item name="item_id" label="关联清单项目（可选）">
               <Select

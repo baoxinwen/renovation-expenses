@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 import { Button, DatePicker, Form, InputNumber, Modal } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import type { Item } from '../api';
-import { fmtMoney } from '../format';
 import { budgetDelta, formatDelta } from '../utils/budgetCalc';
 
 interface Values {
@@ -56,7 +55,6 @@ export default function BuyModal({ item, open, onClose, onConfirm, onUnmark, con
         <Form.Item
           name="price"
           label="实际支付（元）"
-          extra={`预算 ${item.quantity} × ${fmtMoney(item.unit_price)} = ${fmtMoney(budgetTotal)}，登记后预算不变；抹零/打包价直接改数字`}
           rules={[{ required: true, message: '请输入实际支付金额' }]}
         >
           <InputNumber min={0} precision={2} style={{ width: '100%' }} />

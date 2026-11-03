@@ -128,7 +128,6 @@ export default function OrderFormModal({ open, initial, sections, confirmLoading
                 <Form.Item
                   name="pay_amount"
                   label="本次付款金额"
-                  extra="默认等于订单总额；定金场景请关闭本开关"
                   style={{ marginBottom: 10 }}
                 >
                   <InputNumber min={0.01} precision={2} style={{ width: '100%' }} placeholder="默认 = 订单总额" />
