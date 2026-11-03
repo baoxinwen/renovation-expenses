@@ -21,6 +21,16 @@ check('.env.example 承诺 EXTRA_ALLOWED_HOSTS', envExample.includes('EXTRA_ALLO
 check('compose environment 显式声明 EXTRA_ALLOWED_HOSTS（${EXTRA_ALLOWED_HOSTS:-} 形式）',
   /-\s*EXTRA_ALLOWED_HOSTS=\$\{EXTRA_ALLOWED_HOSTS:-\}/.test(compose),
   '未找到透传行');
+// M12：同一段接线契约的另外两项——TZ 透传（容器内中文日期格式）与
+// SQLITE_JOURNAL_MODE=DELETE（db.js 注释承诺：Windows Docker bind mount
+// 不支持 WAL mmap，容器必须显式 DELETE）。此前只守 EXTRA_ALLOWED_HOSTS 一项，
+// 其余被误删不报
+check('compose environment 显式声明 TZ 透传（${TZ:-…} 形式）',
+  /-\s*TZ=\$\{TZ:-[^}]*\}/.test(compose),
+  '未找到透传行');
+check('compose environment 显式声明 SQLITE_JOURNAL_MODE=DELETE',
+  /-\s*SQLITE_JOURNAL_MODE=DELETE/.test(compose),
+  '未找到声明行');
 
 console.log(`\n结果: ${passed} 通过, ${failed} 失败`);
 process.exit(failed ? 1 : 0);
