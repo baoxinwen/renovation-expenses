@@ -30,7 +30,7 @@ export default function OverviewCards({ summary }: { summary: Summary | null }) 
   ];
 
   return (
-    <Row gutter={16}>
+    <Row gutter={[16, isMobile ? 12 : 16]}>
       {cards.map((c) => (
         <Col xs={12} md={6} key={c.label}>
           <Card size="small">
