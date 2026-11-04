@@ -124,7 +124,40 @@ try {
   const planC2b = await req('GET', '/plan');
   const itC2b = planC2b.json.sections.flatMap((s) => s.items).find((i) => i.id === itemC2.json.id);
   check('force 后项目实际 = 200 + 80（显式双算）',
-    Math.abs(itC2b.actual_amount - 280) < 0.01, `actual=${itC2b?.actual_amount}`);
+    Math.abs(itC2b.actual_amount - 280) < 0.01, `actual=${itC2b.actual_amount}`);
+
+  console.log('== 付款入口的双算守卫（r2 C1：先勾已买后付款） ==');
+  // 未买项目建订单（付款 0）→ 清单勾「已买」（此刻 orderPaid=0 静默通过）→
+  // 之后记首笔付款——POST /payments 若无守卫，双算静默落库（与 restore 同类的时序洞）
+  const itemP = await req('POST', `/sections/${sec.json.id}/items`,
+    { name: '后付款项目', quantity: 1, unit_price: 300 });
+  const orderP = await req('POST', '/orders', {
+    title: '后付款订单', item_id: itemP.json.id, total_amount: 120,
+  });
+  check('造数：未买项目建订单（无付款）', orderP.status === 200, `status=${orderP.status}`);
+  r = await req('PUT', `/items/${itemP.json.id}`, { bought: true });
+  check('造数：勾已买（付款 0 静默通过）', r.status === 200, `status=${r.status}`);
+  r = await req('POST', `/orders/${orderP.json.id}/payments`, { amount: 120, pay_date: '2026-09-05' });
+  check('先勾已买后付款 → 409', r.status === 409, `status=${r.status} ${JSON.stringify(r.json)}`);
+  check('返回 needForce 标志', r.json?.needForce === true, JSON.stringify(r.json));
+  check('409 时付款未落库', (await req('GET', `/orders/${orderP.json.id}`)).json.paid === 0);
+  r = await req('POST', `/orders/${orderP.json.id}/payments`,
+    { amount: 120, pay_date: '2026-09-05', force: true });
+  check('force（用户确认双算）→ 放行', r.status === 200, `status=${r.status}`);
+  const planP = await req('GET', '/plan');
+  const itP = planP.json.sections.flatMap((s) => s.items).find((i) => i.id === itemP.json.id);
+  check('显式双算：项目实际 = 300 + 120', Math.abs(itP.actual_amount - 420) < 0.01, `actual=${itP.actual_amount}`);
+  // 已买→已买（第二次付款）不受守卫影响：第一次付款已让用户面对过双算
+  r = await req('POST', `/orders/${orderP.json.id}/payments`, { amount: 20, pay_date: '2026-09-06', force: true });
+  check('后续付款（已处于显式双算态，仍需 force）放行', r.status === 200, `status=${r.status}`);
+  // 未买项目的订单付款不受守卫影响
+  const itemP2 = await req('POST', `/sections/${sec.json.id}/items`,
+    { name: '后付款未买项目', quantity: 1, unit_price: 50 });
+  const orderP2 = await req('POST', '/orders', {
+    title: '后付款未买订单', item_id: itemP2.json.id, total_amount: 30,
+  });
+  r = await req('POST', `/orders/${orderP2.json.id}/payments`, { amount: 30, pay_date: '2026-09-06' });
+  check('未买项目付款放行', r.status === 200, `status=${r.status}`);
 } finally {
   cleanup();
 }

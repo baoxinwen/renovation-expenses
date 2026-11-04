@@ -231,7 +231,7 @@ export default async function (app) {
   // ===== 付款记录 =====
   app.post('/orders/:id/payments', async (req, reply) => {
     const orderId = Number(req.params.id);
-    const order = db.prepare('SELECT id, total_amount, deleted FROM orders WHERE id = ?').get(orderId);
+    const order = db.prepare('SELECT id, item_id, total_amount, deleted FROM orders WHERE id = ?').get(orderId);
     if (!order || order.deleted) return reply.status(404).send({ message: '订单不存在（或已删除）' });
     const b = req.body || {};
     const amount = Number(b.amount);
@@ -240,6 +240,19 @@ export default async function (app) {
     }
     const payDate = String(b.pay_date ?? '');
     if (!validDate(payDate)) return reply.status(400).send({ message: '付款日期无效（应为真实日期，格式 YYYY-MM-DD）' });
+    // 双算守卫（API 级，r2 C1）：挂接项目在「订单无付款」时被勾了「已买」（勾选
+    // 守卫当时静默通过），此刻记首笔付款会让两路同计——与勾选/恢复守卫同一
+    // needForce 模式：前端确认后带 force 放行为显式双算
+    if (!b.force && order.item_id != null) {
+      const target = db.prepare('SELECT id, name, bought FROM items WHERE id = ? AND deleted = 0')
+        .get(order.item_id);
+      if (target?.bought) {
+        return reply.status(409).send({
+          message: `「${target.name}」已勾「已买」，再记付款会重复计入实际合计`,
+          needForce: true,
+        });
+      }
+    }
     const info = db.prepare(`INSERT INTO payments (order_id, amount, pay_date, method, note)
       VALUES (?, ?, ?, ?, ?)`)
       .run(orderId, amount, payDate, String(b.method ?? ''), String(b.note ?? ''));
