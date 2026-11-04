@@ -7,6 +7,18 @@ import { paletteFor } from '../styles/palette';
 /** 万元缩写：echarts 轴标签用（>=10000 显示 X万） */
 export const fmtAxisWan = (v: number) => (v >= 10000 ? v / 10000 + '万' : String(v));
 
+/** HTML 转义：echarts tooltip formatter 的返回值按 HTML 渲染，项目名等来自
+ *  Excel 导入的用户输入必须先转义——`<img onerror=…>` 之类标签会在应用
+ *  origin 内执行（r2 C3）。与新工具相同的原则：拼 HTML 的用户输入一律过这里。 */
+export function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 /** 执行率语义色板（全站 sage=健康 / amber=预警 / clay=超支；neutral/line 供热力图等场景）。
  *  echarts 走 canvas 不识别 CSS 变量，必须按亮暗取具体色值；
  *  paletteFor 每次返回新对象，消费侧必须 memo（旧 Analysis 既有教训） */

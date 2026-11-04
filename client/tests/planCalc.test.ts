@@ -1,6 +1,6 @@
 // planCalc（清单/统计可测纯逻辑）单元测试
 import { describe, it, expect } from 'vitest';
-import { fmtAxisWan, executionColor, pieData, heatLevels, matchSearch } from '../src/utils/planCalc';
+import { fmtAxisWan, executionColor, pieData, heatLevels, matchSearch, escapeHtml } from '../src/utils/planCalc';
 
 describe('fmtAxisWan（万元缩写）', () => {
   it('万级缩写', () => expect(fmtAxisWan(20000)).toBe('2万'));
@@ -74,4 +74,18 @@ describe('matchSearch（清单搜索过滤）', () => {
   it('命中备注', () => expect(matchSearch(it_, '已买')).toBe(true));
   it('空串视为全通过', () => expect(matchSearch(it_, '')).toBe(true));
   it('未命中返回 false', () => expect(matchSearch(it_, '洗衣机')).toBe(false));
+});
+
+describe('escapeHtml（tooltip 注入防护）', () => {
+  it('尖括号与引号全部转义', () => {
+    expect(escapeHtml('<img src=x onerror=alert(1)>'))
+      .toBe('&lt;img src=x onerror=alert(1)&gt;');
+  });
+  it('文本中的 & 与引号转义且不影响普通中文', () => {
+    expect(escapeHtml('瓷砖&大理石 "A" \'B\''))
+      .toBe('瓷砖&amp;大理石 &quot;A&quot; &#39;B&#39;');
+  });
+  it('转义后不再包含裸 <', () => {
+    expect(escapeHtml('<script>').includes('<')).toBe(false);
+  });
 });

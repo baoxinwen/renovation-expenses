@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import ReactECharts from 'echarts-for-react';
 import type { PlanData } from '../../api';
 import { ChartCard, executionColor, useChartTheme } from './shared';
+import { escapeHtml } from '../../utils/planCalc';
 
 // 项目执行率排行 TOP10（spec 功能 E，项目级）：actual/budget 降序；
 // 预算 0 但有支出的项目排末尾、显示「—」（比率无意义不参与排序值）；点击行下钻该项目订单列表
@@ -32,7 +33,7 @@ export default function ExecutionRankChart({ plan }: { plan: PlanData | null }) 
           const r = rated[p.dataIndex];
           if (!r) return '';
           const rateText = r.rate === null ? '—' : Math.round(r.rate * 100) + '%';
-          return `${r.name}<br/>执行率 ${rateText}`;
+          return `${escapeHtml(r.name)}<br/>执行率 ${rateText}`;
         },
       },
       grid: { left: isMobile ? 84 : 110, right: isMobile ? 34 : 56, top: 12, bottom: 30 },
