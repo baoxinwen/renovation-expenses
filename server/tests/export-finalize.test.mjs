@@ -1,7 +1,13 @@
 // 单元回归：票据打包 archive.finalize() 的 Promise 拒绝必须被接住记日志，
 // 不得以 unhandledRejection 终止整个进程（Node ≥15 默认 --unhandled-rejections=throw）。
 // 场景：打包中 zip 模块读流出错（如 Windows 票据文件被占用/杀软锁定）→ finalize reject。
-import { finalizeArchive } from '../routes/export.js';
+// 隔离声明必须在 import routes/export.js 之前——它连带 import db.js，会在模块
+// 加载时对 RENOVATION_DATA_DIR 建库；不声明则测试进程触碰真实用户库（r2 I9）
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+process.env.RENOVATION_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'renovation-finalize-test-'));
+const { finalizeArchive } = await import('../routes/export.js');
 
 let passed = 0, failed = 0;
 const check = (name, cond, detail = '') => {

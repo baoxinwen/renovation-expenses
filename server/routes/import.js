@@ -257,10 +257,19 @@ export default async function (app) {
   // ===== 恢复备份：上传 zip 全量替换当前数据（四步安全链，spec F2） =====
   app.post('/restore/backup', async (req, reply) => {
     const file = await req.file({ limits: { fileSize: LIMITS.BACKUP_MAX_MB * 1024 * 1024 } });
+    // 早退后必须排干 multipart 剩余部分再回包（对照同文件导入排干与
+    // orders.js 标准）：数百 MB 请求体在途时不排干，客户端收不到中文提示
+    const drainRest = async () => {
+      try {
+        for await (const _ of req.parts()) { void _; }
+      } catch { /* 客户端已断开等情况，排干尽力而为 */ }
+    };
     if (!file || file.fieldname !== 'file') {
+      await drainRest();
       return reply.status(400).send({ message: '请上传备份文件（字段名 file）' });
     }
     if (file.truncated) {
+      await drainRest();
       return reply.status(400).send({ message: `备份文件超过 ${LIMITS.BACKUP_MAX_MB}MB 上限` });
     }
     const buf = await file.toBuffer();
