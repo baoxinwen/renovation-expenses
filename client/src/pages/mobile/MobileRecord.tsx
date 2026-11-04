@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, Card, DatePicker, Form, Input, InputNumber, Segmented, Select, Typography } from 'antd';
+import { Button, Card, DatePicker, Empty, Form, Input, InputNumber, Segmented, Select, Skeleton, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { toast } from 'sonner';
 import { api } from '../../api';
@@ -17,6 +17,8 @@ export default function MobileRecord() {
   const [sections, setSections] = useState<Section[]>([]);
   const [openOrders, setOpenOrders] = useState<Order[]>([]);
   const [saving, setSaving] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [payForm] = Form.useForm();
   const [boughtForm] = Form.useForm();
@@ -26,11 +28,16 @@ export default function MobileRecord() {
   const [boughtItem, setBoughtItem] = useState<Item | null>(null);
 
   const load = useCallback(async () => {
+    setLoadError(null);
     try {
       const [p, orders] = await Promise.all([api.getPlan(), api.getOrders({ status: 'open' })]);
       setSections(p.sections);
       setOpenOrders(orders.filter((o) => (o.paid ?? 0) < o.total_amount && o.total_amount > 0));
+      setReady(true);
     } catch (e) {
+      // 失败不能只 toast（4 秒后消失，页面停在误导性空态——「没有未结清订单」
+      // 会被误读成都付清了）；给错误卡+重试（同 MobileHome/MobileItems 模式）
+      setLoadError((e as Error).message);
       toast.error((e as Error).message);
     }
   }, []);
@@ -43,7 +50,9 @@ export default function MobileRecord() {
   );
   const itemOptions = allItems
     .filter((it) => it.order_count === 0)
-    .map((it) => ({ value: it.id, label: `${it.name}${it.spec ? ` · ${it.spec}` : ''}`, item: it }));
+    // 已买项保留在下拉里（可修正实付），但必须可见——否则选中再提交会
+    // 静默覆盖原实付与购买日期（服务端 1→1 不触发守卫）
+    .map((it) => ({ value: it.id, label: `${it.name}${it.spec ? ` · ${it.spec}` : ''}${it.bought ? ' · 已买' : ''}`, item: it }));
 
   // ---- 流程 1：付一笔款 ----
   const submitPay = async (v: { order_id: number; amount: number; pay_date: dayjs.Dayjs; method?: string; note?: string }) => {
@@ -81,10 +90,20 @@ export default function MobileRecord() {
     }
   };
 
-  // ---- 流程 2：买了东西（已买登记） ----
+  // ---- 流程 2：买了东西（已买登记/修正） ----
   const submitBought = async (v: { item_id: number; price: number; date: dayjs.Dayjs }) => {
     const item = allItems.find((it) => it.id === v.item_id);
     if (!item) return toast.error('请选择项目');
+    // 已买项是覆盖语义（服务端 bought 1→1 不触发守卫）：改前必须让用户看到
+    // 原实付，确认才覆盖
+    if (item.bought) {
+      const ok = await confirmAsync({
+        title: '覆盖原记录？',
+        content: `「${item.name}」已登记实付 ${fmtMoney(item.paid_amount ?? item.budget_amount)}，本次提交将覆盖实付金额与购买日期`,
+        okText: '覆盖',
+      });
+      if (!ok) return;
+    }
     setSaving(true);
     try {
       // force 只由服务端 409 触发（submitWithForceGuard 统一链路）：过期快照撞 409
@@ -99,7 +118,7 @@ export default function MobileRecord() {
         () => confirmDoubleCount(item),
       );
       if (!updated) return;
-      toast.success(`已记录：${item.name}`);
+      toast.success(item.bought ? `已更新：${item.name}` : `已记录：${item.name}`);
       setBoughtItem(null);
       boughtForm.resetFields();
       load();
@@ -155,6 +174,19 @@ export default function MobileRecord() {
       setSaving(false);
     }
   };
+
+  // 早退必须位于全部 hook 之后（React 不允许条件分支改变 hook 数量）
+  if (!ready) {
+    if (loadError) {
+      return (
+        <Card>
+          <Empty description={`加载失败：${loadError}`} image={Empty.PRESENTED_IMAGE_SIMPLE} style={{ padding: 20 }} />
+          <Button block onClick={load}>重试</Button>
+        </Card>
+      );
+    }
+    return <Card><Skeleton active paragraph={{ rows: 10 }} /></Card>;
+  }
 
   return (
     <div>
@@ -223,13 +255,20 @@ export default function MobileRecord() {
                 onChange={(id) => {
                   const it = allItems.find((x) => x.id === id);
                   setBoughtItem(it ?? null);
-                  if (it) boughtForm.setFieldsValue({ price: it.unit_price });
+                  // 预填与桌面 BuyModal 同语义：已买项填原实付（修正场景），
+                  // 未买项填数量×单价（预算合计——单价会让数量>1 的项目记错账）
+                  if (it) boughtForm.setFieldsValue({
+                    price: it.bought
+                      ? (it.paid_amount ?? Number((it.quantity * it.unit_price).toFixed(2)))
+                      : Number((it.quantity * it.unit_price).toFixed(2)),
+                  });
                 }}
               />
             </Form.Item>
             {boughtItem && (
               <div style={{ background: 'var(--wood-50)', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 13 }}>
                 {boughtItem.spec || boughtItem.name} · 数量 {boughtItem.quantity} × {fmtMoney(boughtItem.unit_price)}
+                {boughtItem.bought ? ` · 已买，实付 ${fmtMoney(boughtItem.paid_amount ?? boughtItem.budget_amount)}` : ''}
                 <span className="tabular" style={{ float: 'right', fontWeight: 650 }}>{fmtMoney(boughtItem.budget_amount)}</span>
               </div>
             )}

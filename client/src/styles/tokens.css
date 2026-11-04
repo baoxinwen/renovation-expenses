@@ -355,3 +355,17 @@ html.dark .ant-btn {
     }
   }
 }
+
+/* ============ 移动端输入字号（防 iOS 聚焦自动放大） ============ */
+/* iOS 对字号 <16px 的输入框聚焦时会放大视口约 118% 且失焦不回落——记账
+   每次点金额框都要「放大→输完捏回」。统一抬到 16px 根治；不锁 viewport
+   缩放（user-scalable=no 会失去无障碍缩放能力，问题在字号不在缩放）。 */
+@media (max-width: 768px) {
+  .ant-input,
+  .ant-input-number-input,
+  .ant-select-selection-search-input,
+  .ant-picker-input input,
+  textarea.ant-input {
+    font-size: 16px !important;
+  }
+}

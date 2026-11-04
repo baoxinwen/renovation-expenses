@@ -118,15 +118,29 @@ export interface OrderFormValues {
 
 async function req<T = unknown>(url: string, method: string, body?: unknown): Promise<T> {
   const isForm = body instanceof FormData;
+  // 超时上限（I3）：弱网下连接已建立但响应停滞时，fetch 会悬挂到 OS 级 TCP 超时
+  //（iOS 可达分钟级），提交按钮 loading 卡死——用户被迫刷新重记，原请求若已
+  // 落库就成了双笔付款。票据上传（FormData）体积大，放宽到 60s
+  const timeoutMs = isForm ? 60_000 : 15_000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   let res: Response;
   try {
     res = await fetch(url, {
       method,
       headers: !isForm && body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
       body: isForm ? body : body !== undefined ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
     });
-  } catch {
+  } catch (e) {
+    // abort 触发的拒绝是 TimeoutError/DOMException；网络立断是 TypeError
+    if (controller.signal.aborted) {
+      throw new Error(`请求超时（${timeoutMs / 1000} 秒无响应）——请检查手机与电脑的网络后重试`);
+    }
+    void e;
     throw new Error('网络连接失败——账本服务可能没有启动，或手机与电脑不在同一 WiFi');
+  } finally {
+    clearTimeout(timer);
   }
   if (!res.ok) {
     let message = `请求失败（${res.status}）`;

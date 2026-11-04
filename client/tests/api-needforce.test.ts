@@ -1,6 +1,8 @@
 // api.ts req 封装的契约测试（I6）：服务端 409 双算守卫的结构化 needForce 标志
 // 必须随错误抛出——前端「识别→确认→force 重试」链路的半边依赖它；
 // 契约漂移时用户会看到裸 409 文案或守卫失效，此前全靠手工发现。
+// 另含请求超时契约（I3）：弱网悬挂必须按上限中断并给中文文案——
+// 否则提交按钮 loading 永久卡死，用户刷新重记可能造成双笔付款。
 // node 环境 stub 全局 fetch，不触网。
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { api } from '../src/api';
@@ -11,6 +13,7 @@ const jsonRes = (status: number, body: unknown) =>
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe('api.req 的 needForce 结构化透传（I6）', () => {
@@ -62,5 +65,42 @@ describe('api.req 的 needForce 结构化透传（I6）', () => {
     expect(init.method).toBe('PUT');
     expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
     expect(JSON.parse(init.body as string)).toEqual({ total_budget: 160000 });
+  });
+});
+
+describe('api.req 的请求超时（I3）', () => {
+  it('JSON 请求 15s 无响应 → 中文超时错误（而非永久悬挂）', async () => {
+    vi.useFakeTimers();
+    // 模拟真实 fetch 的 abort 语义：连接已建立但响应停滞（自身永不 settle），
+    // 仅在 signal 被 abort 时以 TimeoutError 拒绝
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () =>
+          reject(new DOMException('signal timed out', 'TimeoutError')));
+      })));
+    const p = api.getSettings().then(
+      () => null,
+      (e: Error) => e,
+    );
+    // 让 fetch 的 promise 链先行注册，再推进超时
+    await vi.advanceTimersByTimeAsync(15_000);
+    const err = await p;
+    expect(err).toBeInstanceOf(Error);
+    expect(err?.message).toContain('超时');
+  });
+
+  it('超时前正常返回 → 不受超时机制影响', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonRes(200, { total_budget: 1 })));
+    const p = api.getSettings();
+    await vi.advanceTimersByTimeAsync(50);
+    await expect(p).resolves.toEqual({ total_budget: 1 });
+  });
+
+  it('网络立断（非悬挂）→ 仍是网络失败文案，不是超时文案', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('fail')));
+    const err = await api.getSettings().then(() => null, (e: Error) => e);
+    expect(err?.message).toContain('网络连接失败');
   });
 });
