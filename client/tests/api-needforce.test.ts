@@ -103,4 +103,22 @@ describe('api.req 的请求超时（I3）', () => {
     const err = await api.getSettings().then(() => null, (e: Error) => e);
     expect(err?.message).toContain('网络连接失败');
   });
+
+  it('FormData 上传 15s 时不中断（上传放宽到 60s）', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () =>
+          reject(new DOMException('signal timed out', 'TimeoutError')));
+      })));
+    const p = api.uploadReceipt(1, new File(['x'], 'a.png')).then(
+      () => null,
+      (e: Error) => e,
+    );
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(p).toBeNull(); // 15s 时仍在等——未触发中断
+    await vi.advanceTimersByTimeAsync(45_000); // 推进到 60s
+    const err = await p;
+    expect(err?.message).toContain('60 秒');
+  });
 });

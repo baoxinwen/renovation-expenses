@@ -521,12 +521,35 @@ try {
   });
   check('公网 IPv6 Host 仍被拒', v6Bad === 403, `status=${v6Bad}`);
 
+  console.log('== M19 现金流口径不对称（未挂付款进趋势不进 actual_total） ==');
+  // 口径事实（PRD §2）：actual_total 只含清单内实际；by_month/by_day 额外含
+  // 未挂项目付款（真实现金流）。此处钉住不对称本身，防 UNION 误加 WHERE
+  r = await req('POST', '/orders', { title: 'M19未挂订单', total_amount: 777, paid_now: { amount: 777, pay_date: '2026-10-20' } });
+  check('造数：未挂项目订单付款 777', r.status === 200, `status=${r.status}`);
+  const sumM19 = (await (await req('GET', '/stats/summary')).json);
+  const chartsM19 = (await (await req('GET', '/stats/charts')).json);
+  const octM19 = chartsM19.by_month.find((m) => m.month === '2026-10');
+  check('actual_total 不含未挂付款', Math.abs(sumM19.actual_total - sumM19.sections.reduce((s, x) => s + x.actual_subtotal, 0)) < 0.5,
+    `actual=${sumM19.actual_total} sections=${sumM19.sections.reduce((s, x) => s + x.actual_subtotal, 0)}`);
+  check('by_month 含未挂付款（真实现金流）', octM19 && Math.abs(octM19.amount - 777) < 0.01,
+    JSON.stringify(chartsM19.by_month.filter((m) => m.month === '2026-10')));
+  check('unassigned_paid 单独暴露', Math.abs(sumM19.unassigned_paid - 777) < 0.01, JSON.stringify(sumM19.unassigned_paid));
+  r = await req('DELETE', `/orders/${r.json.id}`);
+  check('清理 M19 订单', r.status === 200);
+
   console.log('== M1 import mode 显式非法值 ==');
   // 放在测试链末尾：修复回退时 appned 会被静默按 replace 执行清空清单，
   // 此时本文件已无比后续数据依赖的断言
   r = await req('POST', '/plan/import?mode=appned', undefined);
   check('mode 拼错回 400（不再静默按 replace 清空）',
     r.status === 400 && !r.json?.ok, `status=${r.status} resp=${JSON.stringify(r.json)}`);
+
+  console.log('== M24 导入早退中文提示 ==');
+  const badExtFd = new FormData();
+  badExtFd.append('file', new Blob([new Uint8Array([0x50, 0x4b])]), 'not-excel.txt');
+  const badExtRes = await fetch(`${BASE}/plan/import?mode=replace`, { method: 'POST', body: badExtFd });
+  r = { status: badExtRes.status, json: await badExtRes.json().catch(() => null) };
+  check('扩展名不符 400 且中文提示', r.status === 400 && r.json?.message?.includes('.xlsx'), `status=${r.status} ${JSON.stringify(r.json)}`);
 } catch (e) {
   failed++;
   console.error('测试执行异常:', e);

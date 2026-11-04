@@ -146,6 +146,13 @@ try {
   r = await req('POST', `/sections/${m3.json.id}/restore`);
   check('M3 恢复剥结尾后缀（原名含同款子串不剥错位）',
     r.status === 200 && r.json?.name === m3Original, `name=${r.json?.name}`);
+
+  // r2 M21：重名冲突的唯一约束口径（POST 与 PUT 改名都回 400 而非裸 500）
+  const dupName = await req('POST', '/sections', { name: 'M21重名占位' });
+  r = await req('POST', '/sections', { name: 'M21重名占位' });
+  check('POST 重名板块 400（UNIQUE）', r.status === 400, `status=${r.status}`);
+  r = await req('PUT', `/sections/${m3.json.id}`, { name: dupName.json.name });
+  check('PUT 改名撞已存在板块 400', r.status === 400, `status=${r.status}`);
 } finally {
   cleanup();
 }

@@ -68,6 +68,12 @@ try {
   r = await req('GET', '/orders?q=无此关键词');
   check('无命中返回空数组', r.status === 200 && r.json.length === 0, JSON.stringify(r.json));
 
+  // r2 M20：筛选参数非法值必须 400（NaN 绑定 NULL 会让过滤静默失效）
+  r = await req('GET', `/orders?item_id=${encodeURIComponent('abc')}`);
+  check('GET item_id 非数字 400', r.status === 400, `status=${r.status}`);
+  r = await req('GET', `/orders?section_id=${encodeURIComponent('abc')}`);
+  check('GET section_id 非数字 400', r.status === 400, `status=${r.status}`);
+
   console.log('== M13 top_items ==');
   r = await req('GET', '/stats/charts');
   const top = r.json?.top_items ?? [];
