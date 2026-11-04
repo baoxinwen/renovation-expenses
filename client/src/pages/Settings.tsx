@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, Button, Card, InputNumber, Modal, Radio, Space, Typography, Upload } from 'antd';
+import { Alert, Button, Card, InputNumber, Modal, Radio, Skeleton, Space, Typography, Upload } from 'antd';
 import { CloudDownloadOutlined, QuestionCircleOutlined, UploadOutlined } from '@ant-design/icons';
 import { toast } from 'sonner';
 import { api } from '../api';
@@ -17,8 +17,13 @@ export default function Settings() {
   const [downloading, setDownloading] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [itemCount, setItemCount] = useState(0);
+  // 加载失败必须阻断表单：预算目标停在 0 时一次「保存」就会把真实目标覆写成 0
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const load = () => {
+    setLoadError(null);
+    setLoading(true);
     Promise.all([api.getSettings(), api.getSummary()])
       .then(([s, sum]) => {
         setTotalBudget(s.total_budget);
@@ -26,9 +31,16 @@ export default function Settings() {
         setPlanTotal(sum.plan_total);
         setActualTotal(sum.actual_total);
         setItemCount(sum.sections.reduce((n, sec) => n + (sec.item_count ?? 0), 0));
+        setLoading(false);
       })
-      .catch((e) => toast.error((e as Error).message));
-  }, []);
+      .catch((e) => {
+        setLoadError((e as Error).message);
+        setLoading(false);
+        toast.error((e as Error).message);
+      });
+  };
+
+  useEffect(() => { load(); }, []);
 
   const save = async () => {
     setSaving(true);
@@ -94,6 +106,24 @@ export default function Settings() {
       },
     });
   };
+
+  // 错误卡守卫（对照 Plan 页）：失败态不渲染表单，杜绝「把 0 存成预算目标」
+  if (loadError) {
+    return (
+      <Card>
+        <Alert
+          type="error"
+          showIcon
+          message="设置加载失败"
+          description={`${loadError}。可能是账本服务没有启动——数据没有丢失，启动后重试即可。`}
+          action={<Button size="small" onClick={load}>重试</Button>}
+        />
+      </Card>
+    );
+  }
+  if (loading) {
+    return <Card><Skeleton active paragraph={{ rows: 6 }} /></Card>;
+  }
 
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
