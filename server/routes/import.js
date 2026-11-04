@@ -341,16 +341,45 @@ export default async function (app) {
         return reply.status(500).send({ message: '恢复失败：暂存写入出错，请检查磁盘空间后重试' });
       }
 
-      // —— 以下 db 已关闭，失败必须还原 ——
+      // —— 以下 db 已关闭，按阶段推进（C2：进 catch ≠ 恢复失败——成功收尾的
+      // 清理失败也会进 catch；「回滚点缺失」时绝不允许写/删主库）——
       db.close();
+      // closed：原库未动，任何失败 reopen 即可，不存在「还原」问题
+      // copied：回滚点完整（tmp 写入+原子改名，半截文件绝不出现）
+      // swapped：主库已被替换——只有此阶段失败才允许用回滚点还原
+      let phase = 'closed';
+      let restored = false;
+      const safeCleanup = (p, e) => {
+        // 清理失败 = 留一个垃圾文件，绝不影响恢复结果（C2 变体 b：Windows
+        // 杀软锁定时 rmSync EPERM 会抛，若让它进回滚分支会误删刚恢复的活库）
+        try { fs.rmSync(p, { recursive: true, force: true }); } catch (err) {
+          req.log.warn({ err, path: p }, '恢复清理残留（不影响数据）');
+        }
+      };
       try {
+        // 回滚点：tmp 写入 + 原子改名——要么完整要么不存在（C2 变体 a：
+        // copyFileSync 直接写目标会留下半截文件被误当回滚点盖回主库）
         for (const ext of dbExts) {
           const src = dbFile + ext;
-          if (fs.existsSync(src)) fs.copyFileSync(src, rollback + ext);
+          if (fs.existsSync(src)) {
+            const tmp = rollback + ext + '.tmp';
+            fs.copyFileSync(src, tmp);
+            fs.renameSync(tmp, rollback + ext);
+          }
         }
+        if (!fs.existsSync(rollback)) {
+          // 回滚点建不出来（磁盘满/杀软锁）：绝不换库、绝不碰主库，保留现场
+          reopenDatabase();
+          phase = 'done';
+          safeCleanup(staging);
+          req.log.error('回滚点创建失败，已放弃本次恢复（原数据未动）');
+          return reply.status(500).send({ message: '恢复失败：无法创建安全回滚点（磁盘空间或文件占用），原数据未受影响' });
+        }
+        phase = 'copied';
         fs.renameSync(checkPath, dbFile);
         for (const ext of ['-wal', '-shm']) fs.rmSync(dbFile + ext, { force: true });
         reopenDatabase();
+        phase = 'swapped';
 
         // 票据目录替换：两个同盘原子 rename；第二个失败在 finally 里还原旧目录
         let uploadsSwapped = false;
@@ -363,28 +392,46 @@ export default async function (app) {
             fs.renameSync(uploadsBackup, UPLOAD_DIR);
           }
         }
-        // 成功收尾：回滚点与旧票据目录用毕即清，不在数据目录留残骸（M17）
-        for (const ext of dbExts) fs.rmSync(rollback + ext, { force: true });
-        fs.rmSync(uploadsBackup, { recursive: true, force: true });
-        fs.rmSync(staging, { recursive: true, force: true });
+        // 成功收尾：回滚点与旧票据目录用毕即清（M17）——清理失败只留残骸
+        for (const ext of dbExts) safeCleanup(rollback + ext);
+        safeCleanup(uploadsBackup);
+        safeCleanup(staging);
+        phase = 'done';
         return { ok: true, restoredAt: new Date().toISOString() };
       } catch (e) {
-        req.log.error({ err: e }, '恢复替换链失败，用回滚点还原');
-        try {
-          try { db.close(); } catch { /* 已关闭或从未重开 */ }
-          for (const ext of dbExts) {
-            const dest = dbFile + ext;
-            if (fs.existsSync(rollback + ext)) fs.copyFileSync(rollback + ext, dest);
-            else fs.rmSync(dest, { force: true });
+        req.log.error({ err: e }, '恢复替换链失败');
+        // 只有「已换库」才存在还原；回滚点主文件必须在（copied 阶段由 tmp→
+        // rename 保证完整性）——缺失时绝不写/删主库（C2：那是活库或原库）
+        const canRestore = phase === 'swapped' && fs.existsSync(rollback);
+        if (canRestore) {
+          try {
+            try { db.close(); } catch { /* 已关闭或从未重开 */ }
+            for (const ext of dbExts) {
+              const dest = dbFile + ext;
+              if (fs.existsSync(rollback + ext)) fs.copyFileSync(rollback + ext, dest);
+              else fs.rmSync(dest, { force: true });
+            }
+            reopenDatabase();
+            safeCleanup(staging);
+            for (const ext of dbExts) safeCleanup(rollback + ext);
+            restored = true;
+          } catch (restoreErr) {
+            req.log.error({ err: restoreErr }, '回滚点还原也失败，保留现场供人工排查');
+            return reply.status(500).send({ message: '恢复失败且自动还原失败，请人工检查数据目录' });
           }
-          reopenDatabase();
-          fs.rmSync(staging, { recursive: true, force: true });
-          for (const ext of dbExts) fs.rmSync(rollback + ext, { force: true });
-        } catch (restoreErr) {
-          req.log.error({ err: restoreErr }, '回滚点还原也失败，保留现场供人工排查');
-          return reply.status(500).send({ message: '恢复失败且自动还原失败，请人工检查数据目录' });
+        } else {
+          // 未换库（closed/copied）：主库仍是原库，重开连接即可
+          try { reopenDatabase(); } catch (reopenErr) {
+            req.log.error({ err: reopenErr }, '重开数据库失败，保留现场供人工排查');
+            return reply.status(500).send({ message: '恢复失败，请人工检查数据目录后重启服务' });
+          }
+          safeCleanup(staging);
         }
-        return reply.status(500).send({ message: '恢复失败，原数据已还原，请重试或人工排查' });
+        return reply.status(500).send({
+          message: restored
+            ? '恢复失败，原数据已还原，请重试或人工排查'
+            : '恢复失败，原数据未受影响，请重试或人工排查',
+        });
       }
     });
   });

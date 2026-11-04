@@ -291,6 +291,29 @@ try {
     okFd.append('file', new Blob([goodBuf]), 'backup.zip');
     const okRes = await fetch(`${BASE}/restore/backup`, { method: 'POST', body: okFd });
     check('失败后再次恢复成功（链路可自愈）', okRes.status === 200, `status=${okRes.status}`);
+
+    // 变体 a：回滚点创建即失败——预锁 .pre-restore 文件名，copyFileSync 写不进去。
+    // 此刻库文件尚未被替换，修复前 catch 会「回滚点缺失 → rmSync(主库) 建空库」，
+    // 直接销毁全部数据；修复后必须保留现场、绝不碰主库
+    const beforeA = await (await fetch(`${BASE}/plan`)).json();
+    const rollbackPath = path.join(tmpDir, 'renovation-expenses.db.pre-restore');
+    fs.writeFileSync(rollbackPath, 'dead-beef');
+    const rollbackLock = fs.openSync(rollbackPath, 'r+');
+    const varAFd = new FormData();
+    varAFd.append('file', new Blob([goodBuf]), 'backup.zip');
+    const varARes = await fetch(`${BASE}/restore/backup`, { method: 'POST', body: varAFd });
+    fs.closeSync(rollbackLock);
+    check('变体 a（回滚点创建失败）返回 500', varARes.status === 500, `status=${varARes.status}`);
+    check('变体 a 后主库文件未被销毁（非空库）',
+      fs.existsSync(path.join(tmpDir, 'renovation-expenses.db'))
+      && fs.statSync(path.join(tmpDir, 'renovation-expenses.db')).size > 4096,
+      `size=${fs.existsSync(path.join(tmpDir, 'renovation-expenses.db')) ? fs.statSync(path.join(tmpDir, 'renovation-expenses.db')).size : 'missing'}`);
+    const afterA = await (await fetch(`${BASE}/plan`)).json();
+    check('变体 a 后原数据完整可读（不删活库、不建空库）',
+      JSON.stringify(afterA.sections) === JSON.stringify(beforeA.sections),
+      `sections=${JSON.stringify(afterA.sections)?.slice(0, 120)}`);
+    check('变体 a 后再次恢复成功（数据在，链路可自愈）',
+      (await fetch(`${BASE}/restore/backup`, { method: 'POST', body: okFd })).status === 200);
   } else {
     console.log('  (C4/C5 失败注入依赖 Windows 句柄锁语义，本平台跳过)');
   }
