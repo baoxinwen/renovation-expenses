@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Button, Card, Empty, Input, Modal, Popconfirm, Select, Skeleton, Space, Table, Tag } from 'antd';
+import { Alert, Button, Card, Empty, Input, Modal, Popconfirm, Select, Skeleton, Space, Table, Tag } from 'antd';
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { api } from '../api';
 import type { Order, OrderFormValues, Section } from '../api';
@@ -20,6 +20,9 @@ export default function Orders() {
   const [rows, setRows] = useState<Order[]>([]);
   const loadSeq = useRef(0);
   const [loading, setLoading] = useState(false);
+  // 加载失败必须可见：移动卡片列表 rows=[] 会渲染成「还没有订单」空态，
+  // 用户会把断网误读成没有订单（对照移动三页的错误卡模式）
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [filters, setFilters] = useState<{ section_id?: number; item_id?: number; status?: string; q: string }>(() => ({
@@ -33,11 +36,15 @@ export default function Orders() {
     // 序号守卫：搜索每键触发请求，后发先至时丢弃过期响应，避免旧结果覆盖新结果
     const seq = ++loadSeq.current;
     setLoading(true);
+    setLoadError(null);
     try {
       const rows = await api.getOrders({ ...filters, q: filters.q || undefined });
       if (seq === loadSeq.current) setRows(rows);
     } catch (e) {
-      if (seq === loadSeq.current) toast.error((e as Error).message);
+      if (seq === loadSeq.current) {
+        setLoadError((e as Error).message);
+        toast.error((e as Error).message);
+      }
     } finally {
       if (seq === loadSeq.current) setLoading(false);
     }
@@ -221,7 +228,12 @@ export default function Orders() {
       {isMobile ? (
         /* 移动端卡片列表：桌面表格 7 列在 375px 屏只剩横滚 980px，操作列还
            易误触——复用移动首页待付行的卡片语言（标题/关联/未付/进度） */
-        loading ? (
+        loadError ? (
+          <Card>
+            <Empty description={`加载失败：${loadError}`} image={Empty.PRESENTED_IMAGE_SIMPLE} style={{ padding: 20 }} />
+            <Button block onClick={load}>重试</Button>
+          </Card>
+        ) : loading ? (
           <Card><Skeleton active paragraph={{ rows: 6 }} /></Card>
         ) : rows.length === 0 ? (
           <Card><Empty description="还没有订单" image={Empty.PRESENTED_IMAGE_SIMPLE} style={{ padding: 20 }} /></Card>
@@ -265,6 +277,16 @@ export default function Orders() {
             ))}
           </Space>
         )
+      ) : loadError ? (
+        <Card>
+          <Alert
+            type="error"
+            showIcon
+            message="订单加载失败"
+            description={`${loadError}。可能是账本服务没有启动——数据没有丢失，启动后重试即可。`}
+            action={<Button size="small" onClick={load}>重试</Button>}
+          />
+        </Card>
       ) : (
       <Table<Order>
         rowKey="id"

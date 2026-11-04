@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Breadcrumb, Button, Card, Col, Descriptions, Empty, Form, Image, Input, InputNumber, Modal,
@@ -93,15 +93,22 @@ export default function OrderDetail() {
   const [savingPayment, setSavingPayment] = useState(false);
   const [payForm] = Form.useForm();
 
+  const loadSeq = useRef(0);
   const load = useCallback(async () => {
+    // 序号守卫（对照 Plan/Orders 先例）：多张票据并行上传时先完成的 load
+    // 响应后到，旧状态会覆盖新状态（票据列表短暂缺张）
+    const seq = ++loadSeq.current;
     setLoading(true);
     try {
-      setOrder(await api.getOrder(orderId));
+      const order = await api.getOrder(orderId);
+      if (seq === loadSeq.current) setOrder(order);
     } catch (e) {
-      toast.error((e as Error).message);
-      nav('/orders');
+      if (seq === loadSeq.current) {
+        toast.error((e as Error).message);
+        nav('/orders');
+      }
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
   }, [orderId, nav]);
 

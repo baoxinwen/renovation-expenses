@@ -17,10 +17,12 @@ export default function MobileTabBar() {
   const nav = useNavigate();
   const loc = useLocation();
   // '/' 精确匹配，其余前缀匹配——避免任何路径都命中首页；
-  // 都不匹配（如 /analysis、/settings）时不高亮任何 tab
-  const active = loc.pathname === '/record'
-    ? '/record'
-    : TABS.filter((t) => t.key !== '/').find((t) => loc.pathname.startsWith(t.key))?.key ?? '';
+  // 都不匹配（如 /settings 子页）时不高亮任何 tab
+  const active = loc.pathname === '/'
+    ? '/'
+    : loc.pathname === '/record'
+      ? '/record'
+      : TABS.filter((t) => t.key !== '/').find((t) => loc.pathname.startsWith(t.key))?.key ?? '';
 
   return (
     <nav
