@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
-  Breadcrumb, Button, Card, Col, Descriptions, Form, Image, Input, InputNumber, Modal,
+  Breadcrumb, Button, Card, Col, Descriptions, Empty, Form, Image, Input, InputNumber, Modal,
   Popconfirm, Row, Select, Space, DatePicker, Table, Tag, Upload,
 } from 'antd';
 import { ArrowLeftOutlined, CheckOutlined, DownloadOutlined, EditOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons';
@@ -19,6 +19,59 @@ interface PaymentFormValues {
   pay_date: dayjs.Dayjs;
   method?: string;
   note?: string;
+}
+
+/** 付款的票据区：缩略图预览 + 单张删除 + 上传（桌面表格单元格与移动卡片共用同一实现） */
+function ReceiptBlock({ p, onRemoveReceipt, onChanged }: {
+  p: Payment;
+  onRemoveReceipt: (r: Receipt) => void;
+  onChanged: () => void;
+}) {
+  return (
+    <Space wrap size={8}>
+      <Image.PreviewGroup>
+        {(p.receipts ?? []).map((r) => (
+          <Image
+            key={r.id}
+            src={`/uploads/${r.filename}`}
+            alt={r.original_name}
+            width={44}
+            height={44}
+            style={{ objectFit: 'cover', borderRadius: 4 }}
+          />
+        ))}
+      </Image.PreviewGroup>
+      {(p.receipts ?? []).map((r) => (
+        <Button
+          key={'del-' + r.id}
+          type="text"
+          size="small"
+          danger
+          onClick={() => onRemoveReceipt(r)}
+          style={{ padding: 0 }}
+        >
+          删除「{r.original_name}」
+        </Button>
+      ))}
+      <Upload
+        accept=".jpg,.jpeg,.png,.webp"
+        showUploadList={false}
+        multiple
+        customRequest={async ({ file, onSuccess, onError }) => {
+          try {
+            await api.uploadReceipt(p.id, file as File);
+            onSuccess?.({});
+            onChanged();
+          } catch (e) {
+            toast.error((e as Error).message);
+            onError?.(e as Error);
+          }
+        }}
+      >
+        <Button type="link" size="small" icon={<UploadOutlined />}>上传票据</Button>
+      </Upload>
+    </Space>
+  );
 }
 
 export default function OrderDetail() {
@@ -281,11 +334,54 @@ export default function OrderDetail() {
           </Button>
         }
       >
+        {isMobile ? (
+          /* 移动端卡片：桌面付款表 7 列在窄屏只剩横滚 860px——手机核对付款与
+             给工头看票据照片是核心场景，卡片化后缩略图/上传/修改直达 */
+          payments.length === 0 ? (
+            <Card>
+              <Empty description="还没有付款记录，点击右上角「记一笔付款」开始" image={Empty.PRESENTED_IMAGE_SIMPLE} style={{ padding: 20 }} />
+            </Card>
+          ) : (
+            <Space direction="vertical" size={10} style={{ width: '100%' }}>
+              {payments.map((p) => (
+                <Card key={p.id} size="small" styles={{ body: { padding: '10px 12px' } }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                    <span style={{ fontWeight: 600 }}>{p.pay_date}</span>
+                    <span className="tabular" style={{ fontWeight: 600, fontSize: 16, color: p.amount < 0 ? 'var(--sage)' : undefined }}>
+                      {fmtMoney(p.amount)}
+                    </span>
+                  </div>
+                  {(p.method || p.note) && (
+                    <div style={{ fontSize: 12, color: 'var(--ink-2)', marginTop: 2 }}>
+                      {[p.method, p.note].filter(Boolean).join(' · ')}
+                    </div>
+                  )}
+                  <div style={{ marginTop: 8 }}>
+                    <ReceiptBlock p={p} onRemoveReceipt={removeReceipt} onChanged={load} />
+                  </div>
+                  <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
+                    <Button type="link" size="small" onClick={() => openPayModal(p)}>修改</Button>
+                    <Popconfirm
+                      title="删除该笔付款？"
+                      description={(p.receipts ?? []).length
+                        ? `该笔付款及 ${(p.receipts ?? []).length} 张票据照片将一并永久删除，不可撤销`
+                        : '该笔付款将被永久删除，不可撤销'}
+                      okText="删除"
+                      okType="danger"
+                      onConfirm={() => deletePayment(p)}
+                    >
+                      <Button type="link" size="small" danger>删除</Button>
+                    </Popconfirm>
+                  </div>
+                </Card>
+              ))}
+            </Space>
+          )
+        ) : (
         <Table<Payment>
           rowKey="id"
           dataSource={payments}
           pagination={false}
-          scroll={isMobile ? { x: 860 } : undefined}
           locale={{ emptyText: '还没有付款记录，点击右上角「记一笔付款」开始' }}
           columns={[
             { title: '日期', dataIndex: 'pay_date', width: 110 },
@@ -300,49 +396,7 @@ export default function OrderDetail() {
             {
               title: '票据', width: 280,
               render: (_, p) => (
-                <Space wrap size={8}>
-                  <Image.PreviewGroup>
-                    {(p.receipts ?? []).map((r) => (
-                      <Image
-                        key={r.id}
-                        src={`/uploads/${r.filename}`}
-                        alt={r.original_name}
-                        width={44}
-                        height={44}
-                        style={{ objectFit: 'cover', borderRadius: 4 }}
-                      />
-                    ))}
-                  </Image.PreviewGroup>
-                  {(p.receipts ?? []).map((r) => (
-                    <Button
-                      key={'del-' + r.id}
-                      type="text"
-                      size="small"
-                      danger
-                      onClick={() => removeReceipt(r)}
-                      style={{ padding: 0 }}
-                    >
-                      删除「{r.original_name}」
-                    </Button>
-                  ))}
-                  <Upload
-                    accept=".jpg,.jpeg,.png,.webp"
-                    showUploadList={false}
-                    multiple
-                    customRequest={async ({ file, onSuccess, onError }) => {
-                      try {
-                        await api.uploadReceipt(p.id, file as File);
-                        onSuccess?.({});
-                        load();
-                      } catch (e) {
-                        toast.error((e as Error).message);
-                        onError?.(e as Error);
-                      }
-                    }}
-                  >
-                    <Button type="link" size="small" icon={<UploadOutlined />}>上传票据</Button>
-                  </Upload>
-                </Space>
+                <ReceiptBlock p={p} onRemoveReceipt={removeReceipt} onChanged={load} />
               ),
             },
             {
@@ -375,6 +429,7 @@ export default function OrderDetail() {
             ) : null
           }
         />
+        )}
       </Card>
 
       <OrderFormModal

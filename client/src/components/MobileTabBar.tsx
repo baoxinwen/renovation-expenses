@@ -1,13 +1,15 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  FileTextOutlined, HomeOutlined, PlusCircleFilled, ProfileOutlined,
+  BarChartOutlined, FileTextOutlined, HomeOutlined, PlusCircleFilled, ProfileOutlined,
 } from '@ant-design/icons';
 
+// 五栏：浏览类两侧排开，「记」恰在正中（P9 底部导航 ≤5 的上限内）
 const TABS = [
   { key: '/', icon: HomeOutlined, label: '首页' },
   { key: '/items', icon: FileTextOutlined, label: '清单' },
   { key: '/record', icon: PlusCircleFilled, label: '记', central: true },
   { key: '/orders', icon: ProfileOutlined, label: '订单' },
+  { key: '/analysis', icon: BarChartOutlined, label: '分析' },
 ];
 
 /** 移动端底部导航（含 iOS 安全区适配） */

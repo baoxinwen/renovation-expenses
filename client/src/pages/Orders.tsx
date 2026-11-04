@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Button, Card, Input, Modal, Popconfirm, Select, Space, Table, Tag } from 'antd';
+import { Button, Card, Empty, Input, Modal, Popconfirm, Select, Skeleton, Space, Table, Tag } from 'antd';
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { api } from '../api';
 import type { Order, OrderFormValues, Section } from '../api';
@@ -201,13 +201,60 @@ export default function Orders() {
         </Space>
       </Card>
 
+      {isMobile ? (
+        /* 移动端卡片列表：桌面表格 7 列在 375px 屏只剩横滚 980px，操作列还
+           易误触——复用移动首页待付行的卡片语言（标题/关联/未付/进度） */
+        loading ? (
+          <Card><Skeleton active paragraph={{ rows: 6 }} /></Card>
+        ) : rows.length === 0 ? (
+          <Card><Empty description="还没有订单" image={Empty.PRESENTED_IMAGE_SIMPLE} style={{ padding: 20 }} /></Card>
+        ) : (
+          <Space direction="vertical" size={10} style={{ width: '100%' }}>
+            {rows.map((o) => (
+              <Card
+                key={o.id}
+                size="small"
+                styles={{ body: { padding: '12px 14px' } }}
+                onClick={() => nav(`/orders/${o.id}`)}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.title}</span>
+                      {o.status === 'closed'
+                        ? <Tag color="green" style={{ marginRight: 0 }}>已结清</Tag>
+                        : (o.paid ?? 0) >= o.total_amount && o.total_amount > 0
+                          ? <Tag color="orange" style={{ marginRight: 0 }}>建议结清</Tag>
+                          : <Tag color="blue" style={{ marginRight: 0 }}>进行中</Tag>}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--ink-2)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {o.item_name || '未关联项目'}{o.vendor ? ` · ${o.vendor}` : ''}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <div className="tabular" style={{ fontWeight: 600 }}>{fmtMoney(o.total_amount)}</div>
+                    <div className="tabular" style={{ fontSize: 12, color: (o.paid ?? 0) > o.total_amount ? 'var(--amber)' : unpaidAmount(o) > 0 ? 'var(--clay)' : 'var(--sage)' }}>
+                      {(o.paid ?? 0) > o.total_amount ? '已付超出' : unpaidAmount(o) === 0 ? '已付清' : `未付 ${fmtMoney(unpaidAmount(o))}`}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+                  <div style={{ flex: 1 }}><WoodProgress value={o.paid ?? 0} budget={o.total_amount} size="sm" /></div>
+                  <span className="tabular" style={{ fontSize: 12, color: 'var(--ink-2)' }}>
+                    {o.total_amount > 0 ? Math.round(Math.min(100, ((o.paid ?? 0) / o.total_amount) * 100)) : 0}%
+                  </span>
+                </div>
+              </Card>
+            ))}
+          </Space>
+        )
+      ) : (
       <Table<Order>
         rowKey="id"
         loading={loading}
         dataSource={rows}
         onRow={(r) => ({ onClick: () => nav(`/orders/${r.id}`), style: { cursor: 'pointer' } })}
         pagination={rows.length > 20 ? { pageSize: 20, showTotal: (t) => `共 ${t} 笔订单` } : false}
-        scroll={isMobile ? { x: 980 } : undefined}
         columns={[
           {
             title: '订单',
@@ -314,6 +361,7 @@ export default function Orders() {
           ) : null
         }
       />
+      )}
 
       <OrderFormModal
         open={modalOpen}
