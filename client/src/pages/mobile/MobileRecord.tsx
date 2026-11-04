@@ -255,12 +255,13 @@ export default function MobileRecord() {
                 onChange={(id) => {
                   const it = allItems.find((x) => x.id === id);
                   setBoughtItem(it ?? null);
-                  // 预填与桌面 BuyModal 同语义：已买项填原实付（修正场景），
-                  // 未买项填数量×单价（预算合计——单价会让数量>1 的项目记错账）
+                  // 预填与桌面 BuyModal 同语义：已买项填原实付与原购买日期（修正
+                  // 场景——只预填金额会让日期被静默覆盖成当天）；未买项填数量×单价
                   if (it) boughtForm.setFieldsValue({
                     price: it.bought
                       ? (it.paid_amount ?? Number((it.quantity * it.unit_price).toFixed(2)))
                       : Number((it.quantity * it.unit_price).toFixed(2)),
+                    ...(it.bought && it.bought_date ? { date: dayjs(it.bought_date) } : {}),
                   });
                 }}
               />
