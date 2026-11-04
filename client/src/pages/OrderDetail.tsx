@@ -327,7 +327,7 @@ export default function OrderDetail() {
           </Space>
         }
       >
-        <Row gutter={16}>
+        <Row gutter={[16, 16]}>
           <Col xs={24} md={16}>
             <Descriptions column={{ xs: 1, sm: 2, md: 3 }} size="small">
               <Descriptions.Item label="商家 / 施工方">{order.vendor || '—'}</Descriptions.Item>

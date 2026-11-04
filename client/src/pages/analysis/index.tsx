@@ -69,7 +69,7 @@ export default function Analysis() {
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
       {/* ===== 总览区 ===== */}
       <OverviewCards summary={summary} />
-      <Row gutter={16} align="stretch">
+      <Row gutter={[16, 16]} align="stretch">
         <Col xs={24} md={12}>
           <BudgetGauge summary={summary} />
         </Col>
@@ -79,7 +79,7 @@ export default function Analysis() {
       </Row>
 
       {/* ===== 板块区 ===== */}
-      <Row gutter={16}>
+      <Row gutter={[16, 16]}>
         <Col xs={24} lg={13}>
           <SectionCompareChart charts={charts} />
         </Col>
@@ -87,7 +87,7 @@ export default function Analysis() {
           <SectionPieChart charts={charts} />
         </Col>
       </Row>
-      <Row gutter={16}>
+      <Row gutter={[16, 16]}>
         <Col xs={24}>
           <Card title={<TypeReveal text="板块汇总：预算 vs 实际" />} size="small">
             <Table
@@ -121,7 +121,7 @@ export default function Analysis() {
       <ExecutionRankChart plan={plan} />
 
       {/* ===== 时间区 ===== */}
-      <Row gutter={16}>
+      <Row gutter={[16, 16]}>
         <Col xs={24} lg={13}>
           <CumulativeChart charts={charts} totalBudget={summary?.total_budget ?? 0} />
         </Col>
