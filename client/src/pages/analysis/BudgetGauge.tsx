@@ -50,7 +50,7 @@ export default function BudgetGauge({ summary }: { summary: Summary | null }) {
   return (
     <Card title="预算健康度" size="small" style={CARD_FILL} styles={{ body: CARD_BODY_CENTER }}>
       <div style={{ textAlign: 'center', color: 'var(--ink-3)', fontSize: 12, marginBottom: -8 }}>
-        已花 {Math.round(cashSpent)} / 目标 {Math.round(budget)}（含未挂项目付款）
+        累计支出 {Math.round(cashSpent)} / 目标 {Math.round(budget)}（含未挂项目付款）
       </div>
       <div data-testid="budget-gauge-chart">
         <ReactECharts option={option} theme={themeName} notMerge style={{ height: 148 }} />

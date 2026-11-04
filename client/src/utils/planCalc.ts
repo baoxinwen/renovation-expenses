@@ -27,21 +27,6 @@ export function executionColor(pct: number, dark: boolean): string {
   return pct > 1 ? pal.over : pct >= 0.9 ? pal.warn : pal.ok;
 }
 
-/** TOP10 拆分：前 5 详画，其余合并为「其他 N 项」，避免长尾压扁主条形 */
-export function top10Chartable(items: { id: number; name: string; budget: number; actual: number }[]) {
-  if (items.length <= 5) return items;
-  const rest = items.slice(5);
-  return [
-    ...items.slice(0, 5),
-    {
-      id: -1,
-      name: `其他 ${rest.length} 项`,
-      budget: rest.reduce((n, i) => n + i.budget, 0),
-      actual: rest.reduce((n, i) => n + i.actual, 0),
-    },
-  ];
-}
-
 /** 饼图数据：指定口径下过滤 0 值板块（0 值不出扇区） */
 export function pieData(sections: { name: string; budget: number; actual: number }[], mode: 'budget' | 'actual') {
   return sections.filter((s) => s[mode] > 0).map((s) => ({ name: s.name, value: s[mode] }));

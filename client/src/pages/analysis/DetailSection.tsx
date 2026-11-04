@@ -1,53 +1,20 @@
-import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, Col, Empty, Row, Space, Table, Tag } from 'antd';
-import ReactECharts from 'echarts-for-react';
 import type { Charts } from '../../api';
 import { fmtMoney } from '../../format';
-import { fmtAxisWan, useChartTheme } from './shared';
-import { top10Chartable } from '../../utils/planCalc';
 import TypeReveal from '../../components/TypeReveal';
 
-// 明细区：TOP10 条形图 + 项目排行表 + 最近付款（自原 Analysis 迁入，口径与交互不变）。
+// 明细区：项目排行表 + 最近付款。TOP10 条形图已移除——与排行表同读 top_items，
+// 同数据同指标双形态并排中图是纯装饰，差额/下钻等信息由表格严格更多。
 // 根用 Space 而非 fragment：容器 Space 只把本组件当一个子项，fragment 内部拿不到页面级间距
 export default function DetailSection({ charts }: { charts: Charts | null }) {
   const nav = useNavigate();
-  const { themeName, colors } = useChartTheme();
-
-  // TOP10 拆分：前 5 详画，其余合并为「其他」，避免长尾压扁（逻辑在 planCalc，可测）
-  const chartable = useMemo(() => top10Chartable(charts?.top_items ?? []), [charts]);
-
-  const topOption = useMemo(() => ({
-    tooltip: { trigger: 'axis', valueFormatter: (v: number) => fmtMoney(v) },
-    legend: { top: 0 },
-    grid: { left: 110, right: 40, top: 36, bottom: 30 },
-    xAxis: { type: 'value', axisLabel: { formatter: fmtAxisWan } },
-    yAxis: { type: 'category', inverse: true, data: chartable.map((i) => i.name) },
-    series: [
-      { name: '预算', type: 'bar', data: chartable.map((i) => i.budget), barMaxWidth: 14, itemStyle: { color: colors.budget, borderRadius: [0, 4, 4, 0] } },
-      { name: '实际', type: 'bar', data: chartable.map((i) => i.actual), barMaxWidth: 14, itemStyle: { color: colors.actual, borderRadius: [0, 4, 4, 0] } },
-    ],
-  }), [chartable, colors]);
 
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
       <Row gutter={16} align="stretch">
         <Col xs={24} lg={13}>
-          <Card
-            title={<TypeReveal text="花费 TOP10 项目（按预算）" />}
-            size="small"
-            style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
-            styles={{ body: { flex: 1, minHeight: 0, paddingBottom: 0, display: 'flex', flexDirection: 'column' } }}
-          >
-            {chartable.length
-              ? <div style={{ flex: 1, minHeight: 320 }}>
-                  <ReactECharts option={topOption} theme={themeName} notMerge style={{ height: '100%' }} />
-                </div>
-              : <Empty description="清单还没有项目" style={{ padding: 32 }} />}
-          </Card>
-        </Col>
-        <Col xs={24} lg={11}>
-          <Card title={<TypeReveal text="项目排行" />} size="small" style={{ height: '100%' }} styles={{ body: { paddingTop: 8 } }}>
+          <Card title={<TypeReveal text="项目排行（按预算 TOP10）" />} size="small" style={{ height: '100%' }} styles={{ body: { paddingTop: 8 } }}>
             <Table
               rowKey="id"
               size="small"
@@ -79,30 +46,31 @@ export default function DetailSection({ charts }: { charts: Charts | null }) {
             />
           </Card>
         </Col>
+        <Col xs={24} lg={11}>
+          <Card title={<TypeReveal text="最近付款" />} size="small" style={{ height: '100%' }} styles={{ body: { paddingTop: 8 } }}>
+            <Table
+              rowKey="id"
+              size="small"
+              dataSource={charts?.recent_payments ?? []}
+              pagination={false}
+              locale={{ emptyText: <Empty description="还没有付款记录——到订单页记第一笔定金" style={{ padding: 24 }} /> }}
+              onRow={(r) => ({ onClick: () => nav(`/orders/${r.order_id}`), style: { cursor: 'pointer' } })}
+              columns={[
+                { title: '日期', dataIndex: 'pay_date', width: 100 },
+                { title: '订单', dataIndex: 'order_title', ellipsis: true },
+                { title: '项目', dataIndex: 'item_name', width: 130, render: (v) => v || '—' },
+                { title: '板块', dataIndex: 'section_name', width: 110, render: (v) => (v ? <Tag bordered={false}>{v}</Tag> : '—') },
+                {
+                  title: '金额', dataIndex: 'amount', width: 110, align: 'right',
+                  render: (v: number) => <span className="tabular" style={{ fontWeight: 600, color: v < 0 ? 'var(--sage)' : undefined }}>{fmtMoney(v)}</span>,
+                },
+                { title: '方式', dataIndex: 'method', width: 80, render: (v: string) => v || '—' },
+                { title: '备注', dataIndex: 'note', ellipsis: true, render: (v: string) => v || '—' },
+              ]}
+            />
+          </Card>
+        </Col>
       </Row>
-
-      <Card title={<TypeReveal text="最近付款" />} size="small">
-        <Table
-          rowKey="id"
-          size="small"
-          dataSource={charts?.recent_payments ?? []}
-          pagination={false}
-          locale={{ emptyText: <Empty description="还没有付款记录——到订单页记第一笔定金" style={{ padding: 24 }} /> }}
-          onRow={(r) => ({ onClick: () => nav(`/orders/${r.order_id}`), style: { cursor: 'pointer' } })}
-          columns={[
-            { title: '日期', dataIndex: 'pay_date', width: 100 },
-            { title: '订单', dataIndex: 'order_title' },
-            { title: '项目', dataIndex: 'item_name', width: 130, render: (v) => v || '—' },
-            { title: '板块', dataIndex: 'section_name', width: 110, render: (v) => (v ? <Tag bordered={false}>{v}</Tag> : '—') },
-            {
-              title: '金额', dataIndex: 'amount', width: 110, align: 'right',
-              render: (v: number) => <span className="tabular" style={{ fontWeight: 600, color: v < 0 ? 'var(--sage)' : undefined }}>{fmtMoney(v)}</span>,
-            },
-            { title: '方式', dataIndex: 'method', width: 80, render: (v: string) => v || '—' },
-            { title: '备注', dataIndex: 'note', ellipsis: true, render: (v: string) => v || '—' },
-          ]}
-        />
-      </Card>
     </Space>
   );
 }

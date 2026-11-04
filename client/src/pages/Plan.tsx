@@ -490,7 +490,7 @@ export default function Plan() {
             allowClear
           />
           <span className="label-caption" style={{ flex: 1, minWidth: 200 }}>
-            点单元格直接编辑；悬停行首 ⠿ 可拖动排序
+            点击行即可编辑；悬停行首 ⠿ 可拖动排序
           </span>
           <Space wrap style={{ marginLeft: 'auto' }}>
             <Button type="primary" ghost icon={<PlusOutlined />} onClick={() => setSectionModalOpen(true)}>

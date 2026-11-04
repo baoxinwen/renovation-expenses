@@ -173,6 +173,17 @@ export default function OrderDetail() {
     }
   };
 
+  // 已结清的出口：发现尾款/质保金/退款要记时可回到「进行中」（既有状态开关的逆操作）
+  const reopenOrder = async () => {
+    try {
+      await api.updateOrder(order.id, { status: 'open' });
+      toast.success('已重新打开');
+      load();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
+
   const deletePayment = async (p: Payment) => {
     try {
       await api.deletePayment(p.id);
@@ -214,6 +225,9 @@ export default function OrderDetail() {
           <Space>
             {order.status === 'open' && paid >= order.total_amount && order.total_amount > 0 && (
               <Button icon={<CheckOutlined />} onClick={closeOrder}>标记结清</Button>
+            )}
+            {order.status === 'closed' && (
+              <Button onClick={reopenOrder}>重新打开</Button>
             )}
             {(order.payments ?? []).some((p) => (p.receipts ?? []).length > 0) && (
               <Button icon={<DownloadOutlined />} href={`/api/export/receipts?order_id=${order.id}`}>下载票据</Button>
@@ -336,7 +350,15 @@ export default function OrderDetail() {
               render: (_, p) => (
                 <Space size={0}>
                   <Button type="link" size="small" onClick={() => openPayModal(p)}>修改</Button>
-                  <Popconfirm title="删除该笔付款？" okText="删除" okType="danger" onConfirm={() => deletePayment(p)}>
+                  <Popconfirm
+                    title="删除该笔付款？"
+                    description={(p.receipts ?? []).length
+                      ? `该笔付款及 ${(p.receipts ?? []).length} 张票据照片将一并永久删除，不可撤销`
+                      : '该笔付款将被永久删除，不可撤销'}
+                    okText="删除"
+                    okType="danger"
+                    onConfirm={() => deletePayment(p)}
+                  >
                     <Button type="link" size="small" danger>删除</Button>
                   </Popconfirm>
                 </Space>

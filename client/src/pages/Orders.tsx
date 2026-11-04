@@ -64,6 +64,9 @@ export default function Orders() {
     if (searchParams.get('new') === '1') setModalOpen(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // 同一入口带来的项目固定作为新建预选值（不受后续筛选变化影响）
+  const preselectItemId = searchParams.get('new') === '1' && Number(searchParams.get('item_id'))
+    ? Number(searchParams.get('item_id')) : undefined;
 
   const findItem = (id: number) =>
     sections.flatMap((s) => s.items ?? []).find((it) => it.id === id);
@@ -316,6 +319,7 @@ export default function Orders() {
         open={modalOpen}
         sections={sections}
         confirmLoading={saving}
+        defaultItemId={preselectItemId}
         onOk={createOrder}
         onCancel={() => setModalOpen(false)}
       />

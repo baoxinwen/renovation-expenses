@@ -1,6 +1,6 @@
 // planCalc（清单/统计可测纯逻辑）单元测试
 import { describe, it, expect } from 'vitest';
-import { fmtAxisWan, executionColor, top10Chartable, pieData, heatLevels, matchSearch } from '../src/utils/planCalc';
+import { fmtAxisWan, executionColor, pieData, heatLevels, matchSearch } from '../src/utils/planCalc';
 
 describe('fmtAxisWan（万元缩写）', () => {
   it('万级缩写', () => expect(fmtAxisWan(20000)).toBe('2万'));
@@ -31,28 +31,6 @@ describe('executionColor（执行率阈值着色）', () => {
   });
   it('三档颜色互不相同', () => {
     expect(new Set([ok, warn, over]).size).toBe(3);
-  });
-});
-
-describe('top10Chartable（TOP10 拆分）', () => {
-  const item = (id: number, budget: number) => ({ id, name: `p${id}`, budget, actual: 0 });
-  it('≤5 项原样返回', () => {
-    const items = [1, 2, 3, 4, 5].map(item);
-    expect(top10Chartable(items)).toHaveLength(5);
-    expect(top10Chartable(items)).toBe(items); // 引用相同（未拆分）
-  });
-  it('>5 项合并为「其他 N 项」且金额求和', () => {
-    const items = [100, 200, 300, 400, 500, 600, 700].map((v) => item(v, v));
-    const out = top10Chartable(items);
-    expect(out).toHaveLength(6);
-    const other = out.at(-1)!;
-    expect(other.name).toBe('其他 2 项');
-    expect(other.budget).toBe(1300);
-    expect(other.id).toBe(-1); // 哨兵 id，不与真实项目冲突
-  });
-  it('恰好 6 项：其他 1 项', () => {
-    const out = top10Chartable([1, 2, 3, 4, 5, 6].map((v) => item(v, v)));
-    expect(out.at(-1)!.name).toBe('其他 1 项');
   });
 });
 

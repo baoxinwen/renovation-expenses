@@ -10,12 +10,14 @@ interface Props {
   initial?: Order | null;
   sections: Section[];
   confirmLoading?: boolean;
+  /** 新建时预选的关联项目（清单行「+订单」入口透传，免二次检索） */
+  defaultItemId?: number;
   /** files：一次付清时选择待上传的票据照片（创建订单后自动传到首笔付款） */
   onOk: (values: OrderFormValues, files: File[]) => void;
   onCancel: () => void;
 }
 
-export default function OrderFormModal({ open, initial, sections, confirmLoading, onOk, onCancel }: Props) {
+export default function OrderFormModal({ open, initial, sections, confirmLoading, defaultItemId, onOk, onCancel }: Props) {
   const [form] = Form.useForm();
   const isNew = !initial;
   // 一次付清默认开启：多数从清单行进来的都是一口价小件；分期大件关掉即可
@@ -36,9 +38,11 @@ export default function OrderFormModal({ open, initial, sections, confirmLoading
           total_amount: initial.total_amount,
           note: initial.note || undefined,
         });
+      } else if (defaultItemId) {
+        form.setFieldsValue({ item_id: defaultItemId });
       }
     }
-  }, [open, initial, isNew, form]);
+  }, [open, initial, isNew, form, defaultItemId]);
 
   const submit = async () => {
     const values = await form.validateFields();

@@ -24,7 +24,7 @@ export default function GapCard({ summary }: { summary: Summary | null }) {
 
   return (
     <Card title="剩余预算缺口" size="small" style={CARD_FILL} styles={{ body: CARD_BODY_EVENLY }}>
-      <GapRow label="剩余可用（预算 − 已花）" value={remainingBudget} />
+      <GapRow label="剩余可用（预算 − 累计支出）" value={remainingBudget} />
       <GapRow label="剩余要花（未落实项目预算）" value={remainingToSpend} />
       <div style={{ borderTop: '1px dashed var(--line, #e8e1d8)', margin: '4px 0' }} />
       <GapRow label={gap > 0 ? '缺口（钱不够）' : '富余（还够花）'} value={gap} color={gapColor} />
