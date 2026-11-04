@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { api } from '../../api';
 import type { Charts, PlanData, Summary } from '../../api';
 import { fmtMoney } from '../../format';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import TypeReveal from '../../components/TypeReveal';
 import OverviewCards from './OverviewCards';
 import GapCard from './GapCard';
@@ -19,6 +20,7 @@ import DetailSection from './DetailSection';
 // getPlan 供 E 项目级排行取全量 items 的 budget_amount/actual_amount）
 // 页面四分区：总览 → 板块 → 时间 → 明细（spec 第 5 章模块划分）
 export default function Analysis() {
+  const isMobile = useIsMobile();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [charts, setCharts] = useState<Charts | null>(null);
   const [plan, setPlan] = useState<PlanData | null>(null);
@@ -87,8 +89,22 @@ export default function Analysis() {
               size="small"
               dataSource={summary?.sections ?? []}
               pagination={false}
-              scroll={{ x: 600 }}
-              columns={[
+              scroll={isMobile ? { x: 450 } : undefined}
+              columns={(isMobile ? [
+                // 移动端收掉计数列（板块/预算/实际/执行率一屏全见），板块名允许换行
+                { title: '板块', dataIndex: 'name' },
+                { title: '预算小计', dataIndex: 'budget_subtotal', width: 110, align: 'right', render: (v: number) => <span className="tabular">{fmtMoney(v)}</span> },
+                { title: '实际小计', dataIndex: 'actual_subtotal', width: 110, align: 'right', render: (v: number) => <span className="tabular">{fmtMoney(v)}</span> },
+                {
+                  title: '执行率', width: 90, align: 'right',
+                  render: (_, s: Summary['sections'][number]) => {
+                    if (!s.budget_subtotal) return <span style={{ color: 'var(--ink-3)' }}>—</span>;
+                    const pct = s.actual_subtotal / s.budget_subtotal;
+                    const color = pct === 0 ? undefined : pct > 1 ? 'error' : pct >= 0.9 ? 'warning' : 'success';
+                    return <Tag color={color}>{Math.round(pct * 100)}%</Tag>;
+                  },
+                },
+              ] : [
                 { title: '板块', dataIndex: 'name', render: (v: string) => <span style={{ whiteSpace: 'nowrap' }}>{v}</span> },
                 { title: '项目数', dataIndex: 'item_count', width: 60, align: 'right' },
                 { title: '已落实', dataIndex: 'bought_count', width: 60, align: 'right' },
@@ -104,7 +120,7 @@ export default function Analysis() {
                     return <Tag color={color}>{Math.round(pct * 100)}%</Tag>;
                   },
                 },
-              ]}
+              ])}
             />
           </Card>
         </Col>
