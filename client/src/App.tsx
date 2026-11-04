@@ -1,6 +1,6 @@
-import { createContext, useContext } from 'react';
+import { createContext, lazy, Suspense, useContext } from 'react';
 import { BrowserRouter, Link, Navigate, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { Button, ConfigProvider, Layout, Menu } from 'antd';
+import { Button, ConfigProvider, Layout, Menu, Spin } from 'antd';
 import { BarChartOutlined, FileTextOutlined, OrderedListOutlined, SettingOutlined } from '@ant-design/icons';
 import { Toaster } from 'sonner';
 import zhCN from 'antd/locale/zh_CN';
@@ -13,11 +13,19 @@ import MobileHome from './pages/mobile/MobileHome';
 import MobileItems from './pages/mobile/MobileItems';
 import MobileRecord from './pages/mobile/MobileRecord';
 import Plan from './pages/Plan';
-import Analysis from './pages/analysis';
-import Orders from './pages/Orders';
-import OrderDetail from './pages/OrderDetail';
-import Settings from './pages/Settings';
-import PrintSection from './pages/PrintSection';
+
+// 路由级代码分割（M5）：此前 echarts/antd/全部页面合成单个 2.5MB chunk，
+// 手机每次发版后首访都要全量拉取。首屏（清单/移动三页）保持同步加载，
+// 重页面按需拉取——局域网下 Suspense 占位一闪即过
+const Analysis = lazy(() => import('./pages/analysis'));
+const Orders = lazy(() => import('./pages/Orders'));
+const OrderDetail = lazy(() => import('./pages/OrderDetail'));
+const Settings = lazy(() => import('./pages/Settings'));
+const PrintSection = lazy(() => import('./pages/PrintSection'));
+
+const PageFallback = () => (
+  <div style={{ padding: 48, textAlign: 'center' }}><Spin /></div>
+);
 
 dayjs.locale('zh-cn');
 
@@ -64,17 +72,37 @@ function SideMenu() {  const nav = useNavigate();
   );
 }
 
-/** 路由分发：打印视图游离于移动/桌面布局之外（无侧边栏、无 TabBar），其余走常规布局 */
+/** 路由分发：打印视图游离于移动/桌面布局之外（无侧边栏、无 TabBar），其余走常规布局。
+ *  路由是单棵树（不再按 isMobile 分成两套）：断点翻转（旋转/折叠屏跨 768px）时
+ *  React 按相同路径复用组件实例——/record 填到一半的表单、已选票据不再被整树
+ *  卸载重定向；仅「/」与「/items」按端选组件（首页两端本就是不同页面，/items
+ *  桌面无对应页，重定向仅丢搜索词，可接受） */
 function AppRoutes({ isMobile }: { isMobile: boolean }) {
   const location = useLocation();
   if (location.pathname.startsWith('/print/')) {
     return (
-      <Routes>
-        <Route path="/print/section/:id" element={<PrintSection />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <Suspense fallback={<PageFallback />}>
+        <Routes>
+          <Route path="/print/section/:id" element={<PrintSection />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
     );
   }
+  const routes = (
+    <Suspense fallback={<PageFallback />}>
+      <Routes>
+        <Route path="/" element={isMobile ? <MobileHome /> : <Plan />} />
+        <Route path="/items" element={isMobile ? <MobileItems /> : <Navigate to="/" replace />} />
+        <Route path="/record" element={<MobileRecord />} />
+        <Route path="/orders" element={<Orders />} />
+        <Route path="/orders/:id" element={<OrderDetail />} />
+        <Route path="/settings" element={<Settings />} />
+        <Route path="/analysis" element={<Analysis />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
+  );
   return (
     <>
       {isMobile ? (
@@ -97,16 +125,7 @@ function AppRoutes({ isMobile }: { isMobile: boolean }) {
                 </Link>
               </header>
               <main style={{ padding: 12, paddingBottom: 'calc(72px + env(safe-area-inset-bottom, 0px))' }}>
-                <Routes>
-                  <Route path="/" element={<MobileHome />} />
-                  <Route path="/items" element={<MobileItems />} />
-                  <Route path="/record" element={<MobileRecord />} />
-                  <Route path="/orders" element={<Orders />} />
-                  <Route path="/orders/:id" element={<OrderDetail />} />
-                  <Route path="/settings" element={<Settings />} />
-                  <Route path="/analysis" element={<Analysis />} />
-                  <Route path="*" element={<MobileHome />} />
-                </Routes>
+                {routes}
               </main>
               <MobileTabBar />
             </div>
@@ -144,14 +163,7 @@ function AppRoutes({ isMobile }: { isMobile: boolean }) {
             </Sider>
             <Layout style={{ background: 'transparent' }}>
               <ContentShell>
-                <Routes>
-                  <Route path="/" element={<Plan />} />
-                  <Route path="/analysis" element={<Analysis />} />
-                  <Route path="/orders" element={<Orders />} />
-                  <Route path="/orders/:id" element={<OrderDetail />} />
-                  <Route path="/settings" element={<Settings />} />
-                  <Route path="*" element={<Navigate to="/" replace />} />
-                </Routes>
+                {routes}
               </ContentShell>
             </Layout>
           </Layout>
