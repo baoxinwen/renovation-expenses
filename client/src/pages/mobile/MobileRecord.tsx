@@ -7,7 +7,7 @@ import type { Item, Order, Section } from '../../api';
 import { fmtMoney, PAY_METHODS } from '../../format';
 import ReceiptUploader from '../../components/ReceiptUploader';
 import { confirmAsync } from '../../utils/confirm';
-import { confirmDoubleCount, confirmOrderOnBoughtItem, submitWithForceGuard } from '../../utils/domain';
+import { confirmDoubleCount, confirmOrderOnBoughtItem, submitWithForceGuard, submitPaymentWithGuard } from '../../utils/domain';
 
 type Mode = 'pay' | 'bought' | 'new';
 
@@ -69,12 +69,20 @@ export default function MobileRecord() {
     }
     setSaving(true);
     try {
-      const payment = await api.addPayment(order.id, {
-        amount: v.amount,
-        pay_date: v.pay_date.format('YYYY-MM-DD'),
-        method: v.method,
-        note: v.note,
-      });
+      const payment = await submitPaymentWithGuard(
+        (force) => api.addPayment(order.id, {
+          amount: v.amount,
+          pay_date: v.pay_date.format('YYYY-MM-DD'),
+          method: v.method,
+          note: v.note,
+          ...(force ? { force: true } : {}),
+        }),
+        (err) => confirmAsync({
+          title: '这笔付款可能是重复提交',
+          content: `${err.message}。确属另一笔同日同额付款可继续。`,
+          okText: '仍要记录',
+        }),
+      );
       let fail = 0;
       for (const f of payFiles) {
         try { await api.uploadReceipt(payment.id, f); } catch { fail++; }

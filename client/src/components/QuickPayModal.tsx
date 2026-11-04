@@ -6,6 +6,7 @@ import { api } from '../api';
 import type { Order } from '../api';
 import { fmtMoney, PAY_METHODS } from '../format';
 import { confirmAsync } from '../utils/confirm';
+import { submitPaymentWithGuard } from '../utils/domain';
 import ReceiptUploader from './ReceiptUploader';
 
 /** 待付尾款行内记付款（桌面清单页 / 移动首页共用），可附票据照片 */
@@ -44,12 +45,20 @@ export default function QuickPayModal({ order, onClose, onDone }: {
     }
     setSaving(true);
     try {
-      const payment = await api.addPayment(order.id, {
-        amount: values.amount,
-        pay_date: values.pay_date.format('YYYY-MM-DD'),
-        method: values.method,
-        note: values.note,
-      });
+      const payment = await submitPaymentWithGuard(
+        (force) => api.addPayment(order.id, {
+          amount: values.amount,
+          pay_date: values.pay_date.format('YYYY-MM-DD'),
+          method: values.method,
+          note: values.note,
+          ...(force ? { force: true } : {}),
+        }),
+        (err) => confirmAsync({
+          title: '这笔付款可能是重复提交',
+          content: `${err.message}。确属另一笔同日同额付款可继续。`,
+          okText: '仍要记录',
+        }),
+      );
       let fail = 0;
       for (const f of files) {
         try { await api.uploadReceipt(payment.id, f); } catch { fail++; }

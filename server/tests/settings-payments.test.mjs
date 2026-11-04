@@ -100,6 +100,22 @@ try {
   check('PUT item_id 非数字 400', r.status === 400, `status=${r.status}`);
   r = await req('GET', `/orders/${order.json.id}`);
   check('非法值未落库（挂接不变）', r.json?.item_id === item.json.id, JSON.stringify({ item_id: r.json?.item_id }));
+
+  console.log('== I4 付款近重复守卫（超时重试防双记） ==');
+  const dupOrder = await req('POST', '/orders', { title: '重复付款订单', total_amount: 500 });
+  const firstPay = await req('POST', `/orders/${dupOrder.json.id}/payments`, { amount: 200, pay_date: '2026-11-04' });
+  check('造数：首笔付款 200', firstPay.status === 200, `status=${firstPay.status}`);
+  r = await req('POST', `/orders/${dupOrder.json.id}/payments`, { amount: 200, pay_date: '2026-11-04' });
+  check('同订单同金额同日期 → 409', r.status === 409, `status=${r.status} ${JSON.stringify(r.json)}`);
+  check('返回 needForce 标志', r.json?.needForce === true, JSON.stringify(r.json));
+  check('拦截时未落库（仍一笔）', (await req('GET', `/orders/${dupOrder.json.id}`)).json.paid === 200);
+  r = await req('POST', `/orders/${dupOrder.json.id}/payments`, { amount: 200, pay_date: '2026-11-04', force: true });
+  check('force（真实两笔同日同额）→ 放行', r.status === 200, `status=${r.status}`);
+  check('此时合计 400（两笔）', (await req('GET', `/orders/${dupOrder.json.id}`)).json.paid === 400);
+  r = await req('POST', `/orders/${dupOrder.json.id}/payments`, { amount: 200, pay_date: '2026-11-05' });
+  check('同金额不同日期放行（真实分期）', r.status === 200, `status=${r.status}`);
+  r = await req('POST', `/orders/${dupOrder.json.id}/payments`, { amount: 100, pay_date: '2026-11-04' });
+  check('同日期不同金额放行', r.status === 200, `status=${r.status}`);
 } finally {
   cleanup();
 }

@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import { api } from '../api';
 import type { Order, Payment, Receipt, Section, OrderFormValues } from '../api';
 import { fmtMoney, PAY_METHODS } from '../format';
-import { undoableDelete, confirmOrderOnBoughtItem, submitWithForceGuard } from '../utils/domain';
+import { undoableDelete, confirmOrderOnBoughtItem, submitWithForceGuard, submitPaymentWithGuard } from '../utils/domain';
 import { confirmAsync } from '../utils/confirm';
 import { useIsMobile } from '../hooks/useIsMobile';
 import OrderFormModal from '../components/OrderFormModal';
@@ -231,9 +231,21 @@ export default function OrderDetail() {
     }
     setSavingPayment(true);
     try {
-      if (editingPayment) await api.updatePayment(editingPayment.id, body);
-      else await api.addPayment(order.id, body);
-      toast.success(editingPayment ? '付款已更新' : '付款已记录');
+      if (editingPayment) {
+        await api.updatePayment(editingPayment.id, body);
+        toast.success('付款已更新');
+      } else {
+        // 近重复守卫（r2 I4）：同订单同金额同日期已存在时服务端 409，确认后放行
+        await submitPaymentWithGuard(
+          (force) => api.addPayment(order.id, { ...body, ...(force ? { force: true } : {}) }),
+          (err) => confirmAsync({
+            title: '这笔付款可能是重复提交',
+            content: `${err.message}。确属另一笔同日同额付款可继续。`,
+            okText: '仍要记录',
+          }),
+        );
+        toast.success('付款已记录');
+      }
       setPayModalOpen(false);
       load();
     } catch (e) {

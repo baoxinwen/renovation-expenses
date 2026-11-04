@@ -51,6 +51,23 @@ export async function submitWithForceGuard<T>(
   }
 }
 
+/** 付款提交的服务端 409 统一出路（近重复/双算两类守卫共用，r2 I4/C1）：
+ *  needForce → confirm 确认 → 带 force 重发；拒绝按「已取消」提示并抛出中止。
+ *  submit 接收 force 参数由调用方闭包决定重发内容。 */
+export async function submitPaymentWithGuard<T>(
+  submit: (force: boolean) => Promise<T>,
+  confirm: (err: Error) => Promise<boolean>,
+): Promise<T> {
+  try {
+    return await submit(false);
+  } catch (e) {
+    const err = e as Error & { needForce?: boolean };
+    if (!err.needForce) throw e;
+    if (!(await confirm(err))) throw new Error('已取消');
+    return submit(true);
+  }
+}
+
 // ===== 软删除 + 撤销的通用流程 =====
 
 interface UndoableOpts {

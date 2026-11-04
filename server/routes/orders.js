@@ -253,6 +253,19 @@ export default async function (app) {
         });
       }
     }
+    // 近重复守卫（r2 I4）：同订单同金额同日期的付款已存在 → 大概率是弱网超时
+    // 后的盲目重试（响应丢失但首笔已落库）。按 needForce 模式让前端确认；真
+    // 实的两笔同日同额（分期）确认后带 force 放行。纯内容判定，无幂等键表
+    if (!b.force) {
+      const dup = db.prepare('SELECT id FROM payments WHERE order_id = ? AND amount = ? AND pay_date = ?')
+        .get(orderId, amount, payDate);
+      if (dup) {
+        return reply.status(409).send({
+          message: '该订单已有一笔同日同额的付款记录——若刚遇到请求超时，请先核对付款列表再决定',
+          needForce: true,
+        });
+      }
+    }
     const info = db.prepare(`INSERT INTO payments (order_id, amount, pay_date, method, note)
       VALUES (?, ?, ?, ?, ?)`)
       .run(orderId, amount, payDate, String(b.method ?? ''), String(b.note ?? ''));
