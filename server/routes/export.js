@@ -305,7 +305,13 @@ export default async function (app) {
     // 与恢复替换链互斥（I7，见 server/lock.js）：快照线程进行中时恢复的 db.close()
     // 会 SQLITE_BUSY。锁只覆盖快照生成——打包读的是快照文件与当时目录，不含活库
     const snapshot = path.join(os.tmpdir(), `backup-snap-${process.pid}-${Date.now()}.db`);
-    await withLock(() => db.backup(snapshot));
+    // 快照自身失败（磁盘满等）时 error/end 回调尚未注册——此处直接清理半截文件（r2 M3）
+    try {
+      await withLock(() => db.backup(snapshot));
+    } catch (e) {
+      fs.unlink(snapshot, () => {});
+      throw e;
+    }
 
     const archive = new ZipArchive({ store: true });
     // 非 end 收尾（打包出错）也清掉 tmp 快照，不留残骸（M18）

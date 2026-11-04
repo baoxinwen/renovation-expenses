@@ -311,7 +311,13 @@ export default async function (app) {
     const payment = db.prepare(`
       SELECT p.id FROM payments p JOIN orders o ON o.id = p.order_id
       WHERE p.id = ? AND o.deleted = 0`).get(paymentId);
-    if (!payment) return reply.status(404).send({ message: '付款记录不存在（或订单已删除）' });
+    if (!payment) {
+      // 付款不存在也先排干（r2 M2）：过期页面带着文件上传时，连接同样悬挂
+      try {
+        for await (const _ of req.files()) { void _; }
+      } catch { /* 客户端已断开等情况，排干尽力而为 */ }
+      return reply.status(404).send({ message: '付款记录不存在（或订单已删除）' });
+    }
 
     // 两遍式：先全部读取并校验，任一失败直接 400，不落任何文件（避免半传残留）
     // throwFileSizeLimit 已全局关闭（见 index.js），超限走 file.truncated 的中文提示
