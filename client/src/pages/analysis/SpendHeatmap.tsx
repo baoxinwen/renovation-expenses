@@ -8,17 +8,19 @@ import { ChartCard, useChartTheme } from './shared';
 // 花费日历热力图（spec 功能 J，Could）：GitHub 风格周格子，数据源 by_day（与 by_month 同口径按日分组）。
 // 色深随当日金额递增；净额为负（退款日）或零用中性灰（spec J-1，不与有支出日混同）
 export default function SpendHeatmap({ charts }: { charts: Charts | null }) {
-  const { themeName, pal } = useChartTheme();
+  const { isMobile, themeName, pal } = useChartTheme();
   const byDay = charts?.by_day ?? [];
 
   const active = useMemo(() => byDay.filter((d) => d.amount > 0).map((d) => d.amount), [byDay]);
   const levels = useMemo(() => heatLevels(active), [active]);
   const range = useMemo(() => {
     if (!byDay.length) return [];
-    const first = byDay[0].date.slice(0, 7);
-    const last = byDay[byDay.length - 1].date.slice(0, 7);
-    return [first, last];
-  }, [byDay]);
+    const months = [...new Set(byDay.map((d) => d.date.slice(0, 7)))];
+    // 手机上多月日历每格只剩几像素、月标签叠字——只看最近两个月，格子宽到
+    // 可读；桌面保持数据全跨度（范围外的日历格不渲染，无越界风险）
+    if (isMobile && months.length > 2) return months.slice(-2);
+    return [months[0], months[months.length - 1]];
+  }, [byDay, isMobile]);
 
   const option = useMemo(() => {
     if (!active.length) return {};

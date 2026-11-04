@@ -292,7 +292,7 @@ export default function OrderDetail() {
       >
         <Row gutter={16}>
           <Col xs={24} md={16}>
-            <Descriptions column={3} size="small">
+            <Descriptions column={{ xs: 1, sm: 2, md: 3 }} size="small">
               <Descriptions.Item label="商家 / 施工方">{order.vendor || '—'}</Descriptions.Item>
               <Descriptions.Item label="状态">
                 {order.status === 'closed' ? <Tag color="green">已结清</Tag> : <Tag color="blue">进行中</Tag>}

@@ -8,7 +8,7 @@ import { ChartCard, executionColor, useChartTheme } from './shared';
 // 预算 0 但有支出的项目排末尾、显示「—」（比率无意义不参与排序值）；点击行下钻该项目订单列表
 export default function ExecutionRankChart({ plan }: { plan: PlanData | null }) {
   const nav = useNavigate();
-  const { isDark, themeName, pal } = useChartTheme();
+  const { isDark, isMobile, themeName, pal } = useChartTheme();
 
   const rated = useMemo(() => {
     const items = (plan?.sections ?? []).flatMap((s) => s.items ?? []);
@@ -35,7 +35,7 @@ export default function ExecutionRankChart({ plan }: { plan: PlanData | null }) 
           return `${r.name}<br/>执行率 ${rateText}`;
         },
       },
-      grid: { left: 110, right: 56, top: 12, bottom: 30 },
+      grid: { left: isMobile ? 84 : 110, right: isMobile ? 34 : 56, top: 12, bottom: 30 },
       xAxis: { type: 'value', max: maxRate, axisLabel: { formatter: (v: number) => Math.round(v * 100) + '%' } },
       yAxis: { type: 'category', inverse: true, data: rated.map((r) => r.name) },
       series: [{
@@ -56,7 +56,7 @@ export default function ExecutionRankChart({ plan }: { plan: PlanData | null }) 
         })),
       }],
     };
-  }, [rated, isDark, pal]);
+  }, [rated, isDark, isMobile, pal]);
 
   return (
     <ChartCard

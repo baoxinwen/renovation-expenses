@@ -100,6 +100,7 @@ export default function Settings() {
       <Card title="外观">
         <Space direction="vertical" size={8}>
           <Radio.Group
+            className="theme-radios"
             value={mode}
             onChange={(e) => setMode(e.target.value as ThemeMode)}
             optionType="button"

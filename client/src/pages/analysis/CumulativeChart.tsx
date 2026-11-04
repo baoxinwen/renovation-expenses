@@ -10,7 +10,7 @@ export default function CumulativeChart({ charts, totalBudget }: {
   charts: Charts | null;
   totalBudget: number;
 }) {
-  const { themeName, colors, pal } = useChartTheme();
+  const { isMobile, themeName, colors, pal } = useChartTheme();
   const byMonth = charts?.by_month ?? [];
 
   const cum = useMemo(() => {
@@ -29,7 +29,7 @@ export default function CumulativeChart({ charts, totalBudget }: {
         return `${m.month}<br/>当月 ${fmtMoney(m.amount)}<br/>累计 ${fmtMoney(cum[i]?.cum ?? 0)}`;
       },
     },
-    grid: { left: 70, right: 24, top: 24, bottom: 30 },
+    grid: { left: isMobile ? 56 : 70, right: isMobile ? 16 : 24, top: 24, bottom: 30 },
     xAxis: { type: 'category', data: cum.map((c) => c.month) },
     yAxis: { type: 'value', axisLabel: { formatter: fmtAxisWan } },
     series: [{
@@ -39,7 +39,6 @@ export default function CumulativeChart({ charts, totalBudget }: {
       itemStyle: { color: colors.actual },
       lineStyle: { width: 2.5 },
       areaStyle: { opacity: 0.1 },
-      symbolSize: 6,
       markLine: totalBudget > 0
         ? {
             silent: true,
@@ -53,7 +52,7 @@ export default function CumulativeChart({ charts, totalBudget }: {
     graphic: totalBudget > 0
       ? undefined
       : [{ type: 'text', right: 14, top: 14, style: { text: '未设置预算目标', fill: pal.neutral, fontSize: 12 } }],
-  }), [cum, byMonth, colors, pal, totalBudget]);
+  }), [cum, byMonth, isMobile, colors, pal, totalBudget]);
 
   return (
     <ChartCard

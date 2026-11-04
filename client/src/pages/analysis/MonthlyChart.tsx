@@ -6,12 +6,12 @@ import { ChartCard, fmtAxisWan, useChartTheme } from './shared';
 
 // 时间区：月度付款柱状图（含已买支出；自原 Analysis 迁入，口径与展示不变）
 export default function MonthlyChart({ charts }: { charts: Charts | null }) {
-  const { themeName, colors } = useChartTheme();
+  const { isMobile, themeName, colors } = useChartTheme();
   const byMonth = charts?.by_month ?? [];
 
   const option = useMemo(() => ({
     tooltip: { trigger: 'axis', valueFormatter: (v: number) => fmtMoney(v) },
-    grid: { left: 70, right: 20, top: 20, bottom: 30 },
+    grid: { left: isMobile ? 56 : 70, right: isMobile ? 12 : 20, top: 20, bottom: 30 },
     xAxis: { type: 'category', data: byMonth.map((m) => m.month) },
     yAxis: { type: 'value', axisLabel: { formatter: fmtAxisWan } },
     series: [{
@@ -20,7 +20,7 @@ export default function MonthlyChart({ charts }: { charts: Charts | null }) {
       barMaxWidth: 42,
       itemStyle: { color: colors.actual, borderRadius: [4, 4, 0, 0] },
     }],
-  }), [byMonth, colors]);
+  }), [byMonth, isMobile, colors]);
 
   return (
     <ChartCard
