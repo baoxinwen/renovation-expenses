@@ -11,6 +11,7 @@ import { api } from '../api';
 import type { Order, Payment, Receipt, Section, OrderFormValues } from '../api';
 import { fmtMoney, PAY_METHODS } from '../format';
 import { undoableDelete, confirmOrderOnBoughtItem, submitWithForceGuard } from '../utils/domain';
+import { confirmAsync } from '../utils/confirm';
 import { useIsMobile } from '../hooks/useIsMobile';
 import OrderFormModal from '../components/OrderFormModal';
 
@@ -172,7 +173,23 @@ export default function OrderDetail() {
       onOk: () => undoableDelete({
         label: order.title,
         del: () => api.deleteOrder(order.id),
-        restore: () => api.restoreOrder(order.id),
+        // 恢复 409 守卫的处理与订单列表页同链路：确认后带 force 重试
+        restore: async () => {
+          try {
+            return await api.restoreOrder(order.id);
+          } catch (e) {
+            const err = e as Error & { needForce?: boolean };
+            if (!err.needForce) throw e;
+            const name = sections.flatMap((s) => s.items ?? []).find((it) => it.id === order.item_id)?.name ?? '关联项目';
+            const ok = await confirmAsync({
+              title: '恢复会重复计入实际',
+              content: `「${name}」在订单删除期间已勾「已买」，恢复会让付款重新计入实际合计。仍要恢复吗？`,
+              okText: '仍要恢复',
+            });
+            if (!ok) throw new Error('已取消恢复');
+            return api.restoreOrder(order.id, { force: true });
+          }
+        },
         onChanged: () => nav('/orders'),
         afterRestore: () => nav('/orders'),
       }),

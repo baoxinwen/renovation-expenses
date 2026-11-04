@@ -125,7 +125,24 @@ export default function Orders() {
       onOk: () => undoableDelete({
         label: o.title,
         del: () => api.deleteOrder(o.id),
-        restore: () => api.restoreOrder(o.id),
+        // 恢复有服务端 409 守卫（删除期间项目被勾「已买」）：确认后带 force 重试，
+        // 否则撤销永远失败——这不是普通错误而是用户选择
+        restore: async () => {
+          try {
+            return await api.restoreOrder(o.id);
+          } catch (e) {
+            const err = e as Error & { needForce?: boolean };
+            if (!err.needForce) throw e;
+            const name = findItem(o.item_id ?? -1)?.name ?? '关联项目';
+            const ok = await confirmAsync({
+              title: '恢复会重复计入实际',
+              content: `「${name}」在订单删除期间已勾「已买」，恢复会让付款重新计入实际合计。仍要恢复吗？`,
+              okText: '仍要恢复',
+            });
+            if (!ok) throw new Error('已取消恢复');
+            return api.restoreOrder(o.id, { force: true });
+          }
+        },
         onChanged: load,
       }),
     });

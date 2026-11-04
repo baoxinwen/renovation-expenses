@@ -202,7 +202,8 @@ export const api = {
   updateOrder: (id: number, patch: Partial<OrderFormValues & { status: 'open' | 'closed' }>) =>
     req<Order>(`/api/orders/${id}`, 'PUT', patch),
   deleteOrder: (id: number) => req<{ ok: boolean; deleted: boolean }>(`/api/orders/${id}`, 'DELETE'),
-  restoreOrder: (id: number) => req<Order>(`/api/orders/${id}/restore`, 'POST'),
+  restoreOrder: (id: number, body?: { force?: boolean }) =>
+    req<Order>(`/api/orders/${id}/restore`, 'POST', body),
 
   // 付款
   addPayment: (orderId: number, body: { amount: number; pay_date: string; method?: string; note?: string }) =>
