@@ -116,6 +116,18 @@ try {
   check('同金额不同日期放行（真实分期）', r.status === 200, `status=${r.status}`);
   r = await req('POST', `/orders/${dupOrder.json.id}/payments`, { amount: 100, pay_date: '2026-11-04' });
   check('同日期不同金额放行', r.status === 200, `status=${r.status}`);
+
+  console.log('== I10 订单状态写路径（重开/白名单） ==');
+  // 待付尾款卡片与 isUnsettled 口径以 status 为根输入；「重新打开结清订单」
+  // 是 CHANGELOG 宣传的行为级条目——此前 PUT /orders/:id 的 status 零测试
+  r = await req('PUT', `/orders/${dupOrder.json.id}`, { status: 'closed' });
+  check('标记结清', r.status === 200 && r.json?.status === 'closed', `status=${r.status}`);
+  r = await req('PUT', `/orders/${dupOrder.json.id}`, { status: 'open' });
+  check('重新打开（closed→open）', r.status === 200 && r.json?.status === 'open', `status=${r.status} ${JSON.stringify(r.json)}`);
+  r = await req('PUT', `/orders/${dupOrder.json.id}`, { status: 'archived' });
+  check('非法状态 400（白名单外）', r.status === 400, `status=${r.status}`);
+  r = await req('GET', `/orders/${dupOrder.json.id}`);
+  check('非法状态未落库', r.json?.status === 'open', JSON.stringify({ status: r.json?.status }));
 } finally {
   cleanup();
 }
