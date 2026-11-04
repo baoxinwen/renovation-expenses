@@ -78,18 +78,18 @@ export default function ItemFormModal({ open, initial, confirmLoading, onOk, onC
           <Input placeholder="台 / 个 / 项" maxLength={10} />
         </Form.Item>
         <Form.Item name="quantity" label="数量" style={{ display: 'inline-block', width: '30%', marginRight: 8 }}>
-          <InputNumber min={0} precision={2} style={{ width: '100%' }} />
+          <InputNumber min={0} precision={2} style={{ width: '100%' }} inputMode="decimal" />
         </Form.Item>
         <Form.Item
           name="unit_price"
           label="单价（元）"
           style={{ display: 'inline-block', width: '34%' }}
         >
-          <InputNumber min={0} precision={2} style={{ width: '100%' }} />
+          <InputNumber min={0} precision={2} style={{ width: '100%' }} inputMode="decimal" />
         </Form.Item>
         {isEdit && initial?.bought === 1 && (
           <Form.Item name="paid_amount" label="实际支付（元）">
-            <InputNumber min={0} precision={2} style={{ width: '100%' }} placeholder="未登记" />
+            <InputNumber min={0} precision={2} style={{ width: '100%' }} placeholder="未登记" inputMode="decimal" />
           </Form.Item>
         )}
         <Form.Item name="note" label="备注">

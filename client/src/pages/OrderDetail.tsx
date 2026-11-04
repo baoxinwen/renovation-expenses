@@ -222,7 +222,7 @@ export default function OrderDetail() {
       <Card
         title={order.title}
         extra={
-          <Space>
+          <Space wrap>
             {order.status === 'open' && paid >= order.total_amount && order.total_amount > 0 && (
               <Button icon={<CheckOutlined />} onClick={closeOrder}>标记结清</Button>
             )}
@@ -406,7 +406,7 @@ export default function OrderDetail() {
             rules={[{ required: true, message: '请输入金额' }]}
             extra="付款为正数；退货/退款请输入负数，统计自动冲抵"
           >
-            <InputNumber precision={2} style={{ width: '100%' }} placeholder="2000" />
+            <InputNumber precision={2} style={{ width: '100%' }} placeholder="2000" inputMode="decimal" />
           </Form.Item>
           <Form.Item name="pay_date" label="付款日期" rules={[{ required: true, message: '请选择日期' }]}>
             <DatePicker style={{ width: '100%' }} />

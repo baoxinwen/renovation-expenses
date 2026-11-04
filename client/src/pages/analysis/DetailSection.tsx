@@ -20,6 +20,7 @@ export default function DetailSection({ charts }: { charts: Charts | null }) {
               size="small"
               dataSource={charts?.top_items ?? []}
               pagination={false}
+              scroll={{ x: 560 }}
               onRow={(r) => ({ onClick: () => nav(`/orders?item_id=${r.id}`), style: { cursor: 'pointer' } })}
               columns={[
                 { title: '项目', dataIndex: 'name', ellipsis: true },
@@ -53,6 +54,7 @@ export default function DetailSection({ charts }: { charts: Charts | null }) {
               size="small"
               dataSource={charts?.recent_payments ?? []}
               pagination={false}
+              scroll={{ x: 760 }}
               locale={{ emptyText: <Empty description="还没有付款记录——到订单页记第一笔定金" style={{ padding: 24 }} /> }}
               onRow={(r) => ({ onClick: () => nav(`/orders/${r.order_id}`), style: { cursor: 'pointer' } })}
               columns={[

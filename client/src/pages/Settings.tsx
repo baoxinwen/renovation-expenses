@@ -127,6 +127,7 @@ export default function Settings() {
             parser={(t) => Number(String(t).replace(/[^\d.]/g, ''))}
             style={{ width: 200 }}
             size="large"
+            inputMode="decimal"
           />
           <Button type="primary" loading={saving} onClick={save}>保存</Button>
           <Typography.Text type="secondary" className="tabular">

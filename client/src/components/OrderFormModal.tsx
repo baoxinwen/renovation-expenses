@@ -110,7 +110,7 @@ export default function OrderFormModal({ open, initial, sections, confirmLoading
           label="订单总额（元）"
           rules={[{ required: true, message: '请输入订单总额' }]}
         >
-          <InputNumber min={0.01} precision={2} style={{ width: '100%' }} placeholder="100000" />
+          <InputNumber min={0.01} precision={2} style={{ width: '100%' }} placeholder="100000" inputMode="decimal" />
         </Form.Item>
 
         {isNew && (
@@ -134,7 +134,7 @@ export default function OrderFormModal({ open, initial, sections, confirmLoading
                   label="本次付款金额"
                   style={{ marginBottom: 10 }}
                 >
-                  <InputNumber min={0.01} precision={2} style={{ width: '100%' }} placeholder="默认 = 订单总额" />
+                  <InputNumber min={0.01} precision={2} style={{ width: '100%' }} placeholder="默认 = 订单总额" inputMode="decimal" />
                 </Form.Item>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <Form.Item name="pay_date" label="付款日期" style={{ marginBottom: 10, flex: 1 }}>

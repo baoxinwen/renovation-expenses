@@ -95,6 +95,7 @@ export default function Analysis() {
               size="small"
               dataSource={summary?.sections ?? []}
               pagination={false}
+              scroll={{ x: 600 }}
               columns={[
                 { title: '板块', dataIndex: 'name', render: (v: string) => <span style={{ whiteSpace: 'nowrap' }}>{v}</span> },
                 { title: '项目数', dataIndex: 'item_count', width: 60, align: 'right' },
