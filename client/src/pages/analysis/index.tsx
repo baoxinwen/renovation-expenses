@@ -6,7 +6,6 @@ import type { Charts, PlanData, Summary } from '../../api';
 import { fmtMoney } from '../../format';
 import TypeReveal from '../../components/TypeReveal';
 import OverviewCards from './OverviewCards';
-import BudgetGauge from './BudgetGauge';
 import GapCard from './GapCard';
 import SectionCompareChart from './SectionCompareChart';
 import SectionPieChart from './SectionPieChart';
@@ -69,14 +68,7 @@ export default function Analysis() {
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
       {/* ===== 总览区 ===== */}
       <OverviewCards summary={summary} />
-      <Row gutter={[16, 16]} align="stretch">
-        <Col xs={24} md={12}>
-          <BudgetGauge summary={summary} />
-        </Col>
-        <Col xs={24} md={12}>
-          <GapCard summary={summary} />
-        </Col>
-      </Row>
+      <GapCard summary={summary} />
 
       {/* ===== 板块区 ===== */}
       <Row gutter={[16, 16]}>
