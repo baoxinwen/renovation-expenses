@@ -3,6 +3,7 @@ import { Button, DatePicker, Form, InputNumber, Modal } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import type { Item } from '../api';
 import { fmtMoney } from '../format';
+import { budgetDelta, formatDelta } from '../utils/budgetCalc';
 
 interface Values {
   price: number;
@@ -26,6 +27,9 @@ export default function BuyModal({ item, open, onClose, onConfirm, onUnmark, con
   const isBought = !!item?.bought;
   // 参考值：数量 × 预算单价（抹零/打包价在此基础上直接改）
   const budgetTotal = item ? Number((item.quantity * item.unit_price).toFixed(2)) : 0;
+  // 实时差额：填实付时立即反馈较预算超/省多少
+  const price = Form.useWatch('price', form);
+  const delta = typeof price === 'number' ? budgetDelta(price, budgetTotal) : null;
 
   useEffect(() => {
     if (open && item) {
@@ -57,6 +61,19 @@ export default function BuyModal({ item, open, onClose, onConfirm, onUnmark, con
         >
           <InputNumber min={0} precision={2} style={{ width: '100%' }} />
         </Form.Item>
+        {delta && (
+          <div
+            style={{
+              marginTop: -12,
+              marginBottom: 16,
+              fontSize: 13,
+              fontWeight: 600,
+              color: delta.amount === 0 ? 'var(--ink-3)' : delta.over ? 'var(--clay)' : 'var(--sage)',
+            }}
+          >
+            较预算：{formatDelta(delta)}
+          </div>
+        )}
         <Form.Item name="date" label="购买日期" rules={[{ required: true, message: '请选择日期' }]}>
           <DatePicker style={{ width: '100%' }} allowClear={false} />
         </Form.Item>

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import ReactECharts from 'echarts-for-react';
 import type { Charts } from '../../api';
 import { fmtMoney } from '../../format';
+import { heatLevels } from '../../utils/planCalc';
 import { ChartCard, useChartTheme } from './shared';
 
 // 花费日历热力图（spec 功能 J，Could）：GitHub 风格周格子，数据源 by_day（与 by_month 同口径按日分组）。
@@ -11,6 +12,7 @@ export default function SpendHeatmap({ charts }: { charts: Charts | null }) {
   const byDay = charts?.by_day ?? [];
 
   const active = useMemo(() => byDay.filter((d) => d.amount > 0).map((d) => d.amount), [byDay]);
+  const levels = useMemo(() => heatLevels(active), [active]);
   const range = useMemo(() => {
     if (!byDay.length) return [];
     const first = byDay[0].date.slice(0, 7);
@@ -20,11 +22,8 @@ export default function SpendHeatmap({ charts }: { charts: Charts | null }) {
 
   const option = useMemo(() => {
     if (!active.length) return {};
-    // 分位阈值随数据自适应，热力层次在大小金额悬殊时仍可读
-    const sorted = [...active].sort((a, b) => a - b);
-    const q = (p: number) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))];
-    const q50 = q(0.5);
-    const q90 = q(0.9);
+    // 分位阈值随数据自适应（计算在 planCalc.heatLevels，可测），热力层次在大小金额悬殊时仍可读
+    const { q50, q90 } = levels;
     return {
       tooltip: {
         formatter: (p: { value: [string, number] }) => `${p.value[0]}<br/>${fmtMoney(p.value[1])}`,
@@ -60,7 +59,7 @@ export default function SpendHeatmap({ charts }: { charts: Charts | null }) {
         data: byDay.map((d) => [d.date, d.amount]),
       }],
     };
-  }, [byDay, active, range, pal]);
+  }, [byDay, active, range, pal, levels]);
 
   return (
     <ChartCard

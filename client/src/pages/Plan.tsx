@@ -18,6 +18,8 @@ import { SortableContext, arrayMove, verticalListSortingStrategy } from '@dnd-ki
 import { api } from '../api';
 import type { Item, Order, PlanData, Section } from '../api';
 import { fmtMoney } from '../format';
+import { budgetDelta, formatDelta, spendablePool } from '../utils/budgetCalc';
+import { matchSearch } from '../utils/planCalc';
 import ItemFormModal from '../components/ItemFormModal';
 import { confirmAsync } from '../utils/confirm';
 import { SortableRow, DragHandle, SectionDragHandle, SortableSectionCard } from '../components/plan/PlanEditing';
@@ -326,10 +328,7 @@ export default function Plan() {
     ? plan.sections
         .map((sec) => ({
           ...sec,
-          items: (sec.items ?? []).filter((it) =>
-            it.name.toLowerCase().includes(q) ||
-            it.spec.toLowerCase().includes(q) ||
-            it.note.toLowerCase().includes(q)),
+          items: (sec.items ?? []).filter((it) => matchSearch(it, q)),
         }))
         .filter((sec) => (sec.items ?? []).length > 0)
     : plan.sections;
@@ -371,11 +370,21 @@ export default function Plan() {
       render: (v: number) => <Typography.Text strong className="tabular">{fmtMoney(v)}</Typography.Text>,
     },
     {
-      // 该项目实际支出合计：已买 = 实付金额（未登记回退数量×单价）+ 挂单付款；未买 = 挂单付款
+      // 该项目实际支出合计：已买 = 实付金额（未登记回退数量×单价）+ 挂单付款；未买 = 挂单付款。
+      // 已买行附差额小字（超支红/结余绿）；挂单未买行不标（分期进行中，无"省/超"语义）
       title: '实际支付', dataIndex: 'actual_amount', width: 110, align: 'right' as const,
-      render: (_, it: Item) => (it.bought || it.order_count > 0)
-        ? <Typography.Text className="tabular" style={{ color: it.actual_amount > it.budget_amount ? 'var(--clay)' : undefined }}>{fmtMoney(it.actual_amount)}</Typography.Text>
-        : <span style={{ color: 'var(--ink-3)' }}>—</span>,
+      render: (_, it: Item) => {
+        if (!(it.bought || it.order_count > 0)) return <span style={{ color: 'var(--ink-3)' }}>—</span>;
+        const delta = it.bought ? budgetDelta(it.actual_amount, it.budget_amount) : null;
+        return (
+          <div>
+            <Typography.Text className="tabular" style={{ color: it.actual_amount > it.budget_amount ? 'var(--clay)' : undefined }}>{fmtMoney(it.actual_amount)}</Typography.Text>
+            {delta && delta.amount > 0 && (
+              <div style={{ fontSize: 11, color: delta.over ? 'var(--clay)' : 'var(--sage)' }}>{formatDelta(delta)}</div>
+            )}
+          </div>
+        );
+      },
     },
     {
       title: '已买', dataIndex: 'bought', width: 56, align: 'center' as const,
@@ -448,6 +457,30 @@ export default function Plan() {
           </Card>
         </Col>
       </Row>
+
+      {/* ===== 可花池：超支未平衡时提示未买项目的实际花费上限（口径与缺口卡同源） ===== */}
+      {plan.total_budget > 0 && (() => {
+        const pool = spendablePool(plan);
+        const tagColor = pool.state === 'over' ? 'error' : pool.state === 'under' ? 'success' : 'default';
+        const label = pool.state === 'over' ? `未平衡超支 ${fmtMoney(pool.gap)}` : pool.state === 'under' ? `预算结余 ${fmtMoney(-pool.gap)}` : '支出持平';
+        return (
+          <Card size="small" className="no-print" styles={{ body: { padding: '8px 16px' } }}>
+            <Space wrap size={10} style={{ alignItems: 'center' }}>
+              <Tag color={tagColor} style={{ marginRight: 2 }}>{label}</Tag>
+              {pool.state === 'over' ? (
+                <span>
+                  未买项目预算合计 <b className="tabular">{fmtMoney(pool.unboughtBudget)}</b>，
+                  实际花费需控制在 <b className="tabular" style={{ color: 'var(--wood-700)' }}>{fmtMoney(pool.pool)}</b> 以内
+                </span>
+              ) : pool.state === 'under' ? (
+                <span>未买项目按预算执行还有 <b className="tabular">{fmtMoney(-pool.gap)}</b> 富余</span>
+              ) : (
+                <span>支出与预算持平，未买项目按预算执行即可</span>
+              )}
+            </Space>
+          </Card>
+        );
+      })()}
 
       {/* ===== 工具栏：左搜索 / 右动作组 ===== */}
       <Card size="small" className="no-print">

@@ -5,6 +5,7 @@ import ReactECharts from 'echarts-for-react';
 import type { Charts } from '../../api';
 import { fmtMoney } from '../../format';
 import { fmtAxisWan, useChartTheme } from './shared';
+import { top10Chartable } from '../../utils/planCalc';
 import TypeReveal from '../../components/TypeReveal';
 
 // 明细区：TOP10 条形图 + 项目排行表 + 最近付款（自原 Analysis 迁入，口径与交互不变）。
@@ -13,21 +14,8 @@ export default function DetailSection({ charts }: { charts: Charts | null }) {
   const nav = useNavigate();
   const { themeName, colors } = useChartTheme();
 
-  // TOP10 拆分：前 5 详画，其余合并为「其他」，避免长尾压扁
-  const chartable = useMemo(() => {
-    const items = charts?.top_items ?? [];
-    if (items.length <= 5) return items;
-    const rest = items.slice(5);
-    return [
-      ...items.slice(0, 5),
-      {
-        id: -1,
-        name: `其他 ${rest.length} 项`,
-        budget: rest.reduce((n, i) => n + i.budget, 0),
-        actual: rest.reduce((n, i) => n + i.actual, 0),
-      },
-    ];
-  }, [charts]);
+  // TOP10 拆分：前 5 详画，其余合并为「其他」，避免长尾压扁（逻辑在 planCalc，可测）
+  const chartable = useMemo(() => top10Chartable(charts?.top_items ?? []), [charts]);
 
   const topOption = useMemo(() => ({
     tooltip: { trigger: 'axis', valueFormatter: (v: number) => fmtMoney(v) },
