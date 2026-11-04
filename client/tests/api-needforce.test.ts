@@ -112,13 +112,15 @@ describe('api.req 的请求超时（I3）', () => {
           reject(new DOMException('signal timed out', 'TimeoutError')));
       })));
     const p = api.uploadReceipt(1, new File(['x'], 'a.png')).then(
-      () => null,
-      (e: Error) => e,
+      () => 'settled',
+      (e: Error) => e.message,
     );
     await vi.advanceTimersByTimeAsync(15_000);
-    expect(p).toBeNull(); // 15s 时仍在等——未触发中断
+    // 15s 时仍未 settle（与立即完成的哨兵赛跑，先到者赢）
+    const at15 = await Promise.race([p, Promise.resolve('pending')]);
+    expect(at15).toBe('pending');
     await vi.advanceTimersByTimeAsync(45_000); // 推进到 60s
-    const err = await p;
-    expect(err?.message).toContain('60 秒');
+    const msg = await p;
+    expect(msg).toContain('60 秒');
   });
 });

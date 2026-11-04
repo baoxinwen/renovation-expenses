@@ -77,8 +77,8 @@ try {
   r = await api('POST', '/orders', { title: '装修公司款', item_id: itemId, total_amount: 30000, force: true });
   check('建订单挂项目', r.status === 200, `status=${r.status} resp=${JSON.stringify(r.json).slice(0, 100)}`);
   const orderId = r.json.id;
-  r = await api('POST', `/orders/${orderId}/payments`, { amount: 10000, pay_date: '2026-11-02' });
-  check('记订单付款', r.status === 200);
+  r = await api('POST', `/orders/${orderId}/payments`, { amount: 10000, pay_date: '2026-11-02', force: true });
+  check('记订单付款（已买项目付款，force 确认双算）', r.status === 200, `status=${r.status}`);
   const png = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a])], { type: 'image/png' });
   const receiptFd = new FormData();
   receiptFd.append('files', png, '空调收据.png');
