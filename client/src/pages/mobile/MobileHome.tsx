@@ -97,7 +97,7 @@ export default function MobileHome() {
                   {o.item_name || '未关联项目'} · 未付 <span className="tabular" style={{ color: 'var(--clay)', fontWeight: 600 }}>{fmtMoney(o.total_amount - (o.paid ?? 0))}</span>
                 </div>
               </div>
-              <Button size="small" onClick={() => setPayTarget(o)}>记一笔</Button>
+              <Button onClick={() => setPayTarget(o)}>记一笔</Button>
             </div>
           ))
         )}

@@ -14,6 +14,7 @@ export default function MobileItems() {
   const [plan, setPlan] = useState<PlanData | null>(null);
   const [search, setSearch] = useState('');
   const [buyTarget, setBuyTarget] = useState<Item | null>(null);
+  const [buySaving, setBuySaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -29,6 +30,7 @@ export default function MobileItems() {
   useEffect(() => { load(); }, [load]);
 
   const q = search.trim().toLowerCase();
+  const searching = q.length > 0;
   const sections = useMemo(() => {
     if (!plan) return [];
     if (!q) return plan.sections;
@@ -40,6 +42,12 @@ export default function MobileItems() {
       }))
       .filter((sec) => (sec.items ?? []).length > 0);
   }, [plan, q]);
+  // 受控折叠：搜索时强制全展开——否则命中项目藏在用户手动折叠的面板里，
+  // 搜索看起来「无结果」；非搜索态保留手动折叠状态
+  const [collapsedKeys, setCollapsedKeys] = useState<string[] | null>(null);
+  const activeKeys = searching
+    ? sections.map((s) => String(s.id))
+    : (collapsedKeys === null ? sections.map((s) => String(s.id)) : collapsedKeys);
 
   if (!plan) {
     // 加载失败必须给重试入口，不能停在无限骨架屏（桌面端有对应错误卡）
@@ -71,7 +79,8 @@ export default function MobileItems() {
         <Card><Empty description={`没有找到与「${search}」匹配的项目`} /></Card>
       ) : (
         <Collapse
-          defaultActiveKey={sections.map((s) => String(s.id))}
+          activeKey={activeKeys}
+          onChange={(k) => setCollapsedKeys(k as string[])}
           items={sections.map((sec) => ({
             key: String(sec.id),
             label: (
@@ -130,9 +139,11 @@ export default function MobileItems() {
         item={buyTarget}
         open={!!buyTarget}
         onClose={() => setBuyTarget(null)}
+        confirmLoading={buySaving}
         onConfirm={async (itemId, price, date) => {
           const item = buyTarget;
           if (!item) return;
+          setBuySaving(true);
           try {
             // force 只由服务端 409 触发（submitWithForceGuard 统一链路）：本地快照的
             // 双算判定不作仲裁——手机端挂载快照过期时会绕过服务端守卫（C3）
@@ -146,9 +157,12 @@ export default function MobileItems() {
             load();
           } catch (e) {
             toast.error((e as Error).message);
+          } finally {
+            setBuySaving(false);
           }
         }}
         onUnmark={async (itemId) => {
+          setBuySaving(true);
           try {
             await api.updateItem(itemId, { bought: false });
             setBuyTarget(null);
@@ -156,6 +170,8 @@ export default function MobileItems() {
             load();
           } catch (e) {
             toast.error((e as Error).message);
+          } finally {
+            setBuySaving(false);
           }
         }}
       />
