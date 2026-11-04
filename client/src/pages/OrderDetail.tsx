@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import { api } from '../api';
 import type { Order, Payment, Receipt, Section, OrderFormValues } from '../api';
 import { fmtMoney, PAY_METHODS } from '../format';
-import { undoableDelete, confirmOrderOnBoughtItem } from '../utils/domain';
+import { undoableDelete, confirmOrderOnBoughtItem, submitWithForceGuard } from '../utils/domain';
 import { useIsMobile } from '../hooks/useIsMobile';
 import OrderFormModal from '../components/OrderFormModal';
 
@@ -66,40 +66,30 @@ export default function OrderDetail() {
 
   // 编辑模式不提供「一次付清」（付款在详情页管理），files 恒为空
   const saveOrder = async (values: OrderFormValues, _files: File[]) => {
-    // 双算校验：挂到已勾「已买」的项目会重复计入实际（确认后带 force）
-    const target = values.item_id
-      ? sections.flatMap((s) => s.items ?? []).find((it) => it.id === values.item_id)
-      : null;
-    if (target?.bought && !(await confirmOrderOnBoughtItem(target))) return;
-    const submit = async (force?: boolean) => {
-      await api.updateOrder(order.id, force ? { ...values, force: true } : values);
+    const submit = async (force: boolean) => {
+      const updated = await api.updateOrder(order.id, force ? { ...values, force: true } : values);
       toast.success('订单已更新');
       setEditOpen(false);
       load();
+      return updated;
     };
     setSavingEdit(true);
     try {
-      await submit();
+      // force 只由服务端 409 触发（submitWithForceGuard 统一链路）：本地快照的
+      // bought 判定不作仲裁，多端场景会过期；确认文案取最新项目名
+      await submitWithForceGuard(submit, async () => {
+        let name = values.item_id
+          ? sections.flatMap((s) => s.items ?? []).find((it) => it.id === values.item_id)?.name
+          : undefined;
+        if (!name && values.item_id) {
+          try {
+            name = (await api.getPlan()).sections.flatMap((s) => s.items ?? []).find((it) => it.id === values.item_id)?.name;
+          } catch { /* 拿不到最新清单就用兜底文案 */ }
+        }
+        return confirmOrderOnBoughtItem({ name: name ?? '该项目' });
+      });
     } catch (e) {
-      const err = e as Error & { needForce?: boolean };
-      if (!err.needForce) {
-        toast.error(err.message);
-        return;
-      }
-      // 服务端守卫兜底：本地 sections 是挂载时的快照，多端场景可能已过期——
-      // 取最新项目名确认后带 force 重试（与新建订单页同一链路）
-      let name = target?.name;
-      if (!name && values.item_id) {
-        try {
-          name = (await api.getPlan()).sections.flatMap((s) => s.items ?? []).find((it) => it.id === values.item_id)?.name;
-        } catch { /* 拿不到最新清单就用兜底文案 */ }
-      }
-      if (!(await confirmOrderOnBoughtItem({ name: name ?? '该项目' }))) return;
-      try {
-        await submit(true);
-      } catch (e2) {
-        toast.error((e2 as Error).message);
-      }
+      toast.error((e as Error).message);
     } finally {
       setSavingEdit(false);
     }

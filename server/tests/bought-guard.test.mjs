@@ -87,6 +87,44 @@ try {
   // 换绑到未买项目不受影响
   r = await req('PUT', `/orders/${oid}`, { item_id: normalItem.json.id });
   check('换绑到未买项目放行', r.status === 200 && r.json.item_id === normalItem.json.id, `status=${r.status}`);
+
+  console.log('== 订单恢复的双算守卫（C2） ==');
+  // 评审 C2 的纯 UI 一手路径：误删订单（付款停止计入）→ 给项目勾「已买」
+  //（当时付款停计，勾选守卫静默通过）→ 8 秒内点「撤销」恢复订单 → 付款复活，双算落库
+  const itemC2 = await req('POST', `/sections/${sec.json.id}/items`,
+    { name: '恢复双算项目', quantity: 1, unit_price: 200 });
+  const orderC2 = await req('POST', '/orders', {
+    title: '恢复双算订单', item_id: itemC2.json.id, total_amount: 80,
+    paid_now: { amount: 80, pay_date: '2026-09-03' },
+  });
+  check('造数：订单已建', orderC2.status === 200, `status=${orderC2.status}`);
+  r = await req('DELETE', `/orders/${orderC2.json.id}`);
+  check('造数：订单已软删', r.status === 200, `status=${r.status}`);
+  // 删除期间付款停计：勾选守卫看到的 orderPaid=0，静默通过（现状即如此，属 C2 入口）
+  r = await req('PUT', `/items/${itemC2.json.id}`, { bought: true });
+  check('软删订单后勾已买静默通过', r.status === 200, `status=${r.status} ${JSON.stringify(r.json)}`);
+  // 恢复订单会让 80 元付款复活并叠加进项目实际（200 + 80 = 280 双算）
+  r = await req('POST', `/orders/${orderC2.json.id}/restore`);
+  check('恢复挂已买项目的订单未带 force → 409', r.status === 409, `status=${r.status}`);
+  check('返回 needForce 标志', r.json?.needForce === true, JSON.stringify(r.json));
+  const planC2 = await req('GET', '/plan');
+  const itC2 = planC2.json.sections.flatMap((s) => s.items).find((i) => i.id === itemC2.json.id);
+  check('409 时未恢复：项目实际仍为 200（无双算）',
+    Math.abs(itC2.actual_amount - 200) < 0.01, `actual=${itC2?.actual_amount}`);
+  // 未挂项目的订单恢复不受守卫影响（无双算可能）
+  const loose = await req('POST', '/orders', {
+    title: '散单恢复', total_amount: 20, paid_now: { amount: 20, pay_date: '2026-09-04' },
+  });
+  await req('DELETE', `/orders/${loose.json.id}`);
+  r = await req('POST', `/orders/${loose.json.id}/restore`);
+  check('未挂项目的订单恢复放行', r.status === 200, `status=${r.status}`);
+  // force（用户确认双算）→ 放行，实际合计变为 280（显式选择）
+  r = await req('POST', `/orders/${orderC2.json.id}/restore`, { force: true });
+  check('带 force（用户已确认）→ 放行', r.status === 200, `status=${r.status}`);
+  const planC2b = await req('GET', '/plan');
+  const itC2b = planC2b.json.sections.flatMap((s) => s.items).find((i) => i.id === itemC2.json.id);
+  check('force 后项目实际 = 200 + 80（显式双算）',
+    Math.abs(itC2b.actual_amount - 280) < 0.01, `actual=${itC2b?.actual_amount}`);
 } finally {
   cleanup();
 }

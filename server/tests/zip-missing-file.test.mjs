@@ -1,13 +1,17 @@
 // 回归测试：票据 zip 导出对磁盘缺失的票据文件跳过而非产出残缺包。
 // 注：HTTP 层先发头再流式打包，缺失文件时状态码仍是 200——可区分的是 zip 完整性
 //（中央目录条目数）：修复前 archiver 读文件报错中断流，包残缺。
+// 另含 C1：DB filename 携带 ../ 穿越时不许把上传目录外的文件打进 zip（与删除侧
+// removeFiles 同一威胁模型：库被篡改/恶意备份恢复）。
 // 隔离运行：自带临时数据库，不触碰生产库。
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
+import Database from 'better-sqlite3';
 import { startTestServer, cleanupTestServer } from './helpers/spawn-server.mjs';
+import { parseZip } from '../zipParse.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = 5214;
@@ -92,6 +96,43 @@ try {
 
   const resAll = await fetch(`${BASE}/export/receipts?order_id=999999`);
   check('无票据可导出仍返回 404', resAll.status === 404, `status=${resAll.status}`);
+
+  console.log('== DB filename 穿越 containment（C1） ==');
+  // 威胁模型（与删除侧 removeFiles 注释同款）：库被篡改/恶意备份恢复时，
+  // receipts.filename 可携带 ../ 指向上传目录之外的任意可读文件。
+  // 先补一张物理完好的票据作幸存者（第 1 张已在缺失段删除、第 2 张将被改越界）
+  const fd2 = new FormData();
+  fd2.append('files', new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x49])], { type: 'image/png' }), 'c.png');
+  const up2 = await fetch(`${BASE}/payments/${paymentId}/receipts`, { method: 'POST', body: fd2 });
+  const survivor = (await up2.json())[0];
+  const secretPath = path.join(tmpDir, 'secret-outside-uploads.txt');
+  const SECRET = 'TOP-SECRET-OUTSIDE-UPLOADS';
+  fs.writeFileSync(secretPath, SECRET);
+  const dbw = new Database(path.join(tmpDir, 'renovation-expenses.db'));
+  dbw.prepare("UPDATE receipts SET filename = '../secret-outside-uploads.txt' WHERE id = ?")
+    .run(receipts[1].id);
+  const back = dbw.prepare('SELECT filename FROM receipts WHERE id = ?').get(receipts[1].id);
+  check('造数：直写已落库', back.filename === '../secret-outside-uploads.txt', `db=${back.filename}`);
+  dbw.close();
+  check('造数：第 2 张 filename 已带 ../ 穿越', fs.existsSync(secretPath));
+
+  const resT = await fetch(`${BASE}/export/receipts`);
+  check('越界票据被跳过，导出仍成功', resT.status === 200, `status=${resT.status}`);
+  const bufT = Buffer.from(await resT.arrayBuffer());
+  // deflate 压缩后明文搜索无效，必须解压逐条目查内容（与服务端恢复共用同一解析实现）
+  const leak = parseZip(bufT).some((e) => e.data.includes(SECRET));
+  check('zip 不含上传目录外的文件内容', !leak, 'secret 被打进 zip');
+  const manifestT = zipEntryText(bufT, '票据清单.txt');
+  check('清单如实标注越界票据未打包', manifestT !== null && manifestT.includes('缺失未打包'),
+    `manifest=${manifestT?.split('\n')[0]}`);
+
+  // 全部条目越界/缺失 → 404：连「文件是否存在」都不探测（不泄露目录结构）
+  const dbw2 = new Database(path.join(tmpDir, 'renovation-expenses.db'));
+  dbw2.prepare("UPDATE receipts SET filename = '../another-outside.png' WHERE id = ?")
+    .run(survivor.id);
+  dbw2.close();
+  const resT2 = await fetch(`${BASE}/export/receipts`);
+  check('全部条目越界 → 404', resT2.status === 404, `status=${resT2.status}`);
 } finally {
   cleanup();
 }

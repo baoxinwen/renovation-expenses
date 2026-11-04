@@ -211,6 +211,23 @@ try {
   r = await req('DELETE', `/payments/${refundId}`);
   check('清理测试退款', r.status === 200);
 
+  console.log('== 5a-b. 已买现金流口径（I1：paid_amount 优先于数量×单价） ==');
+  const secI1 = (await (await req('GET', '/plan')).json).sections[0];
+  r = await req('POST', `/sections/${secI1.id}/items`, { name: 'I1口径哨兵', quantity: 2, unit_price: 1000 });
+  const i1Id = r.json?.id;
+  check('造数：I1 哨兵项目（数量×单价 = 2000）', r.status === 200 && !!i1Id, `status=${r.status}`);
+  r = await req('PUT', `/items/${i1Id}`, { bought: true, paid_amount: 1900, bought_date: '2026-07-15' });
+  check('登记已买并登记实付 1900（抹零场景）', r.status === 200, `status=${r.status}`);
+  r = (await req('GET', '/stats/charts')).json;
+  check('by_month 2026-07 记实付 1900', r.by_month.some((m) => m.month === '2026-07' && Math.abs(m.amount - 1900) < 0.01),
+    JSON.stringify(r.by_month.filter((m) => m.month === '2026-07')));
+  check('by_month 2026-07 不按数量×单价记 2000', !r.by_month.some((m) => m.month === '2026-07' && Math.abs(m.amount - 2000) < 0.01));
+  check('by_day 2026-07-15 记实付 1900', r.by_day.some((d) => d.date === '2026-07-15' && Math.abs(d.amount - 1900) < 0.01),
+    JSON.stringify(r.by_day.filter((d) => d.date === '2026-07-15')));
+  check('by_day 2026-07-15 不含 2000', !r.by_day.some((d) => d.date === '2026-07-15' && Math.abs(d.amount - 2000) < 0.01));
+  r = await req('DELETE', `/items/${i1Id}`);
+  check('清理 I1 哨兵（验完即删）', r.status === 200);
+
   console.log('== 5b. 一次付清（快速购买） ==');
   const hood0 = (await req('GET', '/plan')).json.sections.flatMap((s) => s.items).find((i) => i.name === '抽油烟机');
   r = await req('POST', '/orders', {
@@ -263,8 +280,10 @@ try {
   // 月度趋势含已买：2026-08 应有已买支出（基线测试中硬装订单付款 30000 也在 08）
   r = (await req('GET', '/stats/charts')).json;
   const aug = r.by_month.find((m) => m.month === '2026-08');
-  // 此时 08 = 已买三件fixture(25849.79，无日期不计) + 开关实付 3000 + 一次付清抽油烟机(已软删) + 硬装 30000
-  check('月度趋势含已买支出（08 月 ≥ 33000）', aug && aug.amount >= 33000, JSON.stringify(aug));
+  // 08 = 硬装 30000 + 开关实付修正后 2300（I1：现金流跟实付，不再按数量×单价 3000）
+  //      + 回退项 200（未填实付）；一次付清抽油烟机已软删不计
+  check('月度趋势 08 = 30000 + 实付修正 2300 + 回退 200（I1 口径）',
+    aug && Math.abs(aug.amount - 32500) < 0.01, JSON.stringify(aug));
   // 取消已买：实付与日期一并清空，状态回滚干净
   r = await req('PUT', `/items/${lamp2.id}`, { bought: false });
   check('取消已买 → 实付/日期清空、实际归 0',

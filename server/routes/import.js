@@ -4,6 +4,7 @@ import ExcelJS from 'exceljs';
 import path from 'node:path';
 import fs from 'node:fs';
 import { parseZip } from '../zipParse.js';
+import { withLock } from '../lock.js';
 
 // 在工作表中定位表头行与关键列（项目名称/规格/单位/数量/单价/实际支付/备注）
 function findHeader(ws) {
@@ -264,11 +265,12 @@ export default async function (app) {
     }
     const uploadEntries = entries.filter((e) => e.name.startsWith('uploads/') && !e.name.endsWith('/'));
 
-    // 第 2 步：校验库完整性（临时文件打开 quick_check + 关键表存在）
+    // 第 2 步：校验库完整性（临时文件打开 quick_check + 关键表存在）；校验文件
+    // 写出纳入 try——磁盘满等写失败也走统一分支（M16），不留 .restore-check 残骸
     const checkPath = path.join(DATA_DIR, `.restore-check-${Date.now()}.db`);
-    fs.writeFileSync(checkPath, dbEntry.data);
     let checkDb;
     try {
+      fs.writeFileSync(checkPath, dbEntry.data);
       checkDb = new Database(checkPath);
       const quick = checkDb.pragma('quick_check', { simple: true });
       if (quick !== 'ok') throw new Error('数据库完整性校验未通过');
@@ -277,36 +279,97 @@ export default async function (app) {
         if (!tables.includes(t)) throw new Error(`缺少关键表：${t}`);
       }
     } catch (e) {
-      checkDb?.close();
+      try { checkDb?.close(); } catch { /* 已随写失败关闭 */ }
       fs.rmSync(checkPath, { force: true });
       return reply.status(400).send({ message: `备份校验失败：${e.message}` });
     }
     checkDb.close();
 
-    // 第 3/4 步：原子替换链（回滚点 → 关连接 → 换库清 WAL → 重开 → 票据目录替换）。
-    // 任一步失败：用回滚点覆盖回库文件并重开连接（原数据无损），再向上抛错。
-    const dbFile = path.join(DATA_DIR, 'renovation-expenses.db');
-    const rollback = dbFile + '.pre-restore';
-    try {
-      fs.copyFileSync(dbFile, rollback);
-      db.close();
-      fs.renameSync(checkPath, dbFile);
-      for (const ext of ['-wal', '-shm']) fs.rmSync(dbFile + ext, { force: true });
-      reopenDatabase();
-      fs.rmSync(UPLOAD_DIR, { recursive: true, force: true });
-      fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-      uploadEntries.forEach((e) => {
-        fs.writeFileSync(path.join(UPLOAD_DIR, path.basename(e.name)), e.data);
-      });
-    } catch (e) {
-      req.log.error({ err: e }, '恢复替换链失败，已用回滚点还原');
+    // 第 3/4 步：可回滚替换链，全程与 /export/backup 的异步快照互斥（I7，见
+    // server/lock.js：备份线程未结束时替换链的 db.close() 会 SQLITE_BUSY）。
+    // 任一步失败库与票据都有完整还原路径，响应文案「原数据已还原」是真实承诺（C4/C5）：
+    //   库：db.close() 之后拷贝主库+侧车三件套作回滚点——close 会把 WAL checkpoint
+    //      进主库，三件套兜底侧车残留（对齐 db.js legacy 改名的侧车随迁语义），
+    //      失败还原不再定格旧 checkpoint 时点、丢最近未 checkpoint 的写入（C5）
+    //   票据：先写 staging（重名加序号 M21、Windows 保留名/非法字符清洗），再用
+    //      两个同盘原子 rename 换目录——不再「删光再逐条写回」，失败可整体还原（C4）
+    return withLock(async () => {
+      const dbFile = path.join(DATA_DIR, 'renovation-expenses.db');
+      const rollback = dbFile + '.pre-restore';
+      const uploadsBackup = UPLOAD_DIR + '.pre-restore';
+      const staging = UPLOAD_DIR + '.staging';
+      const dbExts = ['', '-wal', '-shm'];
+      // zip 条目名来自外部，恶意/损坏包可能携带 CON、冒号、尾点等——服务端正常生成的
+      // 随机文件名不会命中，清洗只影响脏数据；重名（大小写不敏感，Windows 同盘）加序号
+      const sanitizeBasename = (name) => {
+        let s = path.basename(name).replace(/[\x00-\x1f<>:"/\\|?*]/g, '_').replace(/[. ]+$/, '').trim();
+        if (!s || s === '.' || s === '..') s = 'file';
+        if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$/i.test(s)) s = `_${s}`;
+        return s;
+      };
       try {
-        fs.copyFileSync(rollback, dbFile);
+        fs.rmSync(staging, { recursive: true, force: true });
+        fs.mkdirSync(staging, { recursive: true });
+        const used = new Set();
+        for (const e of uploadEntries) {
+          const base = sanitizeBasename(e.name);
+          let name = base;
+          let n = 2;
+          while (used.has(name.toLowerCase())) name = `${n++}_${base}`;
+          used.add(name.toLowerCase());
+          fs.writeFileSync(path.join(staging, name), e.data);
+        }
+      } catch (e) {
+        req.log.error({ err: e }, '恢复暂存写入失败（库未动）');
+        fs.rmSync(staging, { recursive: true, force: true });
+        return reply.status(500).send({ message: '恢复失败：暂存写入出错，请检查磁盘空间后重试' });
+      }
+
+      // —— 以下 db 已关闭，失败必须还原 ——
+      db.close();
+      try {
+        for (const ext of dbExts) {
+          const src = dbFile + ext;
+          if (fs.existsSync(src)) fs.copyFileSync(src, rollback + ext);
+        }
+        fs.renameSync(checkPath, dbFile);
         for (const ext of ['-wal', '-shm']) fs.rmSync(dbFile + ext, { force: true });
         reopenDatabase();
-      } catch { /* 还原失败时保留现场供人工排查 */ }
-      return reply.status(500).send({ message: '恢复失败，原数据已还原，请重试或人工排查' });
-    }
-    return { ok: true, restoredAt: new Date().toISOString() };
+
+        // 票据目录替换：两个同盘原子 rename；第二个失败在 finally 里还原旧目录
+        let uploadsSwapped = false;
+        try {
+          if (fs.existsSync(UPLOAD_DIR)) fs.renameSync(UPLOAD_DIR, uploadsBackup);
+          fs.renameSync(staging, UPLOAD_DIR);
+          uploadsSwapped = true;
+        } finally {
+          if (!uploadsSwapped && fs.existsSync(uploadsBackup)) {
+            fs.renameSync(uploadsBackup, UPLOAD_DIR);
+          }
+        }
+        // 成功收尾：回滚点与旧票据目录用毕即清，不在数据目录留残骸（M17）
+        for (const ext of dbExts) fs.rmSync(rollback + ext, { force: true });
+        fs.rmSync(uploadsBackup, { recursive: true, force: true });
+        fs.rmSync(staging, { recursive: true, force: true });
+        return { ok: true, restoredAt: new Date().toISOString() };
+      } catch (e) {
+        req.log.error({ err: e }, '恢复替换链失败，用回滚点还原');
+        try {
+          try { db.close(); } catch { /* 已关闭或从未重开 */ }
+          for (const ext of dbExts) {
+            const dest = dbFile + ext;
+            if (fs.existsSync(rollback + ext)) fs.copyFileSync(rollback + ext, dest);
+            else fs.rmSync(dest, { force: true });
+          }
+          reopenDatabase();
+          fs.rmSync(staging, { recursive: true, force: true });
+          for (const ext of dbExts) fs.rmSync(rollback + ext, { force: true });
+        } catch (restoreErr) {
+          req.log.error({ err: restoreErr }, '回滚点还原也失败，保留现场供人工排查');
+          return reply.status(500).send({ message: '恢复失败且自动还原失败，请人工检查数据目录' });
+        }
+        return reply.status(500).send({ message: '恢复失败，原数据已还原，请重试或人工排查' });
+      }
+    });
   });
 }

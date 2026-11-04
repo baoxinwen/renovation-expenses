@@ -7,7 +7,7 @@ import type { Item, Order, Section } from '../../api';
 import { fmtMoney, PAY_METHODS } from '../../format';
 import ReceiptUploader from '../../components/ReceiptUploader';
 import { confirmAsync } from '../../utils/confirm';
-import { confirmDoubleCount, confirmOrderOnBoughtItem, doubleCountRisk } from '../../utils/domain';
+import { confirmDoubleCount, confirmOrderOnBoughtItem, submitWithForceGuard } from '../../utils/domain';
 
 type Mode = 'pay' | 'bought' | 'new';
 
@@ -85,19 +85,20 @@ export default function MobileRecord() {
   const submitBought = async (v: { item_id: number; price: number; date: dayjs.Dayjs }) => {
     const item = allItems.find((it) => it.id === v.item_id);
     if (!item) return toast.error('请选择项目');
-    const doubleCount = doubleCountRisk(item);
-    if (doubleCount) {
-      const ok = await confirmDoubleCount(item);
-      if (!ok) return;
-    }
     setSaving(true);
     try {
-      await api.updateItem(item.id, {
-        bought: true,
-        paid_amount: v.price,
-        bought_date: v.date.format('YYYY-MM-DD'),
-        ...(doubleCount ? { force: true } : {}),
-      });
+      // force 只由服务端 409 触发（submitWithForceGuard 统一链路）：过期快照撞 409
+      // 时弹确认给出「仍要记」出路，而不是只有 toast 卡死（I3）
+      const updated = await submitWithForceGuard(
+        (force) => api.updateItem(item.id, {
+          bought: true,
+          paid_amount: v.price,
+          bought_date: v.date.format('YYYY-MM-DD'),
+          ...(force ? { force: true } : {}),
+        }),
+        () => confirmDoubleCount(item),
+      );
+      if (!updated) return;
       toast.success(`已记录：${item.name}`);
       setBoughtItem(null);
       boughtForm.resetFields();
@@ -114,24 +115,29 @@ export default function MobileRecord() {
     item_id?: number; title: string; vendor?: string; total_amount: number;
     pay_date: dayjs.Dayjs; pay_method?: string; note?: string;
   }) => {
-    // 双算校验：挂到已勾「已买」的项目会重复计入实际（服务端有 409 守卫，确认后带 force）
-    const target = v.item_id ? allItems.find((x) => x.id === v.item_id) : null;
-    if (target?.bought && !(await confirmOrderOnBoughtItem(target))) return;
     setSaving(true);
     try {
-      const order = await api.addOrder({
-        title: v.title,
-        vendor: v.vendor,
-        item_id: v.item_id ?? null,
-        total_amount: v.total_amount,
-        note: v.note,
-        paid_now: {
-          amount: v.total_amount,
-          pay_date: v.pay_date.format('YYYY-MM-DD'),
-          method: v.pay_method ?? '微信',
+      // 同 submitBought：force 由服务端 409 仲裁，确认后带 force 重试（I3）
+      const order = await submitWithForceGuard(
+        (force) => api.addOrder({
+          title: v.title,
+          vendor: v.vendor,
+          item_id: v.item_id ?? null,
+          total_amount: v.total_amount,
+          note: v.note,
+          paid_now: {
+            amount: v.total_amount,
+            pay_date: v.pay_date.format('YYYY-MM-DD'),
+            method: v.pay_method ?? '微信',
+          },
+          ...(force ? { force: true } : {}),
+        }),
+        async () => {
+          const target = v.item_id ? allItems.find((x) => x.id === v.item_id) : null;
+          return target ? confirmOrderOnBoughtItem(target) : false;
         },
-        ...(target?.bought ? { force: true } : {}),
-      });
+      );
+      if (!order) return;
       const pay = order.payments?.[0];
       let fail = 0;
       if (pay) {

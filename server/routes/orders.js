@@ -1,4 +1,4 @@
-import db, { UPLOAD_DIR, LIMITS, escapeLike } from '../db.js';
+import db, { UPLOAD_DIR, LIMITS, escapeLike, resolveUploadPath } from '../db.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -64,12 +64,11 @@ function receiptFilesOfPayment(paymentId) {
 }
 
 function removeFiles(filenames) {
-  // 纵深防御：filename 取自 DB，库被篡改/恶意备份恢复时可能携带 ../ 穿越或绝对路径，
-  // 归一化后必须仍位于上传目录内才允许删除；越界名跳过并告警，不让单条脏数据挂掉删除接口
-  const root = path.resolve(UPLOAD_DIR);
+  // 纵深防御判定收敛至 db.js resolveUploadPath（与导出侧同一出处）；越界名跳过并告警，
+  // 不让单条脏数据挂掉删除接口
   filenames.forEach((f) => {
-    const target = typeof f === 'string' ? path.resolve(root, f) : null;
-    if (target === null || !target.startsWith(root + path.sep)) {
+    const target = resolveUploadPath(f);
+    if (target === null) {
       console.warn('跳过越界票据文件名（不在上传目录内）:', JSON.stringify(f));
       return;
     }
@@ -204,9 +203,25 @@ export default async function (app) {
   });
 
   app.post('/orders/:id/restore', async (req, reply) => {
-    const info = db.prepare('UPDATE orders SET deleted = 0 WHERE id = ? AND deleted = 1').run(Number(req.params.id));
-    if (info.changes === 0) return reply.status(404).send({ message: '没有可恢复的订单' });
-    return getOrder(Number(req.params.id));
+    const order = db.prepare('SELECT * FROM orders WHERE id = ? AND deleted = 1').get(Number(req.params.id));
+    if (!order) return reply.status(404).send({ message: '没有可恢复的订单' });
+    // 双算守卫（API 级）：删除期间挂接项目可能已勾「已买」（当时订单付款停计，
+    // 勾选守卫看到的 orderPaid=0 会静默通过）；恢复让付款复活并叠加进项目实际。
+    // 与 POST/PUT /orders 的 needForce 模式一致：确认后带 force 放行（显式双算）
+    if (!req.body?.force && order.item_id != null) {
+      const target = db.prepare('SELECT id, name, bought FROM items WHERE id = ? AND deleted = 0')
+        .get(order.item_id);
+      const paid = db.prepare('SELECT COALESCE(SUM(amount), 0) AS s FROM payments WHERE order_id = ?')
+        .get(order.id).s;
+      if (target?.bought && paid > 0) {
+        return reply.status(409).send({
+          message: `「${target.name}」在订单删除期间已勾「已买」，恢复订单会让付款重新计入，重复计入实际合计`,
+          needForce: true,
+        });
+      }
+    }
+    db.prepare('UPDATE orders SET deleted = 0 WHERE id = ?').run(order.id);
+    return getOrder(order.id);
   });
 
   // ===== 付款记录 =====

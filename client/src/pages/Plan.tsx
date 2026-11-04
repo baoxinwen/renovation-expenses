@@ -20,6 +20,7 @@ import type { Item, Order, PlanData, Section } from '../api';
 import { fmtMoney } from '../format';
 import { budgetDelta, formatDelta, spendablePool } from '../utils/budgetCalc';
 import { matchSearch } from '../utils/planCalc';
+import { submitWithForceGuard } from '../utils/domain';
 import ItemFormModal from '../components/ItemFormModal';
 import { confirmAsync } from '../utils/confirm';
 import { SortableRow, DragHandle, SectionDragHandle, SortableSectionCard } from '../components/plan/PlanEditing';
@@ -149,26 +150,17 @@ export default function Plan() {
   const confirmBuy = async (itemId: number, price: number, date: string) => {
     setBuySaving(true);
     try {
-      // 后端 409（项目下已有订单付款）时弹确认，用户坚持则带 force 重试；
+      // force 只由服务端 409 触发（submitWithForceGuard 统一链路）；
       // 登记的是「实际支付金额」，预算单价/总预算不动
       const submit = (force: boolean) =>
         api.updateItem(itemId, { bought: true, paid_amount: price, bought_date: date, ...(force ? { force } : {}) });
-      let updated: Awaited<ReturnType<typeof api.updateItem>>;
-      try {
-        updated = await submit(false);
-      } catch (e) {
-        // 409 双算守卫走结构化 needForce 标志（api.ts 随错误抛出）；文案匹配仅作兜底
-        const needForceErr = e as Error & { needForce?: boolean };
-        if (!needForceErr.needForce && !needForceErr.message.includes('重复计入')) throw e;
-        const item = buyTarget;
-        const ok = await confirmAsync({
-          title: '该项目已有订单付款，可能重复计入',
-          content: item ? `「${item.name}」下订单已付 ${fmtMoney(item.order_paid)}，再记为已买会把总价也计入实际。通常二选一即可，仍要记吗？` : '',
-          okText: '仍要记',
-        });
-        if (!ok) return;
-        updated = await submit(true);
-      }
+      const item = buyTarget;
+      const updated = await submitWithForceGuard(submit, () => confirmAsync({
+        title: '该项目已有订单付款，可能重复计入',
+        content: item ? `「${item.name}」下订单已付 ${fmtMoney(item.order_paid)}，再记为已买会把总价也计入实际。通常二选一即可，仍要记吗？` : '',
+        okText: '仍要记',
+      }));
+      if (!updated) return;
       patchItem(updated);
       setBuyTarget(null);
     } catch (e) {

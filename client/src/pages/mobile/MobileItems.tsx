@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { api } from '../../api';
 import type { Item, PlanData } from '../../api';
 import { fmtMoney } from '../../format';
-import { confirmDoubleCount, doubleCountRisk } from '../../utils/domain';
+import { confirmDoubleCount, submitWithForceGuard } from '../../utils/domain';
 import BuyModal from '../../components/BuyModal';
 
 /** 移动清单：搜索 + 板块手风琴 + 项目卡片；点卡片 = 购买登记（编辑/排序请回电脑端） */
@@ -132,18 +132,18 @@ export default function MobileItems() {
         onClose={() => setBuyTarget(null)}
         onConfirm={async (itemId, price, date) => {
           const item = buyTarget;
-          if (item && doubleCountRisk(item)) {
-            const ok = await confirmDoubleCount(item);
-            if (!ok) return;
-          }
+          if (!item) return;
           try {
-            // 前置确认已通过 → 直接带 force（后端 409 守卫已由确认满足）；
-            // 登记的是实际支付金额，预算不动
-            await api.updateItem(itemId, { bought: true, paid_amount: price, bought_date: date, force: true });
+            // force 只由服务端 409 触发（submitWithForceGuard 统一链路）：本地快照的
+            // 双算判定不作仲裁——手机端挂载快照过期时会绕过服务端守卫（C3）
+            const updated = await submitWithForceGuard(
+              (force) => api.updateItem(itemId, { bought: true, paid_amount: price, bought_date: date, ...(force ? { force: true } : {}) }),
+              () => confirmDoubleCount(item),
+            );
+            if (!updated) return;
             setBuyTarget(null);
             toast.success('已记录购买');
             load();
-            return;
           } catch (e) {
             toast.error((e as Error).message);
           }

@@ -8,6 +8,8 @@ const CDR_SIG = 0x02014b50;
 const LFH_SIG = 0x04034b50;
 const STORE = 0;
 const DEFLATE = 8;
+// 单条目解压上限：与 db.js LIMITS.BACKUP_MAX_MB（300）对齐（模块保持独立不反向依赖）
+const MAX_ENTRY_BYTES = 300 * 1024 * 1024;
 
 /** 解析 zip（Buffer）为条目数组 [{ name, data }]。抛错于结构非法/不支持的方法。 */
 export function parseZip(buf) {
@@ -44,8 +46,16 @@ export function parseZip(buf) {
 
     let data;
     if (method === STORE) data = Buffer.from(raw);
-    else if (method === DEFLATE) data = zlib.inflateRawSync(raw);
-    else throw new Error(`不支持的压缩方法（${method}）：${name}`);
+    else if (method === DEFLATE) {
+      // zip 炸弹防线（I8）：恶意备份可用几百 KB 压缩包内藏任意倍率 deflate 流，
+      // 同步解压全量进内存会 OOM。上限与 db.js 的 LIMITS.BACKUP_MAX_MB 对齐——
+      // 合法备份任何条目解压后都不会超过备份文件本身的 300MB 上限
+      try {
+        data = zlib.inflateRawSync(raw, { maxOutputLength: MAX_ENTRY_BYTES });
+      } catch {
+        throw new Error(`条目解压超过 ${MAX_ENTRY_BYTES / 1024 / 1024}MB 上限（疑似 zip 炸弹）：${name}`);
+      }
+    } else throw new Error(`不支持的压缩方法（${method}）：${name}`);
 
     entries.push({ name, data });
     p += 46 + nameLen + extraLen + commentLen;

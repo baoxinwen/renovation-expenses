@@ -3,7 +3,8 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 import { ZipArchive } from 'archiver';
-import db, { itemActualSQL, UPLOAD_DIR, getTotalBudget } from '../db.js';
+import db, { itemActualSQL, UPLOAD_DIR, getTotalBudget, resolveUploadPath } from '../db.js';
+import { withLock } from '../lock.js';
 
 const MONEY = '#,##0.00';
 
@@ -252,12 +253,24 @@ export default async function (app) {
       ORDER BY o.id, p.pay_date, r.id`).all(...params);
     if (!rows.length) return reply.status(404).send({ message: '没有可导出的票据照片' });
 
-    // 磁盘缺失的票据跳过并留痕（备份部分恢复/手工清理会出现）：
+    // 磁盘缺失/越界的票据跳过并留痕（备份部分恢复/手工清理/库被篡改会出现）：
     // archiver 对 ENOENT 只发 warning 仍出包，但清单若按库记录生成会「声称 N 张、包里 M 张」；
     // 其余读流错误若无监听会变成 uncaught exception，故显式接管 error。
-    const existing = rows.filter((r) => fs.existsSync(path.join(UPLOAD_DIR, r.filename)));
-    const missing = rows.length - existing.length;
-    if (missing) req.log.warn(`票据导出：${missing} 个文件已不在磁盘，已跳过`);
+    // filename 取自 DB，携带 ../ 或绝对路径时按缺失跳过——不许把上传目录外的文件
+    // 打包进 zip（与删除侧 removeFiles 同一威胁模型与判定出处 resolveUploadPath）
+    const existing = [];
+    let missing = 0;
+    for (const r of rows) {
+      const filePath = resolveUploadPath(r.filename);
+      if (filePath === null) {
+        missing += 1;
+        req.log.warn({ filename: r.filename }, '票据导出：越界票据文件名已跳过（不在上传目录内）');
+        continue;
+      }
+      if (fs.existsSync(filePath)) existing.push({ ...r, filePath });
+      else missing += 1;
+    }
+    if (missing) req.log.warn(`票据导出：${missing} 个文件已不在磁盘（或越界），已跳过`);
     if (!existing.length) return reply.status(404).send({ message: '没有可导出的票据照片' });
 
     const safe = (s) => String(s).replace(/[\\/:*?"<>|]/g, '_');
@@ -269,7 +282,7 @@ export default async function (app) {
       let n = 2;
       while (seen.has(entry)) entry = `${safe(r.title)}_${r.order_id}/${r.pay_date}_${r.amount}元/${n++}_${safe(r.original_name)}`;
       seen.add(entry);
-      archive.file(path.join(UPLOAD_DIR, r.filename), { name: entry });
+      archive.file(r.filePath, { name: entry });
     });
     const manifest = existing.map((r) =>
       `${r.title}（${r.vendor || '商家未填'}）｜${r.pay_date}｜${r.amount} 元｜${r.method || '方式未填'}｜票据：${r.original_name}${r.pay_note ? `｜${r.pay_note}` : ''}`
@@ -288,12 +301,18 @@ export default async function (app) {
     const now = new Date();
     const p2 = (n) => String(n).padStart(2, '0');
     const name = `renovation-backup-${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())}-${p2(now.getHours())}${p2(now.getMinutes())}.zip`;
-    // db.backup() 官方在线快照 API：WAL 中未合并事务也会进入快照（直接读文件会丢）
+    // db.backup() 官方在线快照 API：WAL 中未合并事务也会进入快照（直接读文件会丢）。
+    // 与恢复替换链互斥（I7，见 server/lock.js）：快照线程进行中时恢复的 db.close()
+    // 会 SQLITE_BUSY。锁只覆盖快照生成——打包读的是快照文件与当时目录，不含活库
     const snapshot = path.join(os.tmpdir(), `backup-snap-${process.pid}-${Date.now()}.db`);
-    await db.backup(snapshot);
+    await withLock(() => db.backup(snapshot));
 
     const archive = new ZipArchive({ store: true });
-    archive.on('error', (err) => req.log.error({ err }, '备份打包失败'));
+    // 非 end 收尾（打包出错）也清掉 tmp 快照，不留残骸（M18）
+    archive.on('error', (err) => {
+      req.log.error({ err }, '备份打包失败');
+      fs.unlink(snapshot, () => {});
+    });
     archive.on('end', () => fs.unlink(snapshot, () => {}));
     archive.file(snapshot, { name: 'database.db' });
     archive.directory(UPLOAD_DIR, 'uploads');

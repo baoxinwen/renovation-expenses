@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { ZipArchive } from 'archiver';
 import Database from 'better-sqlite3';
@@ -200,6 +201,99 @@ try {
   check('database.db 内容一致', find('database.db')?.data.toString() === 'fake-sqlite-bytes');
   check('中文文件名解析', !!find('uploads/收据-中文.png') && find('uploads/收据-中文.png').data.toString() === '收据-中文');
   check('子目录条目解析', find('uploads/a.png')?.data.toString() === 'receipt-a');
+
+  // I8：zip 炸弹——高压缩比条目解压超上限必须抛错，不整量进内存。
+  // 条目直接给未压缩的 310MB 全零数据，由 archiver level 6 压小；这样 zip 里
+  // 只有一层 deflate，parseZip 解压一次就会撞上限（预先 deflate 会把炸弹藏到第二层）
+  console.log('== I8 解压上限 ==');
+  const bombArchive = new ZipArchive({ zlib: { level: 6 } });
+  bombArchive.append('ok-db', { name: 'database.db' });
+  bombArchive.append(Buffer.alloc(310 * 1024 * 1024, 0), { name: 'uploads/bomb.png' });
+  const bombBuf = await collectZip(bombArchive);
+  check('造数：炸弹 zip 体积在备份上限内（压缩后）', bombBuf.length < 10 * 1024 * 1024, `size=${bombBuf.length}`);
+  let bombThrew = '';
+  try {
+    parseZip(bombBuf);
+  } catch (e) {
+    bombThrew = e.message;
+  }
+  check('高压缩比条目解压被上限拦截', bombThrew.includes('zip 炸弹'), `err=${bombThrew.slice(0, 120)}`);
+
+  // ===== C4/C5/M17/M21 恢复链安全 =====
+  console.log('== C4/C5 恢复链 ==');
+  // 取一份真实合法备份（database.db 是活库快照，恢复必成功）
+  const goodRes = await fetch(`${BASE}/export/backup`);
+  const goodBuf = Buffer.from(await goodRes.arrayBuffer());
+  const realDb = parseZip(goodBuf).find((e) => e.name === 'database.db');
+
+  // M21：同名条目写回不互相覆盖（恶意/损坏 zip 内同名票据静默丢文件）
+  const dupArchive = new ZipArchive({ store: true });
+  dupArchive.append(realDb.data, { name: 'database.db' });
+  dupArchive.append('FIRST-CONTENT', { name: 'uploads/dup.png' });
+  dupArchive.append('SECOND-CONTENT', { name: 'uploads/dup.png' });
+  const dupBuf = await collectZip(dupArchive);
+  const dupFd = new FormData();
+  dupFd.append('file', new Blob([dupBuf]), 'backup.zip');
+  const dupRes = await fetch(`${BASE}/restore/backup`, { method: 'POST', body: dupFd });
+  check('M21 同名条目恢复 200', dupRes.status === 200, `status=${dupRes.status}`);
+  const dupContents = fs.readdirSync(path.join(tmpDir, 'uploads'))
+    .map((f) => fs.readFileSync(path.join(tmpDir, 'uploads', f), 'utf8'));
+  check('M21 同名票据两份内容都在（不覆盖丢文件）',
+    dupContents.includes('FIRST-CONTENT') && dupContents.includes('SECOND-CONTENT'),
+    JSON.stringify(dupContents));
+
+  // M17：成功恢复后回滚点/暂存目录用毕即清，不在数据目录留残骸
+  const dirTop = fs.readdirSync(tmpDir);
+  check('M17 成功后无 .pre-restore / staging / restore-check 残留',
+    !dirTop.some((f) => f.includes('.pre-restore') || f.includes('.staging') || f.startsWith('.restore-check')),
+    JSON.stringify(dirTop));
+
+  // Windows 保留设备名条目不把写回卡死（C4 的 basename 未清洗面）
+  const reservedArchive = new ZipArchive({ store: true });
+  reservedArchive.append(realDb.data, { name: 'database.db' });
+  reservedArchive.append('reserved', { name: 'uploads/con.png' });
+  const reservedBuf = await collectZip(reservedArchive);
+  const reservedFd = new FormData();
+  reservedFd.append('file', new Blob([reservedBuf]), 'backup.zip');
+  const reservedRes = await fetch(`${BASE}/restore/backup`, { method: 'POST', body: reservedFd });
+  check('Windows 保留名条目恢复 200（清洗后写回）', reservedRes.status === 200, `status=${reservedRes.status}`);
+
+  // C4+C5：恢复中途失败时库与票据都必须可还原（Windows：句柄锁住 uploads 内文件，
+  // 使目录 rename/删除失败——单用户 Windows 裸机是主要部署形态，其余平台跳过注入）
+  if (process.platform === 'win32') {
+    const r0 = fs.readdirSync(path.join(tmpDir, 'uploads')).sort();
+    // 恢复前最后写入：进 WAL、不触发 checkpoint（服务从不主动关库）；
+    // 基线状态在哨兵写入之后取（哨兵必须计入基线，C5 断言它不丢）
+    const sentinel = await api('POST', '/sections', { name: '失败注入哨兵' });
+    check('造数：哨兵板块已写入', sentinel.status === 200, `status=${sentinel.status}`);
+    const p0 = await (await fetch(`${BASE}/plan`)).json();
+    const lockPath = path.join(tmpDir, 'uploads', r0[0]);
+    const lockHandle = fs.openSync(lockPath, 'r');
+    const failFd = new FormData();
+    failFd.append('file', new Blob([goodBuf]), 'backup.zip');
+    const failRes = await fetch(`${BASE}/restore/backup`, { method: 'POST', body: failFd });
+    fs.closeSync(lockHandle);
+    check('注入失败返回 500', failRes.status === 500, `status=${failRes.status}`);
+    const p1 = await (await fetch(`${BASE}/plan`)).json();
+    check('C5 失败还原保留最近未 checkpoint 写入（哨兵还在）',
+      p1.sections.some((s) => s.name === '失败注入哨兵'), JSON.stringify(p1.sections.map((s) => s.name)));
+    check('C5 失败还原后清单与恢复前一致',
+      JSON.stringify(p1.sections) === JSON.stringify(p0.sections),
+      `items ${p0.sections.length}→${p1.sections.length}`);
+    check('C4 失败还原票据目录无损',
+      JSON.stringify(fs.readdirSync(path.join(tmpDir, 'uploads')).sort()) === JSON.stringify(r0),
+      JSON.stringify(fs.readdirSync(path.join(tmpDir, 'uploads'))));
+    check('C4/C5 失败后无回滚点残留（还原完成即清）',
+      !fs.readdirSync(tmpDir).some((f) => f.includes('.pre-restore') || f.includes('.staging')),
+      JSON.stringify(fs.readdirSync(tmpDir)));
+    // 失败后链路仍可用：再次恢复成功
+    const okFd = new FormData();
+    okFd.append('file', new Blob([goodBuf]), 'backup.zip');
+    const okRes = await fetch(`${BASE}/restore/backup`, { method: 'POST', body: okFd });
+    check('失败后再次恢复成功（链路可自愈）', okRes.status === 200, `status=${okRes.status}`);
+  } else {
+    console.log('  (C4/C5 失败注入依赖 Windows 句柄锁语义，本平台跳过)');
+  }
 } catch (e) {
   failed++;
   console.error('测试执行异常:', e);

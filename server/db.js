@@ -37,27 +37,36 @@ export function reopenDatabase() {
   db = new Database(DB_FILE);
   db.pragma(`journal_mode = ${process.env.SQLITE_JOURNAL_MODE || 'WAL'}`);
   db.pragma('foreign_keys = ON');
+  // 恢复旧版本 schema 的备份后立即补迁移（M19）：缺列在重开时补齐，
+  // 而不是等软删/实付 SQL 运行期 no such column
+  initSchema(db);
 }
 
-// 核心模型：板块(section) → 预算项目(item) → 订单(order,可选挂项目) → 付款(payment) → 票据(receipt)
-db.exec(`
+// 核心模型：板块(section) → 预算项目(item) → 订单(order,可选挂项目) → 付款(payment) → 票据(receipt)。
+// 建表 + 存量迁移 + 预置提炼为 initSchema：主库启动时执行，恢复链 reopen 后重跑——
+// 旧版本备份恢复到新代码上时缺列在重开时即被补齐（M19），不会运行期 no such column
+function initSchema(target) {
+target.exec(`
 CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT
 );
 
 -- 板块（大类）：硬装施工 / 全屋电器 / 全屋智能 / 家具软装 / 其他杂费 …
--- deleted=1 为软删除（名称加 #已删{id} 后缀避免占用 UNIQUE）
+-- deleted=1 为软删除（名称加 #已删{id} 后缀避免占用 UNIQUE）；
+-- deleted_at 记删除时刻，板块恢复时据此只复活「本次连带」软删的项目（I2）
 CREATE TABLE IF NOT EXISTS sections (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   name       TEXT NOT NULL UNIQUE,
   sort_order INTEGER NOT NULL DEFAULT 0,
-  deleted    INTEGER NOT NULL DEFAULT 0
+  deleted    INTEGER NOT NULL DEFAULT 0,
+  deleted_at TEXT
 );
 
 -- 预算项目：清单里的每一"东西"
 -- 总价 = quantity * unit_price（单价即当前评估价，成交后更新为实际价并勾 bought）
--- 多次付款的大件另建订单挂到 item 上，付款计入项目实际
+-- 多次付款的大件另建订单挂到 item 上，付款计入项目实际；
+-- deleted_at 同上：单独删记自身时刻，板块连带删记板块删除时刻
 CREATE TABLE IF NOT EXISTS items (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   section_id   INTEGER NOT NULL REFERENCES sections(id) ON DELETE CASCADE,
@@ -72,6 +81,7 @@ CREATE TABLE IF NOT EXISTS items (
   note         TEXT NOT NULL DEFAULT '',
   sort_order   INTEGER NOT NULL DEFAULT 0,
   deleted      INTEGER NOT NULL DEFAULT 0,
+  deleted_at   TEXT,
   created_at   TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
@@ -114,56 +124,65 @@ CREATE INDEX IF NOT EXISTS idx_receipts_payment ON receipts(payment_id);
 `);
 
 // 存量库迁移：v2 的 actual_price（直填实际价）→ v2.1 的 bought（已买勾选）
-let itemCols = db.prepare('PRAGMA table_info(items)').all().map((c) => c.name);
+let itemCols = target.prepare('PRAGMA table_info(items)').all().map((c) => c.name);
 if (itemCols.includes('actual_price') && !itemCols.includes('bought')) {
   // 事务性 DDL：中途崩溃不会留下半迁移状态
-  db.transaction(() => {
-    db.exec('ALTER TABLE items ADD COLUMN bought INTEGER NOT NULL DEFAULT 0');
-    db.prepare('UPDATE items SET bought = 1 WHERE actual_price IS NOT NULL').run();
+  target.transaction(() => {
+    target.exec('ALTER TABLE items ADD COLUMN bought INTEGER NOT NULL DEFAULT 0');
+    target.prepare('UPDATE items SET bought = 1 WHERE actual_price IS NOT NULL').run();
   })();
-  itemCols = db.prepare('PRAGMA table_info(items)').all().map((c) => c.name);
+  itemCols = target.prepare('PRAGMA table_info(items)').all().map((c) => c.name);
 }
 // v2.2：软删除标记（订单与项目删除后可撤销）
 if (!itemCols.includes('deleted')) {
-  db.exec('ALTER TABLE items ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0');
+  target.exec('ALTER TABLE items ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0');
 }
-const orderCols = db.prepare('PRAGMA table_info(orders)').all().map((c) => c.name);
+const orderCols = target.prepare('PRAGMA table_info(orders)').all().map((c) => c.name);
 if (!orderCols.includes('deleted')) {
-  db.exec('ALTER TABLE orders ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0');
+  target.exec('ALTER TABLE orders ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0');
 }
-const sectionCols = db.prepare('PRAGMA table_info(sections)').all().map((c) => c.name);
+const sectionCols = target.prepare('PRAGMA table_info(sections)').all().map((c) => c.name);
 if (!sectionCols.includes('deleted')) {
-  db.exec('ALTER TABLE sections ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0');
+  target.exec('ALTER TABLE sections ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0');
 }
 // v2.4：购买登记（bought_date）；v2.6：实付金额（paid_amount），预算/实付语义分离，
 // 旧基线字段 init_unit_price 随漂移机制一并退役
 if (!itemCols.includes('bought_date')) {
-  db.exec('ALTER TABLE items ADD COLUMN bought_date TEXT');
+  target.exec('ALTER TABLE items ADD COLUMN bought_date TEXT');
 }
 if (!itemCols.includes('paid_amount')) {
-  db.exec('ALTER TABLE items ADD COLUMN paid_amount REAL');
+  target.exec('ALTER TABLE items ADD COLUMN paid_amount REAL');
 }
 if (itemCols.includes('init_unit_price')) {
-  db.exec('ALTER TABLE items DROP COLUMN init_unit_price');
+  target.exec('ALTER TABLE items DROP COLUMN init_unit_price');
+}
+// I2：软删时刻（单独删记自身时刻，板块连带删记板块删除时刻，恢复按时刻匹配）
+if (!itemCols.includes('deleted_at')) {
+  target.exec('ALTER TABLE items ADD COLUMN deleted_at TEXT');
+}
+if (!sectionCols.includes('deleted_at')) {
+  target.exec('ALTER TABLE sections ADD COLUMN deleted_at TEXT');
 }
 
 // 首次初始化：写入 seeded 标记 + 预置板块（之后清空板块/重导不会再触发预置）
 function seed() {
-  const seeded = db.prepare("SELECT COUNT(*) AS c FROM settings WHERE key = 'seeded'").get().c;
+  const seeded = target.prepare("SELECT COUNT(*) AS c FROM settings WHERE key = 'seeded'").get().c;
   if (seeded > 0) return;
-  const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
+  const insertSetting = target.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
   insertSetting.run('total_budget', '0');
-  const hasSection = db.prepare('SELECT COUNT(*) AS c FROM sections').get().c;
+  const hasSection = target.prepare('SELECT COUNT(*) AS c FROM sections').get().c;
   if (hasSection === 0) {
     const defaults = ['硬装施工类', '全屋电器类', '全屋智能类', '家具软装类', '其他杂费类'];
-    const insert = db.prepare('INSERT INTO sections (name, sort_order) VALUES (?, ?)');
+    const insert = target.prepare('INSERT INTO sections (name, sort_order) VALUES (?, ?)');
     defaults.forEach((name, i) => insert.run(name, i));
   }
   insertSetting.run('seeded', '1');
 }
 
 // 三段写包事务：中途崩溃不至于留下残缺的预置板块（重启时 hasSection>0 会跳过补种）
-db.transaction(seed)();
+target.transaction(seed)();
+}
+initSchema(db);
 
 // ===== 共享常量（上传/导入上限，各处必须一致） =====
 export const LIMITS = {
@@ -215,6 +234,15 @@ export function totalsSQL() {
 // LIKE 关键字转义（% _ \），配合 ESCAPE 使用
 export function escapeLike(q) {
   return String(q).replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+// 纵深防御：filename 取自 DB，库被篡改/恶意备份恢复时可能携带 ../ 穿越或绝对路径，
+// 归一化后必须仍位于上传目录内才允许文件操作；越界返回 null（调用方跳过并告警）。
+// 删除侧（orders.removeFiles）与导出侧（/export/receipts）共用同一判定
+export function resolveUploadPath(filename) {
+  const root = path.resolve(UPLOAD_DIR);
+  const target = typeof filename === 'string' ? path.resolve(root, filename) : null;
+  return target !== null && target.startsWith(root + path.sep) ? target : null;
 }
 
 // 注意：必须用绑定形式的 default export（live binding）——reopenDatabase 重赋值 db 后，

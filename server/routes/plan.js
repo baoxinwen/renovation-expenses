@@ -91,13 +91,18 @@ export default async function (app) {
   });
 
   app.delete('/sections/:id', async (req, reply) => {
-    // 软删除板块：名称加后缀避免占用 UNIQUE，其下项目一并软删（均可在 8 秒内撤销）
+    // 软删除板块：名称加后缀避免占用 UNIQUE，其下项目一并软删（均可在 8 秒内撤销）。
+    // 连带软删记同一个时刻（deleted_at），恢复时据此只复活本次连带的项目（I2）——
+    // 之前被单独删除的项目不凭空复活
     const id = Number(req.params.id);
     const sec = db.prepare('SELECT * FROM sections WHERE id = ? AND deleted = 0').get(id);
     if (!sec) return reply.status(404).send({ message: '板块不存在' });
+    const deletedAt = new Date().toISOString();
     const rename = db.transaction(() => {
-      db.prepare('UPDATE sections SET deleted = 1, name = ? WHERE id = ?').run(`${sec.name}#已删${id}`, id);
-      db.prepare('UPDATE items SET deleted = 1 WHERE section_id = ? AND deleted = 0').run(id);
+      db.prepare('UPDATE sections SET deleted = 1, deleted_at = ?, name = ? WHERE id = ?')
+        .run(deletedAt, `${sec.name}#已删${id}`, id);
+      db.prepare('UPDATE items SET deleted = 1, deleted_at = ? WHERE section_id = ? AND deleted = 0')
+        .run(deletedAt, id);
     });
     rename();
     return { ok: true, deleted: true };
@@ -110,8 +115,14 @@ export default async function (app) {
     const originalName = sec.name.replace(`#已删${id}`, '');
     const nameTaken = db.prepare('SELECT COUNT(*) AS c FROM sections WHERE name = ? AND id != ?').get(originalName, id).c > 0;
     const restore = db.transaction(() => {
-      db.prepare('UPDATE sections SET deleted = 0, name = ? WHERE id = ?').run(nameTaken ? `${originalName}（恢复）` : originalName, id);
-      db.prepare('UPDATE items SET deleted = 0 WHERE section_id = ? AND deleted = 1').run(id);
+      db.prepare('UPDATE sections SET deleted = 0, deleted_at = NULL, name = ? WHERE id = ?')
+        .run(nameTaken ? `${originalName}（恢复）` : originalName, id);
+      // 只复活与板块同刻连带软删的项目；IS NULL 分支兼容旧版本删除的存量数据
+      //（旧版不写 deleted_at，板块与其连带项都为 NULL，行为与旧版一致）
+      db.prepare(`UPDATE items SET deleted = 0, deleted_at = NULL
+                  WHERE section_id = ? AND deleted = 1
+                    AND (deleted_at = ? OR (deleted_at IS NULL AND ? IS NULL))`)
+        .run(id, sec.deleted_at, sec.deleted_at);
     });
     restore();
     return db.prepare('SELECT * FROM sections WHERE id = ?').get(id);
@@ -215,8 +226,10 @@ export default async function (app) {
   });
 
   app.delete('/items/:id', async (req, reply) => {
-    // 软删除：可撤销；其订单保留（付款不再计入清单实际，恢复后自动回来）
-    const info = db.prepare('UPDATE items SET deleted = 1 WHERE id = ? AND deleted = 0').run(Number(req.params.id));
+    // 软删除：可撤销；其订单保留（付款不再计入清单实际，恢复后自动回来）；
+    // deleted_at 记自身删除时刻，与板块连带删除的时刻区分（I2）
+    const info = db.prepare('UPDATE items SET deleted = 1, deleted_at = ? WHERE id = ? AND deleted = 0')
+      .run(new Date().toISOString(), Number(req.params.id));
     if (info.changes === 0) return reply.status(404).send({ message: '项目不存在' });
     return { ok: true, deleted: true };
   });
@@ -231,10 +244,10 @@ export default async function (app) {
       if (sec) {
         const originalName = sec.name.replace(`#已删${sec.id}`, '');
         const taken = db.prepare('SELECT COUNT(*) AS c FROM sections WHERE name = ? AND id != ?').get(originalName, sec.id).c > 0;
-        db.prepare('UPDATE sections SET deleted = 0, name = ? WHERE id = ?')
+        db.prepare('UPDATE sections SET deleted = 0, deleted_at = NULL, name = ? WHERE id = ?')
           .run(taken ? `${originalName}（恢复）` : originalName, sec.id);
       }
-      db.prepare('UPDATE items SET deleted = 0 WHERE id = ?').run(id);
+      db.prepare('UPDATE items SET deleted = 0, deleted_at = NULL WHERE id = ?').run(id);
     });
     restore();
     return db.prepare(`${ITEM_SELECT} WHERE i.id = ?`).get(id);

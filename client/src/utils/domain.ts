@@ -32,6 +32,25 @@ export async function confirmOrderOnBoughtItem(item: Pick<Item, 'name'>): Promis
   });
 }
 
+/** 服务端 409 双算守卫的统一出路（桌面/移动共用，C3/I3 收敛自 Plan/Orders/OrderDetail/移动两页）：
+ *  首跳一律不带 force；收到 needForce 时经 confirm 确认，用户坚持才带 force 重试。
+ *  force 只能由服务端 409 触发——本地快照的 bought 判定不是仲裁（多端场景会过期）。
+ *  返回 null = 用户放弃；其余错误原样抛出由调用方 toast。
+ *  「重复计入」文案匹配仅作契约漂移兜底（与 Plan.confirmBuy 既有做法一致）。 */
+export async function submitWithForceGuard<T>(
+  submit: (force: boolean) => Promise<T>,
+  confirm: () => Promise<boolean>,
+): Promise<T | null> {
+  try {
+    return await submit(false);
+  } catch (e) {
+    const err = e as Error & { needForce?: boolean };
+    if (!err.needForce && !err.message.includes('重复计入')) throw e;
+    if (!(await confirm())) return null;
+    return submit(true);
+  }
+}
+
 // ===== 软删除 + 撤销的通用流程 =====
 
 interface UndoableOpts {

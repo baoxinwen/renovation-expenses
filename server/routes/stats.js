@@ -35,7 +35,9 @@ export default async function (app) {
       WHERE s.deleted = 0 AND EXISTS (SELECT 1 FROM items i WHERE i.section_id = s.id AND i.deleted = 0)
       ORDER BY s.sort_order, s.id`).all();
 
-    // 月度趋势 = 真实现金流：订单付款（含退款负数）+ 已买项支出（按购买日期）
+    // 月度趋势 = 真实现金流：订单付款（含退款负数）+ 已买项支出（按购买日期）。
+    // 已买金额口径与 itemActualSQL 一致：实付优先，未登记回退数量×单价（I1——
+    // 此前两处硬编码 quantity*unit_price，抹零/打包价项目与「实际已花」同屏两套口径）
     // 口径约定：挂在软删项目上的订单付款不计（与"实际已花"合计一致，恢复项目后自动回来）
     const byMonth = db.prepare(`
       SELECT month, ROUND(SUM(amount), 2) AS amount FROM (
@@ -45,7 +47,8 @@ export default async function (app) {
         LEFT JOIN items di ON di.id = o.item_id
         WHERE o.deleted = 0 AND (o.item_id IS NULL OR di.deleted = 0)
         UNION ALL
-        SELECT substr(bought_date, 1, 7) AS month, quantity * unit_price AS amount
+        SELECT substr(bought_date, 1, 7) AS month,
+               COALESCE(paid_amount, quantity * unit_price) AS amount
         FROM items WHERE deleted = 0 AND bought = 1 AND bought_date IS NOT NULL
       ) GROUP BY month ORDER BY month`).all();
 
@@ -63,7 +66,8 @@ export default async function (app) {
         LEFT JOIN items di ON di.id = o.item_id
         WHERE o.deleted = 0 AND (o.item_id IS NULL OR di.deleted = 0)
         UNION ALL
-        SELECT bought_date AS date, quantity * unit_price AS amount
+        SELECT bought_date AS date,
+               COALESCE(paid_amount, quantity * unit_price) AS amount
         FROM items WHERE deleted = 0 AND bought = 1 AND bought_date IS NOT NULL
       ) GROUP BY date ORDER BY date`).all();
 

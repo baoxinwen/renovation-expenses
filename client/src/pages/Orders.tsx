@@ -6,7 +6,7 @@ import { api } from '../api';
 import type { Order, OrderFormValues, Section } from '../api';
 import { fmtMoney } from '../format';
 import { confirmAsync } from '../utils/confirm';
-import { confirmOrderOnBoughtItem, undoableDelete, unpaidOf } from '../utils/domain';
+import { confirmOrderOnBoughtItem, undoableDelete, unpaidOf, submitWithForceGuard } from '../utils/domain';
 import { useIsMobile } from '../hooks/useIsMobile';
 import WoodProgress from '../components/WoodProgress';
 import { toast } from 'sonner';
@@ -69,9 +69,6 @@ export default function Orders() {
     sections.flatMap((s) => s.items ?? []).find((it) => it.id === id);
 
   const createOrder = async (values: OrderFormValues, files: File[]) => {
-    // 双算校验：挂到已勾「已买」的项目会重复计入实际（服务端有 409 守卫，确认后带 force）
-    const target = values.item_id ? findItem(values.item_id) : null;
-    if (target?.bought && !(await confirmOrderOnBoughtItem(target))) return;
     // 一次付清金额超出总额（用户手动改大）时确认
     if (values.paid_now && values.paid_now.amount > values.total_amount) {
       const ok = await confirmAsync({
@@ -94,30 +91,23 @@ export default function Orders() {
       toast.success(values.paid_now ? '购买已记录（订单+付款+票据）' : '订单已创建');
       setModalOpen(false);
       nav(`/orders/${order.id}`);
+      return order;
     };
     setSaving(true);
     try {
-      await submit(target?.bought === 1);
+      // force 只由服务端 409 触发（submitWithForceGuard 统一链路）：本地快照的
+      // bought 判定不作仲裁，多端场景会过期；确认文案取最新项目名
+      await submitWithForceGuard(submit, async () => {
+        let name = values.item_id ? findItem(values.item_id)?.name : undefined;
+        if (!name && values.item_id) {
+          try {
+            name = (await api.getPlan()).sections.flatMap((s) => s.items ?? []).find((it) => it.id === values.item_id)?.name;
+          } catch { /* 拿不到最新清单就用兜底文案 */ }
+        }
+        return confirmOrderOnBoughtItem({ name: name ?? '该项目' });
+      });
     } catch (e) {
-      const err = e as Error & { needForce?: boolean };
-      if (!err.needForce) {
-        toast.error(err.message);
-        return;
-      }
-      // 服务端守卫兜底：本地 sections 是挂载时的快照，多端场景可能已过期——
-      // 取最新项目名确认后带 force 重试（复用 Plan 页的 409→确认→force 链路）
-      let name = target?.name;
-      if (!name && values.item_id) {
-        try {
-          name = (await api.getPlan()).sections.flatMap((s) => s.items ?? []).find((it) => it.id === values.item_id)?.name;
-        } catch { /* 拿不到最新清单就用兜底文案 */ }
-      }
-      if (!(await confirmOrderOnBoughtItem({ name: name ?? '该项目' }))) return;
-      try {
-        await submit(true);
-      } catch (e2) {
-        toast.error((e2 as Error).message);
-      }
+      toast.error((e as Error).message);
     } finally {
       setSaving(false);
     }
