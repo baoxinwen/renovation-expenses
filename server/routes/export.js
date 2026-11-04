@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 import { ZipArchive } from 'archiver';
@@ -279,6 +280,27 @@ export default async function (app) {
     const label = orderId ? safe(existing[0].title) : '全部订单';
     reply.header('Content-Type', 'application/zip');
     reply.header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(`票据_${label}.zip`)}`);
+    return reply.send(archive);
+  });
+
+  // ===== 全量备份：数据库一致性快照 + 票据 zip（设置页一键下载；恢复端点的对偶） =====
+  app.get('/export/backup', async (req, reply) => {
+    const now = new Date();
+    const p2 = (n) => String(n).padStart(2, '0');
+    const name = `renovation-backup-${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())}-${p2(now.getHours())}${p2(now.getMinutes())}.zip`;
+    // db.backup() 官方在线快照 API：WAL 中未合并事务也会进入快照（直接读文件会丢）
+    const snapshot = path.join(os.tmpdir(), `backup-snap-${process.pid}-${Date.now()}.db`);
+    await db.backup(snapshot);
+
+    const archive = new ZipArchive({ store: true });
+    archive.on('error', (err) => req.log.error({ err }, '备份打包失败'));
+    archive.on('end', () => fs.unlink(snapshot, () => {}));
+    archive.file(snapshot, { name: 'database.db' });
+    archive.directory(UPLOAD_DIR, 'uploads');
+    finalizeArchive(archive, req.log);
+
+    reply.header('Content-Type', 'application/zip');
+    reply.header('Content-Disposition', `attachment; filename="${name}"`);
     return reply.send(archive);
   });
 }

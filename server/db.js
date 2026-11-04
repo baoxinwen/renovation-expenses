@@ -24,11 +24,20 @@ if (!fs.existsSync(DB_FILE) && fs.existsSync(LEGACY_DB_FILE)) {
   }
 }
 
-const db = new Database(DB_FILE);
+let db = new Database(DB_FILE);
 // WAL 需要 mmap 共享内存，Windows Docker Desktop 的 bind mount 不支持（IOERR_SHMOPEN），
 // 容器环境通过 SQLITE_JOURNAL_MODE=DELETE 规避；裸机默认 WAL（读并发更好）
 db.pragma(`journal_mode = ${process.env.SQLITE_JOURNAL_MODE || 'WAL'}`);
 db.pragma('foreign_keys = ON');
+
+// 恢复备份用：关闭连接 → 替换文件后重开（ESM live binding，各模块 import 的 db 自动指向新实例）。
+// 仅限恢复替换链调用；常规业务不得重开连接。
+export function reopenDatabase() {
+  db.close();
+  db = new Database(DB_FILE);
+  db.pragma(`journal_mode = ${process.env.SQLITE_JOURNAL_MODE || 'WAL'}`);
+  db.pragma('foreign_keys = ON');
+}
 
 // 核心模型：板块(section) → 预算项目(item) → 订单(order,可选挂项目) → 付款(payment) → 票据(receipt)
 db.exec(`
@@ -163,6 +172,7 @@ export const LIMITS = {
   RECEIPT_MAX_FILES: 10,  // 单次张数
   IMPORT_FILE_MB: 20,     // Excel 文件
   IMPORT_MAX_ROWS: 3000,  // 工作表行数
+  BACKUP_MAX_MB: 300,     // 恢复上传的备份 zip 上限（票据多时体积大）
 };
 
 // ===== 共享查询片段（口径唯一出处，勿在各路由复制） =====
@@ -207,4 +217,7 @@ export function escapeLike(q) {
   return String(q).replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
-export default db;
+// 注意：必须用绑定形式的 default export（live binding）——reopenDatabase 重赋值 db 后，
+// 各模块 import 到的 db 才会指向新实例；`export default db`（表达式形式）会在模块求值时
+// 固定为旧实例，恢复后全部查询 500。
+export { db as default };

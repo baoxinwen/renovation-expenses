@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Button, Card, InputNumber, Radio, Space, Typography } from 'antd';
+import { Alert, Button, Card, InputNumber, Modal, Radio, Space, Typography, Upload } from 'antd';
+import { CloudDownloadOutlined, QuestionCircleOutlined, UploadOutlined } from '@ant-design/icons';
 import { toast } from 'sonner';
 import { api } from '../api';
 import { fmtMoney } from '../format';
@@ -13,6 +14,9 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [planTotal, setPlanTotal] = useState(0);
   const [actualTotal, setActualTotal] = useState(0);
+  const [downloading, setDownloading] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [itemCount, setItemCount] = useState(0);
 
   useEffect(() => {
     Promise.all([api.getSettings(), api.getSummary()])
@@ -21,6 +25,7 @@ export default function Settings() {
         setBudgetInput(s.total_budget);
         setPlanTotal(sum.plan_total);
         setActualTotal(sum.actual_total);
+        setItemCount(sum.sections.reduce((n, sec) => n + (sec.item_count ?? 0), 0));
       })
       .catch((e) => toast.error((e as Error).message));
   }, []);
@@ -37,6 +42,57 @@ export default function Settings() {
     } finally {
       setSaving(false);
     }
+  };
+
+  // 一键备份：流式下载（数据库 + 票据 zip），loading 防重复点击
+  const downloadBackup = async () => {
+    setDownloading(true);
+    try {
+      const res = await fetch('/api/export/backup');
+      if (!res.ok) throw new Error(`备份失败（${res.status}）`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'renovation-backup.zip';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('备份已下载');
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  // 恢复：上传备份 zip 全量替换当前数据（不可逆），前端红色确认列出当前规模
+  const restoreBackup = async (file: File) => {
+    Modal.confirm({
+      title: '确认恢复备份？',
+      icon: <QuestionCircleOutlined style={{ color: 'var(--clay)' }} />,
+      content: (
+        <Typography.Paragraph type="danger" style={{ marginBottom: 0 }}>
+          将覆盖当前全部数据（{itemCount} 个项目），此操作不可撤销。恢复成功后页面会自动刷新。
+        </Typography.Paragraph>
+      ),
+      okText: '恢复并覆盖',
+      okButtonProps: { danger: true, loading: restoring },
+      onOk: async () => {
+        setRestoring(true);
+        try {
+          const fd = new FormData();
+          fd.append('file', file);
+          const res = await fetch('/api/restore/backup', { method: 'POST', body: fd });
+          const json = await res.json().catch(() => null);
+          if (!res.ok) throw new Error(json?.message ?? `恢复失败（${res.status}）`);
+          toast.success('恢复成功，正在刷新页面');
+          setTimeout(() => window.location.reload(), 600);
+        } catch (e) {
+          setRestoring(false);
+          toast.error((e as Error).message);
+        }
+      },
+    });
   };
 
   return (
@@ -80,24 +136,20 @@ export default function Settings() {
       </Card>
 
       <Card title="数据备份">
-        <Typography.Paragraph>
-          全部数据（数据库 + 票据照片）保存在程序目录的 <Typography.Text code>data</Typography.Text> 文件夹中。
-          备份方法：关闭账本后，把整个 <Typography.Text code>data</Typography.Text> 文件夹复制到移动硬盘或网盘；
-          恢复时用备份覆盖回来即可。也可以在预算清单页导出 Excel 作为轻量备份（不含照片、付款）。
-        </Typography.Paragraph>
-      </Card>
-
-      <Card title="记账口径说明">
-        <Typography.Paragraph>
-          <Typography.Text strong>预算</Typography.Text>：清单里每项 数量 × 单价，板块与全案自动小计、总计；与「预算目标」对比得出超支/结余。
-        </Typography.Paragraph>
-        <Typography.Paragraph>
-          <Typography.Text strong>实际</Typography.Text>：小件买完把清单里的单价改成成交价并勾「已买」（总价计入实际）；
-          定金/尾款等多次付款的大件用「订单」挂在项目下，付款计入项目实际。退货退款在付款里记负数自动冲抵。
-        </Typography.Paragraph>
-        <Typography.Paragraph type="secondary">
-          注意：同一项目避免既勾「已买」又挂订单付款，否则会重复计入实际合计。
-        </Typography.Paragraph>
+        <Space wrap>
+          <Button icon={<CloudDownloadOutlined />} loading={downloading} onClick={downloadBackup}>
+            立即备份
+          </Button>
+          <Upload accept=".zip" showUploadList={false} beforeUpload={(file) => { restoreBackup(file); return false; }}>
+            <Button icon={<UploadOutlined />} loading={restoring}>恢复备份</Button>
+          </Upload>
+        </Space>
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginTop: 12 }}
+          message="恢复会用备份覆盖当前全部数据（含票据），不可撤销。"
+        />
       </Card>
     </Space>
   );

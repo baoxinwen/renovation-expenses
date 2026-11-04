@@ -1,5 +1,9 @@
-import db, { LIMITS } from '../db.js';
+import Database from 'better-sqlite3';
+import db, { reopenDatabase, LIMITS, DATA_DIR, UPLOAD_DIR } from '../db.js';
 import ExcelJS from 'exceljs';
+import path from 'node:path';
+import fs from 'node:fs';
+import { parseZip } from '../zipParse.js';
 
 // 在工作表中定位表头行与关键列（项目名称/规格/单位/数量/单价/实际支付/备注）
 function findHeader(ws) {
@@ -231,5 +235,78 @@ export default async function (app) {
       items: itemCount,
       target: parsed.target,
     };
+  });
+
+  // ===== 恢复备份：上传 zip 全量替换当前数据（四步安全链，spec F2） =====
+  app.post('/restore/backup', async (req, reply) => {
+    const file = await req.file({ limits: { fileSize: LIMITS.BACKUP_MAX_MB * 1024 * 1024 } });
+    if (!file || file.fieldname !== 'file') {
+      return reply.status(400).send({ message: '请上传备份文件（字段名 file）' });
+    }
+    if (file.truncated) {
+      return reply.status(400).send({ message: `备份文件超过 ${LIMITS.BACKUP_MAX_MB}MB 上限` });
+    }
+    const buf = await file.toBuffer();
+
+    // 第 1 步：解析与条目校验（只接受本系统备份格式；拒绝路径穿越条目）
+    let entries;
+    try {
+      entries = parseZip(buf);
+    } catch {
+      return reply.status(400).send({ message: '备份文件解析失败，请确认是本系统导出的备份' });
+    }
+    if (entries.some((e) => e.name.includes('..') || path.isAbsolute(e.name))) {
+      return reply.status(400).send({ message: '备份包含非法路径条目，已拒绝' });
+    }
+    const dbEntry = entries.find((e) => e.name === 'database.db');
+    if (!dbEntry) {
+      return reply.status(400).send({ message: '备份缺少 database.db，请确认是本系统导出的备份' });
+    }
+    const uploadEntries = entries.filter((e) => e.name.startsWith('uploads/') && !e.name.endsWith('/'));
+
+    // 第 2 步：校验库完整性（临时文件打开 quick_check + 关键表存在）
+    const checkPath = path.join(DATA_DIR, `.restore-check-${Date.now()}.db`);
+    fs.writeFileSync(checkPath, dbEntry.data);
+    let checkDb;
+    try {
+      checkDb = new Database(checkPath);
+      const quick = checkDb.pragma('quick_check', { simple: true });
+      if (quick !== 'ok') throw new Error('数据库完整性校验未通过');
+      const tables = checkDb.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map((r) => r.name);
+      for (const t of ['settings', 'sections', 'items', 'orders', 'payments', 'receipts']) {
+        if (!tables.includes(t)) throw new Error(`缺少关键表：${t}`);
+      }
+    } catch (e) {
+      checkDb?.close();
+      fs.rmSync(checkPath, { force: true });
+      return reply.status(400).send({ message: `备份校验失败：${e.message}` });
+    }
+    checkDb.close();
+
+    // 第 3/4 步：原子替换链（回滚点 → 关连接 → 换库清 WAL → 重开 → 票据目录替换）。
+    // 任一步失败：用回滚点覆盖回库文件并重开连接（原数据无损），再向上抛错。
+    const dbFile = path.join(DATA_DIR, 'renovation-expenses.db');
+    const rollback = dbFile + '.pre-restore';
+    try {
+      fs.copyFileSync(dbFile, rollback);
+      db.close();
+      fs.renameSync(checkPath, dbFile);
+      for (const ext of ['-wal', '-shm']) fs.rmSync(dbFile + ext, { force: true });
+      reopenDatabase();
+      fs.rmSync(UPLOAD_DIR, { recursive: true, force: true });
+      fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+      uploadEntries.forEach((e) => {
+        fs.writeFileSync(path.join(UPLOAD_DIR, path.basename(e.name)), e.data);
+      });
+    } catch (e) {
+      req.log.error({ err: e }, '恢复替换链失败，已用回滚点还原');
+      try {
+        fs.copyFileSync(rollback, dbFile);
+        for (const ext of ['-wal', '-shm']) fs.rmSync(dbFile + ext, { force: true });
+        reopenDatabase();
+      } catch { /* 还原失败时保留现场供人工排查 */ }
+      return reply.status(500).send({ message: '恢复失败，原数据已还原，请重试或人工排查' });
+    }
+    return { ok: true, restoredAt: new Date().toISOString() };
   });
 }
