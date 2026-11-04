@@ -92,6 +92,14 @@ try {
   check('软删订单的付款 404', r.status === 404, `status=${r.status}`);
   r = await req('PUT', '/payments/999999', { amount: 1 });
   check('不存在的付款 404', r.status === 404, `status=${r.status}`);
+
+  console.log('== M4 订单 item_id 非法值 ==');
+  r = await req('POST', '/orders', { title: '非法挂接', total_amount: 10, item_id: 'abc' });
+  check('POST item_id 非数字 400（不再误导为「项目不存在」）', r.status === 400, `status=${r.status} ${JSON.stringify(r.json)}`);
+  r = await req('PUT', `/orders/${order.json.id}`, { item_id: 'abc' });
+  check('PUT item_id 非数字 400', r.status === 400, `status=${r.status}`);
+  r = await req('GET', `/orders/${order.json.id}`);
+  check('非法值未落库（挂接不变）', r.json?.item_id === item.json.id, JSON.stringify({ item_id: r.json?.item_id }));
 } finally {
   cleanup();
 }

@@ -128,6 +128,24 @@ try {
     r = await req('DELETE', `/items/${legacyPlanItem.id}`);
     check('恢复后软删路径可用（deleted_at 列在）', r.status === 200, `status=${r.status}`);
   }
+
+  console.log('== M2/M3 板块软删改名边界 ==');
+  // M2：存量板块名恰为「原名#已删<本id>」时删板块 → 软删改名撞 UNIQUE → 400 而非 500
+  const m2a = await req('POST', '/sections', { name: '撞名源板块' });
+  const m2b = await req('POST', '/sections', { name: `撞名源板块#已删${m2a.json.id}` });
+  check('造数：重名形态板块就位', m2a.status === 200 && m2b.status === 200,
+    `a=${m2a.status} b=${m2b.status} ${JSON.stringify(m2b.json)}`);
+  r = await req('DELETE', `/sections/${m2a.json.id}`);
+  check('M2 软删改名撞 UNIQUE 回 400（而非 500）', r.status === 400, `status=${r.status} ${JSON.stringify(r.json)}`);
+
+  // M3：原名含 #已删<同id> 子串 → 恢复只剥结尾后缀，原名完好不剥错位
+  const m3 = await req('POST', '/sections', { name: '错位占位' });
+  const m3Original = `前缀#已删${m3.json.id}后缀`;
+  await req('PUT', `/sections/${m3.json.id}`, { name: m3Original });
+  await req('DELETE', `/sections/${m3.json.id}`); // 软删改名 → `${m3Original}#已删${id}`
+  r = await req('POST', `/sections/${m3.json.id}/restore`);
+  check('M3 恢复剥结尾后缀（原名含同款子串不剥错位）',
+    r.status === 200 && r.json?.name === m3Original, `name=${r.json?.name}`);
 } finally {
   cleanup();
 }

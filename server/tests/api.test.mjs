@@ -520,6 +520,13 @@ try {
     hr.end();
   });
   check('公网 IPv6 Host 仍被拒', v6Bad === 403, `status=${v6Bad}`);
+
+  console.log('== M1 import mode 显式非法值 ==');
+  // 放在测试链末尾：修复回退时 appned 会被静默按 replace 执行清空清单，
+  // 此时本文件已无比后续数据依赖的断言
+  r = await req('POST', '/plan/import?mode=appned', undefined);
+  check('mode 拼错回 400（不再静默按 replace 清空）',
+    r.status === 400 && !r.json?.ok, `status=${r.status} resp=${JSON.stringify(r.json)}`);
 } catch (e) {
   failed++;
   console.error('测试执行异常:', e);

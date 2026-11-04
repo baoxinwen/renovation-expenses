@@ -102,7 +102,10 @@ export default async function (app) {
     if (!title) return reply.status(400).send({ message: '订单名称不能为空' });
     const total = Number(b.total_amount);
     if (!Number.isFinite(total) || total <= 0) return reply.status(400).send({ message: '订单总额必须是正数' });
-    const itemId = b.item_id ? Number(b.item_id) : null;
+    // 非法 item_id 直接 400（M4，对照 GET /orders 的 safeId 先例）：NaN 绑定会
+    // 按 NULL 不命中，报出误导性的「关联的预算项目不存在」
+    const itemId = b.item_id ? safeId(b.item_id) : null;
+    if (b.item_id && itemId === null) return reply.status(400).send({ message: 'item_id 无效' });
     if (itemId != null) {
       const targetItem = db.prepare('SELECT id, name, bought FROM items WHERE id = ? AND deleted = 0').get(itemId);
       if (!targetItem) return reply.status(400).send({ message: '关联的预算项目不存在（或已删除）' });
@@ -168,7 +171,8 @@ export default async function (app) {
     if (!Number.isFinite(total) || total <= 0) return reply.status(400).send({ message: '订单总额必须是正数' });
     const status = b.status !== undefined ? String(b.status) : order.status;
     if (!['open', 'closed'].includes(status)) return reply.status(400).send({ message: '状态不合法' });
-    const itemId = 'item_id' in b ? (b.item_id ? Number(b.item_id) : null) : order.item_id;
+    const itemId = 'item_id' in b ? (b.item_id ? safeId(b.item_id) : null) : order.item_id;
+    if ('item_id' in b && b.item_id && itemId === null) return reply.status(400).send({ message: 'item_id 无效' });
     if (itemId != null) {
       const targetItem = db.prepare('SELECT id, name, bought FROM items WHERE id = ? AND deleted = 0').get(itemId);
       if (!targetItem) return reply.status(400).send({ message: '关联的预算项目不存在（或已删除）' });

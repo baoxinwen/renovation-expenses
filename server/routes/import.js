@@ -161,17 +161,33 @@ function parseWorkbook(wb) {
 
 export default async function (app) {
   app.post('/plan/import', async (req, reply) => {
-    const mode = (req.query.mode === 'append') ? 'append' : 'replace';
+    // mode 只认 append / replace（缺省 replace 兼容不带参调用）；显式拼错（如
+    // appned）回 400 而不是静默按破坏性 replace 清空清单（M1）
+    const rawMode = req.query.mode;
+    if (rawMode !== undefined && rawMode !== '' && rawMode !== 'append' && rawMode !== 'replace') {
+      return reply.status(400).send({ message: 'mode 仅支持 replace 或 append' });
+    }
+    const mode = rawMode === 'append' ? 'append' : 'replace';
     const file = await req.file({ limits: { fileSize: LIMITS.IMPORT_FILE_MB * 1024 * 1024 } });
+    // 早退后必须排干 multipart 剩余部分再回包（M5，对照 orders.js 票据上传的
+    // drainRest 标准）：大文件在途时不排干，客户端只见网络错误收不到中文提示
+    const drainRest = async () => {
+      try {
+        for await (const _ of req.parts()) { void _; }
+      } catch { /* 客户端已断开等情况，排干尽力而为 */ }
+    };
     if (!file || file.fieldname !== 'file') {
+      await drainRest();
       return reply.status(400).send({ message: '请上传 Excel 文件（字段名 file）' });
     }
     const ext = file.filename.toLowerCase();
     if (!ext.endsWith('.xlsx') && !ext.endsWith('.xlsm')) {
+      await drainRest();
       return reply.status(400).send({ message: '只支持 .xlsx / .xlsm 文件' });
     }
     const buf = await file.toBuffer();
     if (file.truncated) {
+      await drainRest();
       return reply.status(400).send({ message: `文件超过 ${LIMITS.IMPORT_FILE_MB}MB 限制，请检查是否传对了文件` });
     }
     const wb = new ExcelJS.Workbook();

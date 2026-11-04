@@ -24,6 +24,13 @@ function validNum(v, { allowZero = true } = {}) {
   return n;
 }
 
+// 只剥结尾的 #已删<id> 后缀（M3）：原名本身含 #已删<同id> 子串时，
+// String.replace 的非锚定替换会剥掉错位的那一处，恢复出错位的板块名
+function stripDeletedSuffix(name, id) {
+  const suffix = `#已删${id}`;
+  return name.endsWith(suffix) ? name.slice(0, -suffix.length) : name;
+}
+
 export default async function (app) {
   // ===== 整张清单（含板块/项目两级聚合，不含软删项） =====
   app.get('/plan', async () => {
@@ -104,7 +111,13 @@ export default async function (app) {
       db.prepare('UPDATE items SET deleted = 1, deleted_at = ? WHERE section_id = ? AND deleted = 0')
         .run(deletedAt, id);
     });
-    rename();
+    // 软删改名可能撞 UNIQUE（存量板块名恰为「原名#已删<本id>」，M2）：
+    // 与 POST/PUT 的唯一冲突口径一致回 400，而不是裸 500
+    try {
+      rename();
+    } catch (e) {
+      return uniqueError(e, reply, '板块名称已存在');
+    }
     return { ok: true, deleted: true };
   });
 
@@ -112,7 +125,7 @@ export default async function (app) {
     const id = Number(req.params.id);
     const sec = db.prepare('SELECT * FROM sections WHERE id = ? AND deleted = 1').get(id);
     if (!sec) return reply.status(404).send({ message: '没有可恢复的板块' });
-    const originalName = sec.name.replace(`#已删${id}`, '');
+    const originalName = stripDeletedSuffix(sec.name, id);
     const nameTaken = db.prepare('SELECT COUNT(*) AS c FROM sections WHERE name = ? AND id != ?').get(originalName, id).c > 0;
     const restore = db.transaction(() => {
       db.prepare('UPDATE sections SET deleted = 0, deleted_at = NULL, name = ? WHERE id = ?')
@@ -242,7 +255,7 @@ export default async function (app) {
     const sec = db.prepare('SELECT * FROM sections WHERE id = ? AND deleted = 1').get(item.section_id);
     const restore = db.transaction(() => {
       if (sec) {
-        const originalName = sec.name.replace(`#已删${sec.id}`, '');
+        const originalName = stripDeletedSuffix(sec.name, sec.id);
         const taken = db.prepare('SELECT COUNT(*) AS c FROM sections WHERE name = ? AND id != ?').get(originalName, sec.id).c > 0;
         db.prepare('UPDATE sections SET deleted = 0, deleted_at = NULL, name = ? WHERE id = ?')
           .run(taken ? `${originalName}（恢复）` : originalName, sec.id);
