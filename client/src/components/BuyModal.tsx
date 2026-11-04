@@ -3,6 +3,7 @@ import { Button, DatePicker, Form, InputNumber, Modal } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import type { Item } from '../api';
 import { budgetDelta, formatDelta } from '../utils/budgetCalc';
+import { paidPrefill } from '../utils/domain';
 
 interface Values {
   price: number;
@@ -33,7 +34,7 @@ export default function BuyModal({ item, open, onClose, onConfirm, onUnmark, con
   useEffect(() => {
     if (open && item) {
       form.setFieldsValue({
-        price: item.paid_amount ?? budgetTotal,
+        price: paidPrefill(item),
         date: dayjs(item.bought_date || new Date()),
       });
     }

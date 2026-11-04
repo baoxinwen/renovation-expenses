@@ -48,10 +48,11 @@ function ReceiptBlock({ p, onRemoveReceipt, onChanged }: {
           type="text"
           size="small"
           danger
+          title={`删除票据「${r.original_name}」`}
           onClick={() => onRemoveReceipt(r)}
           style={{ padding: 0 }}
         >
-          删除「{r.original_name}」
+          删除
         </Button>
       ))}
       <Upload

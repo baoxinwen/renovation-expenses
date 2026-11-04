@@ -7,7 +7,7 @@ import type { Item, Order, Section } from '../../api';
 import { fmtMoney, PAY_METHODS } from '../../format';
 import ReceiptUploader from '../../components/ReceiptUploader';
 import { confirmAsync } from '../../utils/confirm';
-import { confirmDoubleCount, confirmOrderOnBoughtItem, submitWithForceGuard, submitPaymentWithGuard } from '../../utils/domain';
+import { confirmDoubleCount, confirmOrderOnBoughtItem, submitWithForceGuard, submitPaymentWithGuard, paidPrefill } from '../../utils/domain';
 
 type Mode = 'pay' | 'bought' | 'new';
 
@@ -266,9 +266,7 @@ export default function MobileRecord() {
                   // 预填与桌面 BuyModal 同语义：已买项填原实付与原购买日期（修正
                   // 场景——只预填金额会让日期被静默覆盖成当天）；未买项填数量×单价
                   if (it) boughtForm.setFieldsValue({
-                    price: it.bought
-                      ? (it.paid_amount ?? Number((it.quantity * it.unit_price).toFixed(2)))
-                      : Number((it.quantity * it.unit_price).toFixed(2)),
+                    price: paidPrefill(it),
                     ...(it.bought && it.bought_date ? { date: dayjs(it.bought_date) } : {}),
                   });
                 }}

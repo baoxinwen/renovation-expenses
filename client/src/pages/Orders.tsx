@@ -292,6 +292,7 @@ export default function Orders() {
         rowKey="id"
         loading={loading}
         dataSource={rows}
+        scroll={{ x: 980 }}
         onRow={(r) => ({ onClick: () => nav(`/orders/${r.id}`), style: { cursor: 'pointer' } })}
         pagination={rows.length > 20 ? { pageSize: 20, showTotal: (t) => `共 ${t} 笔订单` } : false}
         columns={[

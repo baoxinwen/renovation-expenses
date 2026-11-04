@@ -68,7 +68,8 @@ export default function Settings() {
       a.href = url;
       a.download = 'renovation-backup.zip';
       a.click();
-      URL.revokeObjectURL(url);
+      // 延迟释放：click() 同步 revoke 会中断个别浏览器的下载启动（r2 M7）
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
       toast.success('备份已下载');
     } catch (e) {
       toast.error((e as Error).message);
@@ -88,12 +89,13 @@ export default function Settings() {
         </Typography.Paragraph>
       ),
       okText: '恢复并覆盖',
-      okButtonProps: { danger: true, loading: restoring },
+      okButtonProps: { danger: true },
       onOk: async () => {
         setRestoring(true);
         try {
           const fd = new FormData();
           fd.append('file', file);
+          // 大文件上传不设 AbortSignal 超时（与下载同理由），spinner + 页面提示兜底
           const res = await fetch('/api/restore/backup', { method: 'POST', body: fd });
           const json = await res.json().catch(() => null);
           if (!res.ok) throw new Error(json?.message ?? `恢复失败（${res.status}）`);

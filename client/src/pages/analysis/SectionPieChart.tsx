@@ -3,7 +3,7 @@ import { Segmented, Space } from 'antd';
 import ReactECharts from 'echarts-for-react';
 import type { Charts } from '../../api';
 import { fmtMoney } from '../../format';
-import { pieData } from '../../utils/planCalc';
+import { pieData, truncateLabel } from '../../utils/planCalc';
 import { ChartCard, useChartTheme } from './shared';
 
 // 板块分布环形图：预算/实际双口径切换，中心显示总额（spec 功能 A，数据源 by_section）
@@ -30,7 +30,7 @@ export default function SectionPieChart({ charts }: { charts: Charts | null }) {
       radius: ['45%', '68%'],
       center: ['50%', '46%'],
       data,
-      label: { formatter: '{b}\n{d}%' },
+      label: { formatter: (p: { name: string; percent: number }) => `${truncateLabel(p.name)}\n{d}%` },
     }],
   }), [data, total, mode]);
 

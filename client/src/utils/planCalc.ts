@@ -19,6 +19,12 @@ export function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;');
 }
 
+/** 轴/饼图标签截断（r2 M11）：长项目名在窄屏 canvas 上被静默裁切，主动按
+ *  宽度截断加省略号；tooltip 用全文，截断只影响轴标签。 */
+export function truncateLabel(s: string, max = 8): string {
+  return s.length > max ? `${s.slice(0, max)}…` : s;
+}
+
 /** 执行率语义色板（全站 sage=健康 / amber=预警 / clay=超支；neutral/line 供热力图等场景）。
  *  echarts 走 canvas 不识别 CSS 变量，必须按亮暗取具体色值；
  *  paletteFor 每次返回新对象，消费侧必须 memo（旧 Analysis 既有教训） */

@@ -3,6 +3,7 @@ import ReactECharts from 'echarts-for-react';
 import type { Charts } from '../../api';
 import { fmtMoney } from '../../format';
 import { ChartCard, executionColor, fmtAxisWan, useChartTheme } from './shared';
+import { truncateLabel } from '../../utils/planCalc';
 
 // 板块预算 vs 实际横向分组条形图（spec 功能 B，数据源 by_section）：
 // 预算浅木 / 实际深木全站色板；实际条端执行率标签按阈值着色（预算 0 显示「—」，与汇总表口径一致）
@@ -16,7 +17,7 @@ export default function SectionCompareChart({ charts }: { charts: Charts | null 
     legend: { top: 0 },
     grid: { left: isMobile ? 80 : 90, right: isMobile ? 40 : 64, top: 30, bottom: 30 },
     xAxis: { type: 'value', axisLabel: { formatter: fmtAxisWan } },
-    yAxis: { type: 'category', inverse: true, data: sections.map((s) => s.name) },
+    yAxis: { type: 'category', inverse: true, data: sections.map((s) => truncateLabel(s.name)) },
     series: [
       {
         name: '预算', type: 'bar', barMaxWidth: 14,

@@ -14,6 +14,13 @@ export const unpaidOf = (o: Order) => Math.max(0, o.total_amount - (o.paid ?? 0)
 /** 双算风险：未勾已买但项目下已有订单付款，再勾「已买」会重复计入实际 */
 export const doubleCountRisk = (it: Item) => !it.bought && it.order_paid > 0;
 
+/** 购买登记的实付预填值（r2 M18：三处重复且正是「数量>1 预填错账」bug 的
+ *  位置——已买填原实付（修正语义，回退数量×单价），未买填预算合计。 */
+export const paidPrefill = (it: Pick<Item, 'bought' | 'paid_amount' | 'quantity' | 'unit_price'>) =>
+  it.bought
+    ? (it.paid_amount ?? Number((it.quantity * it.unit_price).toFixed(2)))
+    : Number((it.quantity * it.unit_price).toFixed(2));
+
 /** 勾「已买」前的双算确认（桌面/移动共用文案与逻辑）；返回是否继续 */
 export async function confirmDoubleCount(item: Item): Promise<boolean> {
   return confirmAsync({

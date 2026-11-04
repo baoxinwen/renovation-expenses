@@ -1,6 +1,7 @@
 // planCalc（清单/统计可测纯逻辑）单元测试
 import { describe, it, expect } from 'vitest';
 import { fmtAxisWan, executionColor, pieData, heatLevels, matchSearch, escapeHtml } from '../src/utils/planCalc';
+import { paidPrefill } from '../src/utils/domain';
 
 describe('fmtAxisWan（万元缩写）', () => {
   it('万级缩写', () => expect(fmtAxisWan(20000)).toBe('2万'));
@@ -87,5 +88,21 @@ describe('escapeHtml（tooltip 注入防护）', () => {
   });
   it('转义后不再包含裸 <', () => {
     expect(escapeHtml('<script>').includes('<')).toBe(false);
+  });
+});
+
+describe('paidPrefill（购买登记实付预填）', () => {
+  const base = { bought: 0, paid_amount: null as number | null, quantity: 4, unit_price: 25 };
+  it('未买项预填数量×单价（数量>1 不再记错账）', () => {
+    expect(paidPrefill({ ...base })).toBe(100);
+  });
+  it('已买且登记过实付 → 预填原实付（修正语义）', () => {
+    expect(paidPrefill({ ...base, bought: 1, paid_amount: 90 })).toBe(90);
+  });
+  it('已买但实付为空 → 回退数量×单价', () => {
+    expect(paidPrefill({ ...base, bought: 1, paid_amount: null })).toBe(100);
+  });
+  it('浮点合计按两位归整', () => {
+    expect(paidPrefill({ ...base, quantity: 3, unit_price: 33.333 })).toBe(100);
   });
 });
