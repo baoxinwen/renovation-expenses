@@ -3,24 +3,28 @@ import { useNavigate } from 'react-router-dom';
 import { Button, Drawer, Space, Tag, Typography } from 'antd';
 import { toast } from 'sonner';
 import { api } from '../../api';
-import type { Item } from '../../api';
+import type { Item, OrderFormValues, Section } from '../../api';
 import { fmtMoney } from '../../format';
-import { confirmDoubleCount, submitWithForceGuard, undoableDelete } from '../../utils/domain';
+import { confirmDoubleCount, confirmOrderOnBoughtItem, submitWithForceGuard, undoableDelete } from '../../utils/domain';
+import { confirmAsync } from '../../utils/confirm';
 import BuyModal from '../../components/BuyModal';
 import ItemFormModal from '../../components/ItemFormModal';
+import OrderFormModal from '../../components/OrderFormModal';
 
 /** 项目详情抽屉（方案 A）：点卡片唯一入口，操作全部收敛在抽屉内。
- *  记买/修正实付的守卫链路与原 MobileItems 内联版完全一致（submitWithForceGuard，
+ *  记买/修正实付/建订单的守卫链路与桌面一致（submitWithForceGuard，
  *  force 只由服务端 409 触发——本地快照的双算判定不作仲裁）。 */
-export default function MobileItemDrawer({ item, open, onClose, onChanged }: {
+export default function MobileItemDrawer({ item, open, sections, onClose, onChanged }: {
   item: Item | null;
   open: boolean;
+  sections: Section[];
   onClose: () => void;
   onChanged: () => void;
 }) {
   const nav = useNavigate();
   const [buyOpen, setBuyOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [orderOpen, setOrderOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
   if (!item) return null;
@@ -58,6 +62,40 @@ export default function MobileItemDrawer({ item, open, onClose, onChanged }: {
     }
   };
 
+  // 建订单：与桌面 Orders.createOrder 同语义（超付确认/守卫/票据补传/跳详情）
+  const createOrder = async (values: OrderFormValues, files: File[]) => {
+    if (values.paid_now && values.paid_now.amount > values.total_amount) {
+      const ok = await confirmAsync({
+        title: '付款金额超过订单总额',
+        content: `总额 ${fmtMoney(values.total_amount)}，本次 ${fmtMoney(values.paid_now.amount)}。确定继续？`,
+      });
+      if (!ok) return;
+    }
+    const submit = async (force: boolean) => {
+      const order = await api.addOrder({ ...values, ...(force ? { force: true } : {}) });
+      const pay = order.payments?.[0];
+      if (pay && files.length) {
+        let fail = 0;
+        for (const f of files) {
+          try { await api.uploadReceipt(pay.id, f); } catch { fail++; }
+        }
+        if (fail) toast.warning(`${fail} 张票据未上传成功，可在订单详情里补传`);
+      }
+      toast.success(values.paid_now ? '购买已记录' : '订单已创建');
+      setOrderOpen(false);
+      nav(`/orders/${order.id}`);
+      return order;
+    };
+    setSaving(true);
+    try {
+      await submitWithForceGuard(submit, () => confirmOrderOnBoughtItem({ name: item.name }));
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <Drawer placement="bottom" open={open} onClose={onClose} height="auto" styles={{ body: { paddingTop: 8 } }}>
       <Typography.Title level={5} style={{ marginTop: 0 }}>{item.name}</Typography.Title>
@@ -77,6 +115,7 @@ export default function MobileItemDrawer({ item, open, onClose, onChanged }: {
           {bought ? '修正实付' : '记为已买'}
         </Button>
         <Button size="large" block onClick={() => setEditOpen(true)}>编辑</Button>
+        <Button size="large" block onClick={() => setOrderOpen(true)}>+ 订单</Button>
         <Button danger size="large" block onClick={() => undoableDelete({
           label: item.name,
           del: () => api.deleteItem(item.id),
@@ -84,8 +123,16 @@ export default function MobileItemDrawer({ item, open, onClose, onChanged }: {
           // 软删 + 8 秒撤销条已是保护，不加二次确认（与桌面清单行删除同语义）
           onChanged: () => { onClose(); onChanged(); },
         })}>删除项目</Button>
-        {/* +订单：Task 4 在此追加 */}
+        {/* +订单挂已买项目的双算确认走 createOrder 内守卫 */}
       </Space>
+      <OrderFormModal
+        open={orderOpen}
+        sections={sections}
+        confirmLoading={saving}
+        defaultItemId={item.id}
+        onOk={createOrder}
+        onCancel={() => setOrderOpen(false)}
+      />
       <ItemFormModal
         open={editOpen}
         initial={item}
