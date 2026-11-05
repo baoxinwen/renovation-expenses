@@ -173,24 +173,28 @@ export default async function (app) {
     let filename;
 
     if (sectionId != null) {
-      // ===== 单板块导出：裁掉全案区块；付款明细仅在该板块有付款时附带 =====
+      // ===== 单板块导出：裁掉全案区块；付款明细仅在含价且该板块有付款时附带 =====
       buildBudgetSheet(wb, { sections, itemsBySection, totalBudget, actualLikeApp: 0, single: true, includePrice });
-      // 口径与全案付款 SQL 一致，仅过滤到本板块（未挂项目的付款不属于任何板块）
-      const sectionPayments = db.prepare(`
-        SELECT p.pay_date, p.amount, p.method, p.note,
-               o.title AS order_title, o.vendor,
-               i.name AS item_name, s.name AS section_name
-        FROM payments p
-        JOIN orders o ON o.id = p.order_id
-        LEFT JOIN items i ON i.id = o.item_id
-        LEFT JOIN sections s ON s.id = i.section_id
-        WHERE o.deleted = 0 AND i.section_id = ?
-        ORDER BY p.pay_date, p.id`).all(sectionId);
-      if (sectionPayments.length) {
-        buildPaymentSheet(wb, {
-          payments: sectionPayments,
-          totalSpent: sectionPayments.reduce((s, p) => s + p.amount, 0),
-        });
+      // 脱敏完整性（r3 I1）：「不含价格」承诺不外泄任何金额——付款明细表本质是
+      // 金额清单，脱敏导出时整表不附带
+      if (includePrice) {
+        // 口径与全案付款 SQL 一致，仅过滤到本板块（未挂项目的付款不属于任何板块）
+        const sectionPayments = db.prepare(`
+          SELECT p.pay_date, p.amount, p.method, p.note,
+                 o.title AS order_title, o.vendor,
+                 i.name AS item_name, s.name AS section_name
+          FROM payments p
+          JOIN orders o ON o.id = p.order_id
+          LEFT JOIN items i ON i.id = o.item_id
+          LEFT JOIN sections s ON s.id = i.section_id
+          WHERE o.deleted = 0 AND i.section_id = ?
+          ORDER BY p.pay_date, p.id`).all(sectionId);
+        if (sectionPayments.length) {
+          buildPaymentSheet(wb, {
+            payments: sectionPayments,
+            totalSpent: sectionPayments.reduce((s, p) => s + p.amount, 0),
+          });
+        }
       }
       filename = encodeURIComponent(`装修预算清单_${sections[0].name}_${date}.xlsx`);
     } else {

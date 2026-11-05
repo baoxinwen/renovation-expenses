@@ -127,6 +127,12 @@ try {
   }
   check('付款明细仅本板块一笔+合计行', payRows.length === 2 && payRows[0][1] === '乙1' && payRows[1][0] === '合计',
     `rows=${JSON.stringify(payRows)}`);
+  // 脱敏完整性（r3 I1）：不含价格 = 不外泄任何金额——付款明细表本质是金额
+  // 清单，脱敏导出时整表不附带（此前无条件输出，每笔金额照常外泄）
+  const noPricePay = await exportWb(`?section_id=${secB.json.id}&include_price=0`);
+  check('不含价格导出不附带付款明细（脱敏不含金额）',
+    noPricePay.wb.worksheets.length === 1 && !noPricePay.wb.getWorksheet('付款明细'),
+    `sheets=${noPricePay.wb.worksheets.map((w) => w.name)}`);
 
   console.log('== 全案向后兼容 ==');
   const full = await exportWb('');
