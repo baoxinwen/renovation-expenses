@@ -1,20 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Button, Card, Collapse, Empty, Input, Skeleton, Tag } from 'antd';
 import { toast } from 'sonner';
 import { api } from '../../api';
-import type { Item, PlanData } from '../../api';
+import type { PlanData } from '../../api';
 import { fmtMoney } from '../../format';
-import { confirmDoubleCount, submitWithForceGuard } from '../../utils/domain';
-import BuyModal from '../../components/BuyModal';
+import MobileItemDrawer from './MobileItemDrawer';
 
-/** 移动清单：搜索 + 板块手风琴 + 项目卡片；点卡片 = 购买登记（编辑/排序请回电脑端） */
+/** 移动清单：搜索 + 板块手风琴 + 项目卡片；点卡片 = 详情抽屉（方案 A，操作收敛在抽屉内） */
 export default function MobileItems() {
-  const nav = useNavigate();
   const [plan, setPlan] = useState<PlanData | null>(null);
   const [search, setSearch] = useState('');
-  const [buyTarget, setBuyTarget] = useState<Item | null>(null);
-  const [buySaving, setBuySaving] = useState(false);
+  const [drawerId, setDrawerId] = useState<number | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -28,6 +24,13 @@ export default function MobileItems() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // 抽屉目标从 plan 全量取（不从搜索过滤结果取）：load() 重拉后抽屉自动拿到
+  // 最新值；项目被删除后 find 落空 → drawerItem 为 null → 抽屉关闭
+  const drawerItem = useMemo(
+    () => drawerId == null ? null : (plan?.sections.flatMap((s) => s.items ?? []).find((i) => i.id === drawerId) ?? null),
+    [plan, drawerId],
+  );
 
   const q = search.trim().toLowerCase();
   const searching = q.length > 0;
@@ -72,7 +75,7 @@ export default function MobileItems() {
         style={{ marginBottom: 12 }}
       />
       <div className="label-caption" style={{ marginBottom: 10 }}>
-        点项目卡片即可记购买；编辑与排序请在电脑端操作
+        点项目卡片查看详情与操作
       </div>
 
       {sections.length === 0 ? (
@@ -96,10 +99,7 @@ export default function MobileItems() {
                 {(sec.items ?? []).map((it) => (
                   <div
                     key={it.id}
-                    onClick={() => {
-                      if (it.order_count > 0) nav(`/orders?item_id=${it.id}`);
-                      else setBuyTarget(it);
-                    }}
+                    onClick={() => setDrawerId(it.id)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 10,
                       padding: '11px 4px', minHeight: 48,
@@ -135,45 +135,11 @@ export default function MobileItems() {
         />
       )}
 
-      <BuyModal
-        item={buyTarget}
-        open={!!buyTarget}
-        onClose={() => setBuyTarget(null)}
-        confirmLoading={buySaving}
-        onConfirm={async (itemId, price, date) => {
-          const item = buyTarget;
-          if (!item) return;
-          setBuySaving(true);
-          try {
-            // force 只由服务端 409 触发（submitWithForceGuard 统一链路）：本地快照的
-            // 双算判定不作仲裁——手机端挂载快照过期时会绕过服务端守卫（C3）
-            const updated = await submitWithForceGuard(
-              (force) => api.updateItem(itemId, { bought: true, paid_amount: price, bought_date: date, ...(force ? { force: true } : {}) }),
-              () => confirmDoubleCount(item),
-            );
-            if (!updated) return;
-            setBuyTarget(null);
-            toast.success('已记录购买');
-            load();
-          } catch (e) {
-            toast.error((e as Error).message);
-          } finally {
-            setBuySaving(false);
-          }
-        }}
-        onUnmark={async (itemId) => {
-          setBuySaving(true);
-          try {
-            await api.updateItem(itemId, { bought: false });
-            setBuyTarget(null);
-            toast.success('已取消已买');
-            load();
-          } catch (e) {
-            toast.error((e as Error).message);
-          } finally {
-            setBuySaving(false);
-          }
-        }}
+      <MobileItemDrawer
+        item={drawerItem}
+        open={drawerId != null}
+        onClose={() => setDrawerId(null)}
+        onChanged={load}
       />
     </div>
   );
