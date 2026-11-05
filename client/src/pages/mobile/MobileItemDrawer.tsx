@@ -5,8 +5,9 @@ import { toast } from 'sonner';
 import { api } from '../../api';
 import type { Item } from '../../api';
 import { fmtMoney } from '../../format';
-import { confirmDoubleCount, submitWithForceGuard } from '../../utils/domain';
+import { confirmDoubleCount, submitWithForceGuard, undoableDelete } from '../../utils/domain';
 import BuyModal from '../../components/BuyModal';
+import ItemFormModal from '../../components/ItemFormModal';
 
 /** 项目详情抽屉（方案 A）：点卡片唯一入口，操作全部收敛在抽屉内。
  *  记买/修正实付的守卫链路与原 MobileItems 内联版完全一致（submitWithForceGuard，
@@ -19,6 +20,7 @@ export default function MobileItemDrawer({ item, open, onClose, onChanged }: {
 }) {
   const nav = useNavigate();
   const [buyOpen, setBuyOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
   if (!item) return null;
@@ -74,8 +76,36 @@ export default function MobileItemDrawer({ item, open, onClose, onChanged }: {
         <Button type="primary" size="large" block onClick={() => setBuyOpen(true)}>
           {bought ? '修正实付' : '记为已买'}
         </Button>
-        {/* 编辑 / 删除 / +订单：Task 3/4 在此追加 */}
+        <Button size="large" block onClick={() => setEditOpen(true)}>编辑</Button>
+        <Button danger size="large" block onClick={() => undoableDelete({
+          label: item.name,
+          del: () => api.deleteItem(item.id),
+          restore: () => api.restoreItem(item.id),
+          // 软删 + 8 秒撤销条已是保护，不加二次确认（与桌面清单行删除同语义）
+          onChanged: () => { onClose(); onChanged(); },
+        })}>删除项目</Button>
+        {/* +订单：Task 4 在此追加 */}
       </Space>
+      <ItemFormModal
+        open={editOpen}
+        initial={item}
+        confirmLoading={saving}
+        onOk={async (values) => {
+          setSaving(true);
+          try {
+            await api.updateItem(item.id, values);
+            setEditOpen(false);
+            onClose();
+            toast.success('已保存');
+            onChanged();
+          } catch (e) {
+            toast.error((e as Error).message);
+          } finally {
+            setSaving(false);
+          }
+        }}
+        onCancel={() => setEditOpen(false)}
+      />
       <BuyModal
         item={item}
         open={buyOpen}
