@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- maskable：全出血底色（系统裁圆角/圆形），图形缩至 80% 居中安全区 -->
+  <rect width="512" height="512" fill="#8c5e3c"/>
+  <g transform="translate(51.2 51.2) scale(0.8)" stroke="#f5f5f3" stroke-width="28" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M136 262 L256 156 L376 262"/>
+    <path d="M176 236 L176 372 L336 372 L336 236"/>
+    <path d="M232 372 L232 300 L280 300 L280 372"/>
+  </g>
+</svg>

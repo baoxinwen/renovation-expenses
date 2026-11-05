@@ -5,6 +5,15 @@
     <!-- viewport-fit=cover：让 env(safe-area-inset-*) 生效（刘海屏安全区） -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>装修账本</title>
+    <!-- PWA 可安装（M1/M2）：manifest + 图标体系 + iOS 主屏 meta -->
+    <link rel="icon" type="image/png" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#8c5e3c" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="装修账本" />
     <script>
       // 首帧前应用暗色（与 useThemeMode 同规则），避免深色用户闪白屏
       (function () {
