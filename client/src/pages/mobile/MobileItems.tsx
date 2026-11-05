@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, Card, Collapse, Empty, Input, Skeleton, Tag } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import { HolderOutlined, PlusOutlined } from '@ant-design/icons';
 import { toast } from 'sonner';
+import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { api } from '../../api';
-import type { ItemFormValues, PlanData } from '../../api';
+import type { Item, ItemFormValues, PlanData } from '../../api';
 import { fmtMoney } from '../../format';
 import MobileItemDrawer from './MobileItemDrawer';
 import MobileSectionManager from './MobileSectionManager';
@@ -31,6 +34,32 @@ export default function MobileItems() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // 触摸拖拽：激活距离比桌面(4)略大，防滚动列表时误起拖
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  );
+
+  // 拖拽落点：乐观更新即时反馈，持久化失败 load() 重拉回滚服务端顺序
+  const onItemDragEnd = (secId: number) => async ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    const sec = plan?.sections.find((s) => s.id === secId);
+    if (!sec) return;
+    const ids = (sec.items ?? []).map((i) => i.id);
+    const from = ids.indexOf(Number(active.id));
+    const to = ids.indexOf(Number(over.id));
+    if (from < 0 || to < 0) return;
+    setPlan((p) => p && ({
+      ...p,
+      sections: p.sections.map((s) => s.id !== secId ? s : { ...s, items: arrayMove(s.items ?? [], from, to) }),
+    }));
+    try {
+      await api.reorderItems(arrayMove(ids, from, to));
+    } catch (e) {
+      toast.error((e as Error).message);
+      load();
+    }
+  };
 
   // 抽屉目标从 plan 全量取（不从搜索过滤结果取）：load() 重拉后抽屉自动拿到
   // 最新值；项目被删除后 find 落空 → drawerItem 为 null → 抽屉关闭
@@ -113,41 +142,20 @@ export default function MobileItems() {
               </span>
             ),
             children: (
-              <div>
-                {(sec.items ?? []).map((it) => (
-                  <div
-                    key={it.id}
-                    onClick={() => setDrawerId(it.id)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 10,
-                      padding: '11px 4px', minHeight: 48,
-                      borderBottom: '1px solid var(--line)',
-                      opacity: it.bought ? 0.75 : 1,
-                    }}
-                  >
-                    <span
-                      aria-hidden
-                      style={{
-                        width: 8, height: 8, borderRadius: 4, flexShrink: 0,
-                        background: it.bought ? 'var(--sage)' : it.order_count > 0 ? 'var(--wood-600)' : 'var(--line)',
-                      }}
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onItemDragEnd(sec.id)}>
+                <SortableContext items={searching ? [] : (sec.items ?? []).map((i) => i.id)} strategy={verticalListSortingStrategy}>
+                  {(sec.items ?? []).map((it) => (
+                    <SortableItemRow
+                      key={it.id}
+                      item={it}
+                      // 搜索态禁拖（与桌面一致：过滤视图里拖动改真实顺序易误拖）；
+                      // 折叠态无把手——须先展开
+                      handle={!searching && activeKeys.includes(String(sec.id))}
+                      onOpen={() => setDrawerId(it.id)}
                     />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
-                        <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.name}</span>
-                        {it.order_count > 0 && <Tag style={{ marginRight: 0, lineHeight: '16px' }}>{it.order_count} 单</Tag>}
-                      </div>
-                      <div style={{ fontSize: 12, color: 'var(--ink-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {it.spec || '—'} · {it.bought
-                          ? `实付 ${fmtMoney(it.paid_amount ?? it.quantity * it.unit_price)}`
-                          : `${it.quantity} × ${fmtMoney(it.unit_price)}`}
-                        {it.bought_date ? ` · ${it.bought_date} 买` : ''}
-                      </div>
-                    </div>
-                    <span className="tabular" style={{ fontWeight: 650 }}>{fmtMoney(it.budget_amount)}</span>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </SortableContext>
+              </DndContext>
             ),
           }))}
         />
@@ -187,6 +195,54 @@ export default function MobileItems() {
         }}
         onCancel={() => setAddSectionId(null)}
       />
+    </div>
+  );
+}
+
+/** 可排序项目行：把手区域发起拖拽（touchAction:none 防触摸滚动抢占），
+ *  卡片其余区域点击开抽屉；把手 span 上 stopPropagation 防起拖触发 onClick */
+function SortableItemRow({ item: it, handle, onOpen }: { item: Item; handle: boolean; onOpen: () => void }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({ id: it.id });
+  const style: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', gap: 10,
+    padding: '11px 4px', minHeight: 48,
+    borderBottom: '1px solid var(--line)',
+    opacity: it.bought ? 0.75 : 1,
+    transform: CSS.Transform.toString(transform),
+    ...(isDragging ? { position: 'relative', zIndex: 10, background: 'var(--linen, #f5f5f3)' } : {}),
+  };
+  return (
+    <div ref={setNodeRef} {...attributes} style={style} onClick={onOpen}>
+      <span
+        aria-hidden
+        style={{
+          width: 8, height: 8, borderRadius: 4, flexShrink: 0,
+          background: it.bought ? 'var(--sage)' : it.order_count > 0 ? 'var(--wood-600)' : 'var(--line)',
+        }}
+      />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
+          <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.name}</span>
+          {it.order_count > 0 && <Tag style={{ marginRight: 0, lineHeight: '16px' }}>{it.order_count} 单</Tag>}
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--ink-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {it.spec || '—'} · {it.bought
+            ? `实付 ${fmtMoney(it.paid_amount ?? it.quantity * it.unit_price)}`
+            : `${it.quantity} × ${fmtMoney(it.unit_price)}`}
+          {it.bought_date ? ` · ${it.bought_date} 买` : ''}
+        </div>
+      </div>
+      <span className="tabular" style={{ fontWeight: 650 }}>{fmtMoney(it.budget_amount)}</span>
+      {handle && (
+        // 触控目标 ≥48px（与移动端既有约定一致）；不挂 .drag-handle——
+        // 那个 class 桌面默认隐身 hover 浮现，移动端无 hover 必须常显
+        <span
+          onClick={(e) => e.stopPropagation()}
+          style={{ touchAction: 'none', display: 'flex', alignItems: 'center', minHeight: 48, padding: '0 8px', color: 'var(--ink-3)' }}
+        >
+          <HolderOutlined {...listeners} />
+        </span>
+      )}
     </div>
   );
 }
