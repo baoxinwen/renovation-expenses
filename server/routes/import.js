@@ -309,6 +309,7 @@ export default async function (app) {
       return reply.status(400).send({ message: `备份校验失败：${e.message}` });
     }
     checkDb.close();
+    checkDb.close();
 
     // 第 3/4 步：可回滚替换链，全程与 /export/backup 的异步快照互斥（I7，见
     // server/lock.js：备份线程未结束时替换链的 db.close() 会 SQLITE_BUSY）。
@@ -347,6 +348,7 @@ export default async function (app) {
       } catch (e) {
         req.log.error({ err: e }, '恢复暂存写入失败（库未动）');
         fs.rmSync(staging, { recursive: true, force: true });
+        fs.rmSync(checkPath, { force: true }); // 校验库残留清理（r3 M1）
         return reply.status(500).send({ message: '恢复失败：暂存写入出错，请检查磁盘空间后重试' });
       }
 
@@ -381,14 +383,18 @@ export default async function (app) {
           reopenDatabase();
           phase = 'done';
           safeCleanup(staging);
+          safeCleanup(checkPath); // 校验库残留清理（r3 M1）
           req.log.error('回滚点创建失败，已放弃本次恢复（原数据未动）');
           return reply.status(500).send({ message: '恢复失败：无法创建安全回滚点（磁盘空间或文件占用），原数据未受影响' });
         }
         phase = 'copied';
         fs.renameSync(checkPath, dbFile);
+        // rename 原子成功即已换库——阶段必须同步置位（r3 M2：此前等 reopen 也
+        // 成功才算 swapped,中途失败会把「磁盘已是备份库」误报成「原数据未受影响」,
+        // 回滚点明明完整却不用）
+        phase = 'swapped';
         for (const ext of ['-wal', '-shm']) fs.rmSync(dbFile + ext, { force: true });
         reopenDatabase();
-        phase = 'swapped';
 
         // 票据目录替换：两个同盘原子 rename；第二个失败在 finally 里还原旧目录
         let uploadsSwapped = false;
@@ -435,6 +441,8 @@ export default async function (app) {
             return reply.status(500).send({ message: '恢复失败，请人工检查数据目录后重启服务' });
           }
           safeCleanup(staging);
+          safeCleanup(checkPath); // 校验库残留清理（r3 M1；swapped 后已被 rename 走,force 无害）
+          for (const ext of dbExts) safeCleanup(rollback + ext + '.tmp'); // 回滚点拷贝中断的半截 tmp
         }
         return reply.status(500).send({
           message: restored

@@ -337,6 +337,12 @@ try {
       `sections=${JSON.stringify(afterA.sections)?.slice(0, 120)}`);
     check('变体 a 后再次恢复成功（数据在，链路可自愈）',
       (await fetch(`${BASE}/restore/backup`, { method: 'POST', body: okFd })).status === 200);
+    // r3 M1：早退/失败路径的临时文件残留——校验库与回滚点 tmp 都要清干净
+    //（变体 a 已跑过「回滚点创建失败」早退，正好断言其现场）
+    const dirAfterA = fs.readdirSync(tmpDir);
+    check('M1 变体 a 后无 .restore-check / 回滚点 tmp 残留',
+      !dirAfterA.some((f) => f.startsWith('.restore-check') || f.includes('.pre-restore.tmp')),
+      JSON.stringify(dirAfterA.filter((f) => f.startsWith('.') || f.includes('restore'))));
   } else {
     console.log('  (C4/C5 失败注入依赖 Windows 句柄锁语义，本平台跳过)');
   }
