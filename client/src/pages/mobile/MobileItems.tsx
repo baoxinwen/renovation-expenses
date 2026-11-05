@@ -6,6 +6,7 @@ import { api } from '../../api';
 import type { ItemFormValues, PlanData } from '../../api';
 import { fmtMoney } from '../../format';
 import MobileItemDrawer from './MobileItemDrawer';
+import MobileSectionManager from './MobileSectionManager';
 import ItemFormModal from '../../components/ItemFormModal';
 
 /** 移动清单：搜索 + 板块手风琴 + 项目卡片；点卡片 = 详情抽屉（方案 A，操作收敛在抽屉内） */
@@ -16,6 +17,7 @@ export default function MobileItems() {
   const [loadError, setLoadError] = useState<string | null>(null);
   // 板块内添加项目：目标板块 id（null = 关闭表单）
   const [addSectionId, setAddSectionId] = useState<number | null>(null);
+  const [managerOpen, setManagerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -72,13 +74,16 @@ export default function MobileItems() {
 
   return (
     <div>
-      <Input.Search
-        placeholder="搜项目 / 品牌 / 备注"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        allowClear
-        style={{ marginBottom: 12 }}
-      />
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <Input.Search
+          placeholder="搜项目 / 品牌 / 备注"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          allowClear
+          style={{ flex: 1 }}
+        />
+        <Button onClick={() => setManagerOpen(true)}>管理板块</Button>
+      </div>
       <div className="label-caption" style={{ marginBottom: 10 }}>
         点项目卡片查看详情与操作
       </div>
@@ -153,6 +158,13 @@ export default function MobileItems() {
         open={drawerId != null}
         sections={plan.sections}
         onClose={() => setDrawerId(null)}
+        onChanged={load}
+      />
+
+      <MobileSectionManager
+        open={managerOpen}
+        sections={plan.sections}
+        onClose={() => setManagerOpen(false)}
         onChanged={load}
       />
 
