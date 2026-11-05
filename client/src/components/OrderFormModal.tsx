@@ -100,7 +100,7 @@ export default function OrderFormModal({ open, initial, sections, confirmLoading
                 label: s.name,
                 options: (s.items ?? []).map((it) => ({
                   value: it.id,
-                  label: `${s.name} / ${it.name}`,
+                  label: `${s.name} / ${it.name}${it.spec ? ` · ${it.spec}` : ''}`,
                 })),
               }))}
           />

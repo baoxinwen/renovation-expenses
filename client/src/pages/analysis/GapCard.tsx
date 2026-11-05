@@ -30,7 +30,7 @@ export default function GapCard({ summary }: { summary: Summary | null }) {
     <Card title="剩余预算缺口" size="small" style={CARD_FILL} styles={{ body: CARD_BODY_EVENLY }}>
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 12, color: 'var(--ink-3)', marginBottom: 6 }}>
-          <span>已花 {fmtMoney(cashSpent)} / 目标 {fmtMoney(budget)}（含未挂项目付款）</span>
+          <span>累计支出 {fmtMoney(cashSpent)} / 目标 {fmtMoney(budget)}（含未挂项目付款）</span>
           <span className="tabular" style={{ fontWeight: 600, color: pct !== null && pct > 100 ? 'var(--clay)' : undefined }}>已用 {pct}%</span>
         </div>
         <WoodProgress value={cashSpent} budget={budget} size="md" />

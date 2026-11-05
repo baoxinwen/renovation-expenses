@@ -14,6 +14,7 @@ export default function MobileSectionManager({ open, sections, onClose, onChange
   onChanged: () => void;
 }) {
   // 正在改名的板块 id（该行切换为输入框）；新建板块输入框
+  const [saving, setSaving] = useState(false);
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [newName, setNewName] = useState('');
@@ -21,6 +22,7 @@ export default function MobileSectionManager({ open, sections, onClose, onChange
   const submitRename = async (sec: Section) => {
     const name = renameValue.trim();
     if (!name || name === sec.name) { setRenamingId(null); return; }
+    setSaving(true);
     try {
       await api.updateSection(sec.id, { name });
       toast.success('已改名');
@@ -28,6 +30,8 @@ export default function MobileSectionManager({ open, sections, onClose, onChange
       onChanged();
     } catch (e) {
       toast.error((e as Error).message); // 重名 400 等服务端校验，保留输入让用户改
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -48,6 +52,7 @@ export default function MobileSectionManager({ open, sections, onClose, onChange
   const addSection = async () => {
     const name = newName.trim();
     if (!name) return;
+    setSaving(true);
     try {
       await api.addSection(name);
       toast.success('板块已添加');
@@ -55,6 +60,8 @@ export default function MobileSectionManager({ open, sections, onClose, onChange
       onChanged();
     } catch (e) {
       toast.error((e as Error).message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -79,7 +86,7 @@ export default function MobileSectionManager({ open, sections, onClose, onChange
                     maxLength={60}
                     style={{ flex: 1 }}
                   />
-                  <Button type="primary" size="small" onClick={() => submitRename(sec)}>保存</Button>
+                  <Button type="primary" size="small" loading={saving} onClick={() => submitRename(sec)}>保存</Button>
                   <Button size="small" onClick={() => setRenamingId(null)}>取消</Button>
                 </>
               ) : (
@@ -106,7 +113,7 @@ export default function MobileSectionManager({ open, sections, onClose, onChange
           onPressEnter={addSection}
           maxLength={60}
         />
-        <Button type="primary" onClick={addSection}>新增板块</Button>
+        <Button type="primary" loading={saving} onClick={addSection}>新增板块</Button>
       </Space.Compact>
     </Drawer>
   );

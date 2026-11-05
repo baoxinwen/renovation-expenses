@@ -200,7 +200,7 @@ export default function Orders() {
             value={filters.item_id}
             onChange={(v) => setFilters((f) => ({ ...f, item_id: v }))}
             options={sections.flatMap((s) =>
-              (s.items ?? []).map((it) => ({ value: it.id, label: `${s.name} / ${it.name}` })))}
+              (s.items ?? []).map((it) => ({ value: it.id, label: `${s.name} / ${it.name}${it.spec ? ` · ${it.spec}` : ''}` })))}
           />
           <Select
             style={{ width: 120 }}

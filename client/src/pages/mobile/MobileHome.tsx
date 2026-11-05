@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, Empty, Skeleton, Space } from 'antd';
 import { toast } from 'sonner';
@@ -18,14 +18,19 @@ export default function MobileHome() {
   const [payTarget, setPayTarget] = useState<Order | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  // 序号守卫（r3 I6，对照桌面 Plan 同款）：弱网下先发后至的过期响应丢弃
+  const loadSeq = useRef(0);
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     setLoadError(null);
     try {
       const [p, orders, c] = await Promise.all([api.getPlan(), api.getOrders({ status: 'open' }), api.getCharts()]);
+      if (seq !== loadSeq.current) return;
       setPlan(p);
       setCharts(c);
       setUnpaid(orders.filter((o) => (o.paid ?? 0) < o.total_amount && o.total_amount > 0));
     } catch (e) {
+      if (seq !== loadSeq.current) return;
       setLoadError((e as Error).message);
       toast.error((e as Error).message);
     }

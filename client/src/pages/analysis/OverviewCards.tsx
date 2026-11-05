@@ -21,7 +21,7 @@ export default function OverviewCards({ summary }: { summary: Summary | null }) 
       label: '超支 / 结余',
       node: (
         <AnimatedMoney
-          value={diff}
+          value={Math.abs(diff)}
           style={{ ...moneyStyle, fontSize: moneySize, color: diff > 0 ? 'var(--clay)' : 'var(--sage)' }}
         />
       ),

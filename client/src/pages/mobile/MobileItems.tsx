@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card, Collapse, Empty, Input, Skeleton, Tag } from 'antd';
 import { HolderOutlined, PlusOutlined } from '@ant-design/icons';
 import { toast } from 'sonner';
@@ -23,11 +23,18 @@ export default function MobileItems() {
   const [managerOpen, setManagerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // 序号守卫（r3 I6，对照桌面 Plan 同款）：弱网下连续操作（保存实付→删项目）
+  // 先发后至的过期响应会整体覆盖新快照——已删项目「复活」显示
+  const loadSeq = useRef(0);
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     setLoadError(null);
     try {
-      setPlan(await api.getPlan());
+      const p = await api.getPlan();
+      if (seq !== loadSeq.current) return;
+      setPlan(p);
     } catch (e) {
+      if (seq !== loadSeq.current) return;
       setLoadError((e as Error).message);
       toast.error((e as Error).message);
     }
@@ -209,7 +216,7 @@ function SortableItemRow({ item: it, handle, onOpen }: { item: Item; handle: boo
     borderBottom: '1px solid var(--line)',
     opacity: it.bought ? 0.75 : 1,
     transform: CSS.Transform.toString(transform),
-    ...(isDragging ? { position: 'relative', zIndex: 10, background: 'var(--linen, #f5f5f3)' } : {}),
+    ...(isDragging ? { position: 'relative', zIndex: 10, background: 'var(--bg-linen)' } : {}),
   };
   return (
     <div ref={setNodeRef} {...attributes} style={style} onClick={onOpen}>
@@ -238,7 +245,7 @@ function SortableItemRow({ item: it, handle, onOpen }: { item: Item; handle: boo
         // 那个 class 桌面默认隐身 hover 浮现，移动端无 hover 必须常显
         <span
           onClick={(e) => e.stopPropagation()}
-          style={{ touchAction: 'none', display: 'flex', alignItems: 'center', minHeight: 48, padding: '0 8px', color: 'var(--ink-3)' }}
+          style={{ touchAction: 'none', display: 'flex', alignItems: 'center', minHeight: 48, minWidth: 48, justifyContent: 'center', padding: '0 10px', color: 'var(--ink-3)' }}
         >
           <HolderOutlined {...listeners} />
         </span>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card, DatePicker, Empty, Form, Input, InputNumber, Segmented, Select, Skeleton, Typography } from 'antd';
 import dayjs from 'dayjs';
 import { toast } from 'sonner';
@@ -27,14 +27,19 @@ export default function MobileRecord() {
   const [newFiles, setNewFiles] = useState<File[]>([]);
   const [boughtItem, setBoughtItem] = useState<Item | null>(null);
 
+  // 序号守卫（r3 I6，对照桌面 Plan 同款）：弱网下先发后至的过期响应丢弃
+  const loadSeq = useRef(0);
   const load = useCallback(async () => {
+    const seq = ++loadSeq.current;
     setLoadError(null);
     try {
       const [p, orders] = await Promise.all([api.getPlan(), api.getOrders({ status: 'open' })]);
+      if (seq !== loadSeq.current) return;
       setSections(p.sections);
       setOpenOrders(orders.filter((o) => (o.paid ?? 0) < o.total_amount && o.total_amount > 0));
       setReady(true);
     } catch (e) {
+      if (seq !== loadSeq.current) return;
       // 失败不能只 toast（4 秒后消失，页面停在误导性空态——「没有未结清订单」
       // 会被误读成都付清了）；给错误卡+重试（同 MobileHome/MobileItems 模式）
       setLoadError((e as Error).message);
@@ -52,7 +57,7 @@ export default function MobileRecord() {
     .filter((it) => it.order_count === 0)
     // 已买项保留在下拉里（可修正实付），但必须可见——否则选中再提交会
     // 静默覆盖原实付与购买日期（服务端 1→1 不触发守卫）
-    .map((it) => ({ value: it.id, label: `${it.name}${it.spec ? ` · ${it.spec}` : ''}${it.bought ? ' · 已买' : ''}`, item: it }));
+    .map((it) => ({ value: it.id, label: `${it.sectionName} / ${it.name}${it.spec ? ` · ${it.spec}` : ''}${it.bought ? ' · 已买' : ''}`, item: it }));
 
   // ---- 流程 1：付一笔款 ----
   const submitPay = async (v: { order_id: number; amount: number; pay_date: dayjs.Dayjs; method?: string; note?: string }) => {
