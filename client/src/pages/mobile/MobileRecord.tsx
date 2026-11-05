@@ -258,7 +258,7 @@ export default function MobileRecord() {
               <Select
                 showSearch
                 optionFilterProp="label"
-                placeholder="搜索项目名 / 品牌"
+                placeholder="搜索项目名 / 规格 / 品牌"
                 options={itemOptions}
                 onChange={(id) => {
                   const it = allItems.find((x) => x.id === id);
@@ -298,8 +298,11 @@ export default function MobileRecord() {
                 showSearch
                 allowClear
                 optionFilterProp="label"
-                placeholder="搜索项目"
-                options={sections.flatMap((s) => (s.items ?? []).map((it) => ({ value: it.id, label: `${s.name} / ${it.name}` })))}
+                placeholder="搜索项目名 / 规格"
+                options={sections.flatMap((s) => (s.items ?? []).map((it) => ({
+                  value: it.id,
+                  label: `${s.name} / ${it.name}${it.spec ? ` · ${it.spec}` : ''}`,
+                })))}
                 onChange={(id) => {
                   if (!id) return;
                   const it = allItems.find((x) => x.id === id);
