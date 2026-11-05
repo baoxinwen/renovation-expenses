@@ -219,6 +219,29 @@ try {
   }
   check('高压缩比条目解压被上限拦截', bombThrew.includes('zip 炸弹'), `err=${bombThrew.slice(0, 120)}`);
 
+  // r3 I2：多条目累计上限——单条目防线拦不住「各 <300MB 但累计任意大」的
+  // store 型 zip；maxTotalBytes 参数化便于小值注入（生产默认 300MB）
+  console.log('== I2 条目累计上限 ==');
+  const multi = new ZipArchive({ store: true });
+  multi.append('a'.repeat(60), { name: 'a.bin' });
+  multi.append('b'.repeat(60), { name: 'b.bin' });
+  const multiBuf = await collectZip(multi);
+  let multiThrew = '';
+  try {
+    parseZip(multiBuf, { maxTotalBytes: 100 });
+  } catch (e) {
+    multiThrew = e.message;
+  }
+  check('条目累计超限 → 抛错', multiThrew.includes('累计'), `err=${multiThrew.slice(0, 120)}`);
+  let multiOk = true;
+  try {
+    parseZip(multiBuf, { maxTotalBytes: 120 });
+  } catch {
+    multiOk = false;
+  }
+  check('合计在上限内 → 放行', multiOk);
+  check('默认上限走生产值（不传 opts 正常解析）', (() => { try { parseZip(multiBuf); return true; } catch { return false; } })());
+
   // ===== C4/C5/M17/M21 恢复链安全 =====
   console.log('== C4/C5 恢复链 ==');
   // 取一份真实合法备份（database.db 是活库快照，恢复必成功）

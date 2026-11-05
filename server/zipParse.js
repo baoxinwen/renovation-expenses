@@ -10,9 +10,13 @@ const STORE = 0;
 const DEFLATE = 8;
 // 单条目解压上限：与 db.js LIMITS.BACKUP_MAX_MB（300）对齐（模块保持独立不反向依赖）
 const MAX_ENTRY_BYTES = 300 * 1024 * 1024;
+// 条目累计上限（r3 I2）：单条目防线拦不住「各 <300MB 但累计任意大」的 store
+// 型 zip 同步全量进内存——总量同样不超过备份文件本身的 300MB
+const MAX_TOTAL_BYTES = MAX_ENTRY_BYTES;
 
-/** 解析 zip（Buffer）为条目数组 [{ name, data }]。抛错于结构非法/不支持的方法。 */
-export function parseZip(buf) {
+/** 解析 zip（Buffer）为条目数组 [{ name, data }]。抛错于结构非法/不支持的方法。
+ *  opts.maxTotalBytes 可选：条目累计上限（默认 300MB，测试注入小值用）。 */
+export function parseZip(buf, opts = {}) {
   // 1) 从尾部扫描 EOCD（注释最长 65535，窗口按缓冲上限截断）
   const scanFrom = Math.max(0, buf.length - 22 - 65535);
   let eocd = -1;
@@ -26,6 +30,8 @@ export function parseZip(buf) {
 
   // 2) 遍历 Central Directory
   const entries = [];
+  const maxTotalBytes = Number.isFinite(opts.maxTotalBytes) ? opts.maxTotalBytes : MAX_TOTAL_BYTES;
+  let totalBytes = 0;
   let p = cdOffset;
   for (let i = 0; i < cdCount; i++) {
     if (buf.readUInt32LE(p) !== CDR_SIG) throw new Error('zip 结构损坏（CDR 签名不符）');
@@ -57,6 +63,11 @@ export function parseZip(buf) {
       }
     } else throw new Error(`不支持的压缩方法（${method}）：${name}`);
 
+    // 累计防线（r3 I2）：单条目各自合法但合计任意大同样 OOM——收条目前累计校验
+    totalBytes += data.length;
+    if (totalBytes > maxTotalBytes) {
+      throw new Error(`条目累计解压超过 ${Math.floor(maxTotalBytes / 1024 / 1024)}MB 上限（疑似 zip 炸弹）：${name}`);
+    }
     entries.push({ name, data });
     p += 46 + nameLen + extraLen + commentLen;
   }
