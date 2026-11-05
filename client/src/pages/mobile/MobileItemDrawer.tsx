@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { api } from '../../api';
 import type { Item, OrderFormValues, Section } from '../../api';
 import { fmtMoney } from '../../format';
-import { confirmDoubleCount, confirmOrderOnBoughtItem, submitWithForceGuard, undoableDelete } from '../../utils/domain';
+import { confirmDoubleCount, confirmOrderOnBoughtItem, restoreWithGuard, submitWithForceGuard, undoableDelete } from '../../utils/domain';
 import { confirmAsync } from '../../utils/confirm';
 import BuyModal from '../../components/BuyModal';
 import ItemFormModal from '../../components/ItemFormModal';
@@ -75,7 +75,7 @@ export default function MobileItemDrawer({ item, open, sections, onClose, onChan
       onOk: () => undoableDelete({
         label: item.name,
         del: () => api.deleteItem(item.id),
-        restore: () => api.restoreItem(item.id),
+        restore: () => restoreWithGuard((f) => api.restoreItem(item.id, f ? { force: true } : undefined), item.name),
         onChanged: () => { onClose(); onChanged(); },
       }),
     });

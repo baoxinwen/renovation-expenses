@@ -168,7 +168,8 @@ export const api = {
   addSection: (name: string) => req<Section>('/api/sections', 'POST', { name }),
   updateSection: (id: number, patch: { name?: string }) => req(`/api/sections/${id}`, 'PUT', patch),
   deleteSection: (id: number) => req<{ ok: boolean; deleted: boolean }>(`/api/sections/${id}`, 'DELETE'),
-  restoreSection: (id: number) => req<Section>(`/api/sections/${id}/restore`, 'POST'),
+  restoreSection: (id: number, body?: { force?: boolean }) =>
+    req<Section>(`/api/sections/${id}/restore`, 'POST', body),
   reorderSections: (ids: number[]) => req('/api/sections/reorder', 'PUT', { ids }),
   addItem: (sectionId: number, body: ItemFormValues) =>
     req<Item>(`/api/sections/${sectionId}/items`, 'POST', body),
@@ -179,7 +180,8 @@ export const api = {
     paid_amount: number | null;
   }> & { force?: boolean }) => req<Item>(`/api/items/${id}`, 'PUT', patch),
   deleteItem: (id: number) => req<{ ok: boolean; deleted: boolean }>(`/api/items/${id}`, 'DELETE'),
-  restoreItem: (id: number) => req<Item>(`/api/items/${id}/restore`, 'POST'),
+  restoreItem: (id: number, body?: { force?: boolean }) =>
+    req<Item>(`/api/items/${id}/restore`, 'POST', body),
   reorderItems: (ids: number[]) => req('/api/items/reorder', 'PUT', { ids }),
   importPlan: (file: File, mode: 'replace' | 'append') => {
     const fd = new FormData();

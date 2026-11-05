@@ -20,7 +20,7 @@ import type { Item, Order, PlanData, Section } from '../api';
 import { fmtMoney } from '../format';
 import { budgetDelta, formatDelta, spendablePool } from '../utils/budgetCalc';
 import { matchSearch } from '../utils/planCalc';
-import { submitWithForceGuard } from '../utils/domain';
+import { restoreWithGuard, submitWithForceGuard } from '../utils/domain';
 import ItemFormModal from '../components/ItemFormModal';
 import { confirmAsync } from '../utils/confirm';
 import { SortableRow, DragHandle, SectionDragHandle, SortableSectionCard } from '../components/plan/PlanEditing';
@@ -144,7 +144,8 @@ export default function Plan() {
           duration: 8000,
           action: {
             label: '撤销',
-            onClick: () => api.restoreItem(item.id).then(load).catch((e) => toast.error((e as Error).message)),
+            onClick: () => restoreWithGuard((f) => api.restoreItem(item.id, f ? { force: true } : undefined), item.name)
+              .then(load).catch((e) => toast.error((e as Error).message)),
           },
         });
         load();
@@ -253,7 +254,8 @@ export default function Plan() {
             duration: 8000,
             action: {
               label: '撤销',
-              onClick: () => api.restoreSection(sec.id).then(load).catch((e) => toast.error((e as Error).message)),
+              onClick: () => restoreWithGuard((f) => api.restoreSection(sec.id, f ? { force: true } : undefined), sec.name)
+                .then(load).catch((e) => toast.error((e as Error).message)),
             },
           });
           load();

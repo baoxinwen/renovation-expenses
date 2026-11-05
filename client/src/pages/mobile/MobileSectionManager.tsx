@@ -3,7 +3,7 @@ import { Button, Drawer, Empty, Input, Modal, Space } from 'antd';
 import { toast } from 'sonner';
 import { api } from '../../api';
 import type { Section } from '../../api';
-import { undoableDelete } from '../../utils/domain';
+import { restoreWithGuard, undoableDelete } from '../../utils/domain';
 
 /** 移动端板块管理：新增 / 改名 / 删除（软删 + 8 秒撤销，与桌面同语义）。
  *  删除确认文案抄桌面 Plan.tsx（含连带项目数与口径说明）。 */
@@ -40,7 +40,7 @@ export default function MobileSectionManager({ open, sections, onClose, onChange
       onOk: () => undoableDelete({
         label: sec.name,
         del: () => api.deleteSection(sec.id),
-        restore: () => api.restoreSection(sec.id),
+        restore: () => restoreWithGuard((f) => api.restoreSection(sec.id, f ? { force: true } : undefined), sec.name),
         onChanged,
       }),
     });

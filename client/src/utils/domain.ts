@@ -39,6 +39,20 @@ export async function confirmOrderOnBoughtItem(item: Pick<Item, 'name'>): Promis
   });
 }
 
+/** 恢复入口的 409 统一出路（r3 C1，桌面/移动共用）：恢复「已买且名下订单有
+ *  付款」的项目/板块会让两路支出同刻回归实际合计，服务端 needForce 后经确认
+ *  才带 force 重试。返回 null = 用户放弃恢复。 */
+export async function restoreWithGuard(
+  restore: (force: boolean) => Promise<unknown>,
+  name: string,
+): Promise<unknown | null> {
+  return submitWithForceGuard(restore, () => confirmAsync({
+    title: '恢复会重复计入实际合计',
+    content: `「${name}」已勾「已买」且名下订单有付款，恢复后已买实付与订单付款会同时计入。仍要恢复吗？`,
+    okText: '仍要恢复',
+  }));
+}
+
 /** 服务端 409 双算守卫的统一出路（桌面/移动共用，C3/I3 收敛自 Plan/Orders/OrderDetail/移动两页）：
  *  首跳一律不带 force；收到 needForce 时经 confirm 确认，用户坚持才带 force 重试。
  *  force 只能由服务端 409 触发——本地快照的 bought 判定不是仲裁（多端场景会过期）。

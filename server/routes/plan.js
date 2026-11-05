@@ -125,6 +125,24 @@ export default async function (app) {
     const id = Number(req.params.id);
     const sec = db.prepare('SELECT * FROM sections WHERE id = ? AND deleted = 1').get(id);
     if (!sec) return reply.status(404).send({ message: '没有可恢复的板块' });
+    // 恢复双算守卫（r3 C1）：连带复活「已买且名下订单有付款」的项目会让已买
+    // 实付与订单付款同刻回归实际合计——needForce 确认后才放行，与勾选/付款/
+    // 订单恢复守卫同一模式。恢复条件与下方复活 UPDATE 完全同构（含旧版 NULL 兼容）
+    if (!req.body?.force) {
+      const risky = db.prepare(`
+        SELECT i.name FROM items i
+        WHERE i.section_id = ? AND i.deleted = 1 AND i.bought = 1
+          AND (i.deleted_at = ? OR (i.deleted_at IS NULL AND ? IS NULL))
+          AND EXISTS (SELECT 1 FROM payments p JOIN orders o ON o.id = p.order_id
+                      WHERE o.item_id = i.id AND o.deleted = 0)
+        LIMIT 1`).get(id, sec.deleted_at, sec.deleted_at);
+      if (risky) {
+        return reply.status(409).send({
+          message: `「${risky.name}」已勾「已买」且名下订单有付款，恢复板块后已买实付与订单付款会重复计入实际合计`,
+          needForce: true,
+        });
+      }
+    }
     const originalName = stripDeletedSuffix(sec.name, id);
     const nameTaken = db.prepare('SELECT COUNT(*) AS c FROM sections WHERE name = ? AND id != ?').get(originalName, id).c > 0;
     const restore = db.transaction(() => {
@@ -251,6 +269,19 @@ export default async function (app) {
     const id = Number(req.params.id);
     const item = db.prepare('SELECT * FROM items WHERE id = ? AND deleted = 1').get(id);
     if (!item) return reply.status(404).send({ message: '没有可恢复的项目' });
+    // 恢复双算守卫（r3 C1）：已买项目名下订单有付款时，恢复会让已买实付与
+    // 订单付款同刻回归实际合计——needForce 确认后才放行
+    if (!req.body?.force && item.bought) {
+      const paid = db.prepare(`
+        SELECT COUNT(*) AS c FROM payments p JOIN orders o ON o.id = p.order_id
+        WHERE o.item_id = ? AND o.deleted = 0`).get(id).c;
+      if (paid > 0) {
+        return reply.status(409).send({
+          message: `「${item.name}」已勾「已买」且名下订单有付款，恢复后已买实付与订单付款会重复计入实际合计`,
+          needForce: true,
+        });
+      }
+    }
     // 所属板块已软删时连带恢复，避免出现"计入总计但任何列表不可见"的孤儿
     const sec = db.prepare('SELECT * FROM sections WHERE id = ? AND deleted = 1').get(item.section_id);
     const restore = db.transaction(() => {

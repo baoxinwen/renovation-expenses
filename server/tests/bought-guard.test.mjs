@@ -158,6 +158,63 @@ try {
   });
   r = await req('POST', `/orders/${orderP2.json.id}/payments`, { amount: 30, pay_date: '2026-09-06' });
   check('未买项目付款放行', r.status === 200, `status=${r.status}`);
+
+  console.log('== 软删项目的守卫失明与恢复双算（r3 C1） ==');
+  // 时序：未买项目建订单（无付款）→ 勾已买（付款 0 静默通过）→ 软删项目 →
+  // 记首笔付款（守卫查 deleted=0 失明）→ 恢复项目/板块（无守卫）→ 两路同计
+  const itemR3 = await req('POST', `/sections/${sec.json.id}/items`,
+    { name: '软删双算项目', quantity: 1, unit_price: 400 });
+  const orderR3 = await req('POST', '/orders', {
+    title: '软删双算订单', item_id: itemR3.json.id, total_amount: 150,
+  });
+  check('造数：未买项目建订单（无付款）', orderR3.status === 200, `status=${orderR3.status}`);
+  r = await req('PUT', `/items/${itemR3.json.id}`, { bought: true });
+  check('造数：勾已买（付款 0 静默通过）', r.status === 200, `status=${r.status}`);
+  r = await req('DELETE', `/items/${itemR3.json.id}`);
+  check('造数：项目已软删', r.status === 200, `status=${r.status}`);
+  // 修复点①：付款守卫不再因项目软删失明——bought 状态跨软删可见
+  r = await req('POST', `/orders/${orderR3.json.id}/payments`, { amount: 150, pay_date: '2026-09-07' });
+  check('软删的已买项目记付款 → 409（不再失明）', r.status === 409, `status=${r.status} ${JSON.stringify(r.json)}`);
+  check('返回 needForce 标志', r.json?.needForce === true, JSON.stringify(r.json));
+  r = await req('POST', `/orders/${orderR3.json.id}/payments`,
+    { amount: 150, pay_date: '2026-09-07', force: true });
+  check('force（用户确认双算）→ 付款放行', r.status === 200, `status=${r.status}`);
+  // 修复点②：恢复入口守卫——恢复会让 bought=1 与订单付款（150）同刻复活
+  r = await req('POST', `/items/${itemR3.json.id}/restore`);
+  check('恢复「已买+挂单有付款」项目未带 force → 409', r.status === 409, `status=${r.status} ${JSON.stringify(r.json)}`);
+  check('返回 needForce 标志', r.json?.needForce === true, JSON.stringify(r.json));
+  const planR3 = await req('GET', '/plan');
+  const itR3 = planR3.json.sections.flatMap((s) => s.items).find((i) => i.id === itemR3.json.id);
+  check('409 时项目未恢复（不在清单中）', itR3 === undefined, `item=${JSON.stringify(itR3)}`);
+  r = await req('POST', `/items/${itemR3.json.id}/restore`, { force: true });
+  check('带 force（用户已确认）→ 恢复放行', r.status === 200, `status=${r.status}`);
+
+  // 板块恢复连带复活同类项目：与单项目恢复同一守卫口径
+  const secR3 = await req('POST', '/sections', { name: '软删双算板块' });
+  const itemR3b = await req('POST', `/sections/${secR3.json.id}/items`,
+    { name: '连带复活项目', quantity: 1, unit_price: 90, bought: true });
+  await req('POST', '/orders', {
+    title: '连带订单', item_id: itemR3b.json.id, total_amount: 60,
+    paid_now: { amount: 60, pay_date: '2026-09-08' }, force: true, // 建单时已双算确认
+  });
+  r = await req('DELETE', `/sections/${secR3.json.id}`);
+  check('造数：板块已软删（连带项目）', r.status === 200, `status=${r.status}`);
+  r = await req('POST', `/sections/${secR3.json.id}/restore`);
+  check('恢复连带复活「已买+有付款」项目的板块未带 force → 409',
+    r.status === 409, `status=${r.status} ${JSON.stringify(r.json)}`);
+  r = await req('POST', `/sections/${secR3.json.id}/restore`, { force: true });
+  check('带 force（用户已确认）→ 板块恢复放行', r.status === 200, `status=${r.status}`);
+
+  // 干净项目恢复不受守卫影响：未买项目 / 无付款的已买项目
+  const cleanSec = await req('POST', '/sections', { name: '干净恢复板块' });
+  const cleanA = await req('POST', `/sections/${cleanSec.json.id}/items`, { name: '未买恢复', quantity: 1, unit_price: 10 });
+  const cleanB = await req('POST', `/sections/${cleanSec.json.id}/items`, { name: '无付款已买恢复', quantity: 1, unit_price: 10, bought: true });
+  await req('DELETE', `/items/${cleanA.json.id}`);
+  r = await req('POST', `/items/${cleanA.json.id}/restore`);
+  check('未买项目恢复放行', r.status === 200, `status=${r.status}`);
+  await req('DELETE', `/items/${cleanB.json.id}`);
+  r = await req('POST', `/items/${cleanB.json.id}/restore`);
+  check('无付款的已买项目恢复放行', r.status === 200, `status=${r.status}`);
 } finally {
   cleanup();
 }

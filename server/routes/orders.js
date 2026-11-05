@@ -244,7 +244,9 @@ export default async function (app) {
     // 守卫当时静默通过），此刻记首笔付款会让两路同计——与勾选/恢复守卫同一
     // needForce 模式：前端确认后带 force 放行为显式双算
     if (!b.force && order.item_id != null) {
-      const target = db.prepare('SELECT id, name, bought FROM items WHERE id = ? AND deleted = 0')
+      // 不筛 deleted：软删项目的 bought 状态跨软删可见（r3 C1）——否则软删期
+      // 记付款守卫失明，恢复项目后两路同计静默落库
+      const target = db.prepare('SELECT id, name, bought FROM items WHERE id = ?')
         .get(order.item_id);
       if (target?.bought) {
         return reply.status(409).send({
