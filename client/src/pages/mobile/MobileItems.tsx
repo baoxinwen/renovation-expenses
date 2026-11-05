@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, Card, Collapse, Empty, Input, Skeleton, Tag } from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
 import { toast } from 'sonner';
 import { api } from '../../api';
-import type { PlanData } from '../../api';
+import type { ItemFormValues, PlanData } from '../../api';
 import { fmtMoney } from '../../format';
 import MobileItemDrawer from './MobileItemDrawer';
+import ItemFormModal from '../../components/ItemFormModal';
 
 /** 移动清单：搜索 + 板块手风琴 + 项目卡片；点卡片 = 详情抽屉（方案 A，操作收敛在抽屉内） */
 export default function MobileItems() {
@@ -12,6 +14,9 @@ export default function MobileItems() {
   const [search, setSearch] = useState('');
   const [drawerId, setDrawerId] = useState<number | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // 板块内添加项目：目标板块 id（null = 关闭表单）
+  const [addSectionId, setAddSectionId] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoadError(null);
@@ -87,11 +92,19 @@ export default function MobileItems() {
           items={sections.map((sec) => ({
             key: String(sec.id),
             label: (
-              <span>
+              <span style={{ display: 'flex', alignItems: 'center' }}>
                 <span style={{ fontWeight: 600 }}>{sec.name}</span>
                 <span className="tabular" style={{ color: 'var(--ink-2)', fontSize: 12, marginLeft: 8 }}>
                   {fmtMoney(sec.budget_subtotal ?? 0)}
                 </span>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<PlusOutlined />}
+                  aria-label={`在「${sec.name}」添加项目`}
+                  onClick={(e) => { e.stopPropagation(); setAddSectionId(sec.id); }}
+                  style={{ marginLeft: 'auto' }}
+                />
               </span>
             ),
             children: (
@@ -141,6 +154,26 @@ export default function MobileItems() {
         sections={plan.sections}
         onClose={() => setDrawerId(null)}
         onChanged={load}
+      />
+
+      <ItemFormModal
+        open={addSectionId != null}
+        confirmLoading={saving}
+        onOk={async (values: ItemFormValues) => {
+          if (addSectionId == null) return;
+          setSaving(true);
+          try {
+            await api.addItem(addSectionId, values);
+            setAddSectionId(null);
+            toast.success('已添加');
+            load();
+          } catch (e) {
+            toast.error((e as Error).message);
+          } finally {
+            setSaving(false);
+          }
+        }}
+        onCancel={() => setAddSectionId(null)}
       />
     </div>
   );
