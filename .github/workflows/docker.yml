@@ -4,6 +4,7 @@ name: Build Docker Image
 on:
   push:
     branches: [main]
+    tags: ['v*']
 
 env:
   REGISTRY: ghcr.io
@@ -65,6 +66,10 @@ jobs:
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha
+            # 发版（推 v* tag）时额外产出可回滚的版本镜像：v1.2.3 / 1.2 / 1
+            type=semver,pattern={{version}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=semver,pattern={{major}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
 
       - name: 构建并推送（amd64 + arm64）
         uses: docker/build-push-action@v6
