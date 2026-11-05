@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Drawer, Space, Tag, Typography } from 'antd';
+import { Button, Drawer, Modal, Space, Tag, Typography } from 'antd';
 import { toast } from 'sonner';
 import { api } from '../../api';
 import type { Item, OrderFormValues, Section } from '../../api';
@@ -62,6 +62,24 @@ export default function MobileItemDrawer({ item, open, sections, onClose, onChan
     }
   };
 
+  // 删除确认与桌面 Plan.deleteItem 同款（挂单项目提示订单保留不计入统计）；
+  // 软删后的 8 秒撤销条由 undoableDelete 提供
+  const deleteWithConfirm = () =>
+    Modal.confirm({
+      title: `删除项目「${item.name}」？`,
+      content: item.order_count > 0
+        ? `该项目下有 ${item.order_count} 个订单，删除后订单保留、其付款不再计入项目实际。`
+        : '确定删除该清单项？',
+      okType: 'danger',
+      okText: '删除',
+      onOk: () => undoableDelete({
+        label: item.name,
+        del: () => api.deleteItem(item.id),
+        restore: () => api.restoreItem(item.id),
+        onChanged: () => { onClose(); onChanged(); },
+      }),
+    });
+
   // 建订单：与桌面 Orders.createOrder 同语义（超付确认/守卫/票据补传/跳详情）
   const createOrder = async (values: OrderFormValues, files: File[]) => {
     if (values.paid_now && values.paid_now.amount > values.total_amount) {
@@ -116,13 +134,7 @@ export default function MobileItemDrawer({ item, open, sections, onClose, onChan
         </Button>
         <Button size="large" block onClick={() => setEditOpen(true)}>编辑</Button>
         <Button size="large" block onClick={() => setOrderOpen(true)}>+ 订单</Button>
-        <Button danger size="large" block onClick={() => undoableDelete({
-          label: item.name,
-          del: () => api.deleteItem(item.id),
-          restore: () => api.restoreItem(item.id),
-          // 软删 + 8 秒撤销条已是保护，不加二次确认（与桌面清单行删除同语义）
-          onChanged: () => { onClose(); onChanged(); },
-        })}>删除项目</Button>
+        <Button danger size="large" block onClick={() => deleteWithConfirm()}>删除项目</Button>
         {/* +订单挂已买项目的双算确认走 createOrder 内守卫 */}
       </Space>
       <OrderFormModal

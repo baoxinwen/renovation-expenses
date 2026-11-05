@@ -59,7 +59,10 @@ export default function MobileSectionManager({ open, sections, onClose, onChange
   };
 
   return (
-    <Drawer placement="bottom" open={open} onClose={onClose} height="auto" title="管理板块" styles={{ body: { paddingTop: 8 } }}>
+    <Drawer
+      placement="bottom" open={open} onClose={onClose} height="auto" title="管理板块"
+      styles={{ body: { paddingTop: 8, maxHeight: '60vh', overflowY: 'auto' } }}
+    >
       {sections.length === 0 ? (
         <Empty description="还没有板块" style={{ padding: 16 }} />
       ) : (
