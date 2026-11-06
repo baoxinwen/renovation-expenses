@@ -110,16 +110,39 @@ try {
   const wrong = await timedUpload(fdWrong);
   check('字段名不符快速返回 400', wrong.res.status === 400 && wrong.ms < 10000, `status=${wrong.res.status} ms=${wrong.ms}`);
 
-  // 4) 付款不存在（r3 M19，锁定 ab4ad24 的 404 早退排干）：过期页面带文件上传
-  // 到已删除的付款——修复前 multipart 未消费直接 404,连接悬挂至超时
-  const fdMissing = new FormData();
-  fdMissing.append('files', blobOf(64 * 1024), 'gone.png');
-  const t0 = Date.now();
-  const missing = await fetch(`${BASE}/payments/99999999/receipts`, {
-    method: 'POST', body: fdMissing, signal: AbortSignal.timeout(15000),
+  // 4) 付款不存在（r3 M19，锁定 6e3e44c 的 404 排干）：过期页面带文件上传
+  // 到已删除的付款——排干实现无效时连接悬挂至超时。
+  // 用独立 socket 的原生 http 请求（同下方存活探针的理由）：前序早退用例
+  // 被服务端截断的 socket 留在 undici 连接池，fetch 复用会在 Linux CI 上悬挂
+  const rawMultipart404 = () => new Promise((resolve) => {
+    const t0 = Date.now();
+    const boundary = '----m19drain';
+    const body = Buffer.concat([
+      Buffer.from(`--${boundary}
+Content-Disposition: form-data; name="files"; filename="gone.png"
+Content-Type: image/png
+
+`),
+      Buffer.alloc(64 * 1024, 0xff),
+      Buffer.from(`
+--${boundary}--
+`),
+    ]);
+    const rq = http.request(`${BASE}/payments/99999999/receipts`, {
+      method: 'POST',
+      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}`, 'Content-Length': body.length },
+      timeout: 15000,
+    }, (res) => {
+      res.resume();
+      resolve({ status: res.statusCode, ms: Date.now() - t0 });
+    });
+    rq.on('timeout', () => rq.destroy());
+    rq.on('error', () => resolve({ status: 0, ms: Date.now() - t0 }));
+    rq.end(body);
   });
+  const missing = await rawMultipart404();
   check('付款不存在快速返回 404（不悬挂至超时）',
-    missing.status === 404 && Date.now() - t0 < 10000, `status=${missing.status} ms=${Date.now() - t0}`);
+    missing.status === 404 && missing.ms < 10000, `status=${missing.status} ms=${missing.ms}`);
 
   // 存活探针走 node:http 独立新连接：早退场景服务端会在客户端仍在上传时提前回 400
   // 并截断连接，被重置的 socket 残留在 fetch(undici) 连接池里，复用会误报 ECONNRESET
