@@ -2,7 +2,7 @@
 // 核心契约：force 只能由服务端 409 needForce 触发——首跳一律不带 force，
 // 本地快照的 bought 判定不是仲裁（多端场景会过期）。
 import { describe, it, expect, vi } from 'vitest';
-import { submitWithForceGuard } from '../src/utils/domain';
+import { submitPaymentWithGuard, submitWithForceGuard } from '../src/utils/domain';
 
 const needForceErr = (msg = '重复计入') => Object.assign(new Error(msg), { needForce: true });
 
@@ -54,5 +54,43 @@ describe('submitWithForceGuard', () => {
     const confirm = vi.fn().mockResolvedValue(true);
     await expect(submitWithForceGuard(submit, confirm)).resolves.toBe('ok');
     expect(submit.mock.calls.map((c) => c[0])).toEqual([false, true]);
+  });
+});
+
+// r3 I7：付款近重复守卫的客户端半边契约（submitPaymentWithGuard——
+// QuickPayModal/OrderDetail/MobileRecord 三入口共用，此前零测试防护）
+describe('submitPaymentWithGuard', () => {
+  const payForceErr = (msg = '重复提示') => Object.assign(new Error(msg), { needForce: true });
+
+  it('首跳成功：直接返回，确认不被调用', async () => {
+    const submit = vi.fn().mockResolvedValue('paid');
+    const confirm = vi.fn().mockResolvedValue(true);
+    await expect(submitPaymentWithGuard(submit, confirm)).resolves.toBe('paid');
+    expect(submit).toHaveBeenCalledExactlyOnceWith(false);
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it('needForce → 确认后带 force 重试', async () => {
+    const submit = vi.fn()
+      .mockRejectedValueOnce(payForceErr())
+      .mockResolvedValueOnce('forced');
+    const confirm = vi.fn().mockResolvedValue(true);
+    await expect(submitPaymentWithGuard(submit, confirm)).resolves.toBe('forced');
+    expect(submit.mock.calls.map((c) => c[0])).toEqual([false, true]);
+    expect(confirm).toHaveBeenCalledExactlyOnceWith(expect.any(Error));
+  });
+
+  it('确认被拒绝 → 抛「已取消」中止，不重试', async () => {
+    const submit = vi.fn().mockRejectedValue(payForceErr());
+    const confirm = vi.fn().mockResolvedValue(false);
+    await expect(submitPaymentWithGuard(submit, confirm)).rejects.toThrow('已取消');
+    expect(submit).toHaveBeenCalledExactlyOnceWith(false);
+  });
+
+  it('非 needForce 错误原样抛出（不走确认）', async () => {
+    const submit = vi.fn().mockRejectedValue(new Error('网络连接失败'));
+    const confirm = vi.fn().mockResolvedValue(true);
+    await expect(submitPaymentWithGuard(submit, confirm)).rejects.toThrow('网络连接失败');
+    expect(confirm).not.toHaveBeenCalled();
   });
 });
