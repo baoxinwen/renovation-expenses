@@ -314,9 +314,11 @@ export default async function (app) {
       SELECT p.id FROM payments p JOIN orders o ON o.id = p.order_id
       WHERE p.id = ? AND o.deleted = 0`).get(paymentId);
     if (!payment) {
-      // 付款不存在也先排干（r2 M2）：过期页面带着文件上传时，连接同样悬挂
+      // 付款不存在也先排干（r2 M2）：过期页面带着文件上传时，连接同样悬挂。
+      // 必须把 file stream 排空——仅丢弃 part 不消费流会填满 busboy 16KB 高
+      // 水位令解析停摆,iterator 永不结束（r3 M19 追测实证 ab4ad24 首版无效）
       try {
-        for await (const _ of req.files()) { void _; }
+        for await (const part of req.files()) { part.file?.resume(); }
       } catch { /* 客户端已断开等情况，排干尽力而为 */ }
       return reply.status(404).send({ message: '付款记录不存在（或订单已删除）' });
     }

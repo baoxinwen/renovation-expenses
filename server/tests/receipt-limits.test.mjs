@@ -110,6 +110,17 @@ try {
   const wrong = await timedUpload(fdWrong);
   check('字段名不符快速返回 400', wrong.res.status === 400 && wrong.ms < 10000, `status=${wrong.res.status} ms=${wrong.ms}`);
 
+  // 4) 付款不存在（r3 M19，锁定 ab4ad24 的 404 早退排干）：过期页面带文件上传
+  // 到已删除的付款——修复前 multipart 未消费直接 404,连接悬挂至超时
+  const fdMissing = new FormData();
+  fdMissing.append('files', blobOf(64 * 1024), 'gone.png');
+  const t0 = Date.now();
+  const missing = await fetch(`${BASE}/payments/99999999/receipts`, {
+    method: 'POST', body: fdMissing, signal: AbortSignal.timeout(15000),
+  });
+  check('付款不存在快速返回 404（不悬挂至超时）',
+    missing.status === 404 && Date.now() - t0 < 10000, `status=${missing.status} ms=${Date.now() - t0}`);
+
   // 存活探针走 node:http 独立新连接：早退场景服务端会在客户端仍在上传时提前回 400
   // 并截断连接，被重置的 socket 残留在 fetch(undici) 连接池里，复用会误报 ECONNRESET
   const alive = await new Promise((resolve) => {
