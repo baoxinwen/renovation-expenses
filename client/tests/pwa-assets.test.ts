@@ -35,4 +35,14 @@ describe('PWA 可安装资产', () => {
     expect(html).toContain('name="theme-color"');
     expect(html).toContain('apple-mobile-web-app-capable');
   });
+
+  // r3 M20：构建产物漂移防护——dist 存在时（本地构建过；CI test 阶段无 dist）
+  // PWA 资产必须已拷贝，防止「源文件在、产物旧」的部署错位
+  it('dist 存在时 PWA 资产已随构建拷入', () => {
+    const dist = join(root, 'dist');
+    if (!existsSync(dist)) return; // CI 测试阶段不构建，无产物可查
+    expect(existsSync(join(dist, 'manifest.webmanifest')), 'dist/manifest.webmanifest').toBe(true);
+    expect(existsSync(join(dist, 'icons', 'icon-512.png')), 'dist/icons/icon-512.png').toBe(true);
+    expect(existsSync(join(dist, 'icons', 'apple-touch-icon.png')), 'dist/icons/apple-touch-icon.png').toBe(true);
+  });
 });
