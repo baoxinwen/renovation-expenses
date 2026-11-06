@@ -37,7 +37,7 @@
 
 ### 变更
 
-- 发版镜像按版本号打 tag（v1.2.0 / 1.2 / 1）——NAS 上拉新版出问题可退回
+- 发版镜像按版本号打 tag（1.2.0 / 1.2 / 1，如 `docker pull ghcr.io/baoxinwen/renovation-expenses:1.2.0`）——NAS 上拉新版出问题可退回
   指定版本，不再只有滚动覆盖的 latest
 - 客户端测试重新纳入 TypeScript 类型检查
 
