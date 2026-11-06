@@ -382,6 +382,13 @@ html.dark .ant-btn {
   }
 }
 
+/* 浏览器默认 body 横向 margin(8px×2)会让 antd 滚动锁的宽度补偿
+   (width: calc(100% - 滚动条宽))系统性错位——补偿公式以 body 无 margin
+   为前提,错位表现为锁滚动时背景横向跳动(开抽屉即跳)。清零归位 */
+body {
+  margin: 0;
+}
+
 /* 底部抽屉与主体对齐(移动端 main 左右 padding 12px):两侧留边成弹层样式,
    不再 100% 顶满屏宽把主体留白挤没(用户真机反馈);面板圆角配弹层形态。
    wrapper 宽度是 antd 内联样式,须 !important 才能覆盖 */
