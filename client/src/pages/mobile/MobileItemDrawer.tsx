@@ -115,7 +115,7 @@ export default function MobileItemDrawer({ item, open, sections, onClose, onChan
   };
 
   return (
-    <Drawer placement="bottom" open={open} onClose={onClose} height="auto" styles={{ body: { paddingTop: 8, maxHeight: '70vh', overflowY: 'auto' } }}>
+    <Drawer rootClassName="bottom-sheet-inset" placement="bottom" open={open} onClose={onClose} height="auto" styles={{ body: { paddingTop: 8, maxHeight: '70vh', overflowY: 'auto' } }}>
       <Typography.Title level={5} style={{ marginTop: 0 }}>{item.name}</Typography.Title>
       <div style={{ color: 'var(--ink-2)', fontSize: 13, lineHeight: 1.9, marginBottom: 16 }}>
         <div>{item.spec || '—'}{item.unit ? ` · ${item.quantity} ${item.unit}` : ` · ${item.quantity}`}</div>

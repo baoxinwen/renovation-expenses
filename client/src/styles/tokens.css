@@ -381,3 +381,15 @@ html.dark .ant-btn {
     line-height: 38px;
   }
 }
+
+/* 底部抽屉与主体对齐(移动端 main 左右 padding 12px):两侧留边成弹层样式,
+   不再 100% 顶满屏宽把主体留白挤没(用户真机反馈);面板圆角配弹层形态。
+   wrapper 宽度是 antd 内联样式,须 !important 才能覆盖 */
+.bottom-sheet-inset > .ant-drawer-content-wrapper {
+  left: 12px !important;
+  right: 12px !important;
+  width: auto !important;
+}
+.bottom-sheet-inset > .ant-drawer-content {
+  border-radius: 16px 16px 0 0;
+}
