@@ -206,6 +206,42 @@ export default async function (app) {
     return { ok: true, deleted: true };
   });
 
+  // ===== 批量软删/恢复（桌面订单列表多选）：整批同一单元，撤销语义与单条一致 =====
+  app.post('/orders/batch-delete', async (req, reply) => {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Number.isInteger) : [];
+    if (!ids.length) return reply.status(400).send({ message: 'ids 不能为空' });
+    const info = db.prepare(`UPDATE orders SET deleted = 1
+      WHERE deleted = 0 AND id IN (${ids.map(() => '?').join(',')})`).run(...ids);
+    return { ok: true, deleted: info.changes };
+  });
+
+  app.post('/orders/batch-restore', async (req, reply) => {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Number.isInteger) : [];
+    if (!ids.length) return reply.status(400).send({ message: 'ids 不能为空' });
+    const rows = ids
+      .map((id) => db.prepare('SELECT * FROM orders WHERE id = ? AND deleted = 1').get(id))
+      .filter(Boolean);
+    if (!rows.length) return reply.status(404).send({ message: '没有可恢复的订单' });
+    // 整批双算守卫（与单条恢复同条件）：删除期间挂接项目可能已勾「已买」
+    // （当时订单付款停计，勾选守卫看到 orderPaid=0 静默通过），恢复前整批确认
+    if (!req.body?.force) {
+      const risky = rows.find((order) => order.item_id != null && db.prepare(`
+        SELECT 1 AS x WHERE EXISTS (
+          SELECT 1 FROM items i WHERE i.id = ? AND i.deleted = 0 AND i.bought = 1)
+          AND EXISTS (SELECT 1 FROM payments p WHERE p.order_id = ?)`.trim()
+      ).get(order.item_id, order.id));
+      if (risky) {
+        return reply.status(409).send({
+          message: `「${risky.title}」关联的项目已勾「已买」，恢复订单会让付款重新计入，重复计入实际合计`,
+          needForce: true,
+        });
+      }
+    }
+    const restore = db.transaction(() => rows.forEach((o) =>
+      db.prepare('UPDATE orders SET deleted = 0 WHERE id = ?').run(o.id)))();
+    return { ok: true, restored: rows.length };
+  });
+
   app.post('/orders/:id/restore', async (req, reply) => {
     const order = db.prepare('SELECT * FROM orders WHERE id = ? AND deleted = 1').get(Number(req.params.id));
     if (!order) return reply.status(404).send({ message: '没有可恢复的订单' });

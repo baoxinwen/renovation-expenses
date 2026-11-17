@@ -188,6 +188,54 @@ export default async function (app) {
     return { ok: true };
   });
 
+  // ===== 批量软删/恢复（桌面清单多选）：整批同一时刻软删，撤销只复活本批 =====
+  app.post('/items/batch-delete', async (req, reply) => {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Number.isInteger) : [];
+    if (!ids.length) return reply.status(400).send({ message: 'ids 不能为空' });
+    // 单条 UPDATE 自带原子性；已删/不存在的 id 自然落空，changes 即真实删除数
+    const info = db.prepare(`UPDATE items SET deleted = 1, deleted_at = ?
+      WHERE deleted = 0 AND id IN (${ids.map(() => '?').join(',')})`)
+      .run(new Date().toISOString(), ...ids);
+    return { ok: true, deleted: info.changes };
+  });
+
+  app.post('/items/batch-restore', async (req, reply) => {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Number.isInteger) : [];
+    if (!ids.length) return reply.status(400).send({ message: 'ids 不能为空' });
+    const rows = ids
+      .map((id) => db.prepare('SELECT * FROM items WHERE id = ? AND deleted = 1').get(id))
+      .filter(Boolean);
+    if (!rows.length) return reply.status(404).send({ message: '没有可恢复的项目' });
+    // 整批一个恢复单元：任一条命中双算守卫（已买+挂单付款）就整批 409，
+    // 确认后 force 整批放行——与单条恢复同一契约（needForce → force 重试）
+    if (!req.body?.force) {
+      const risky = rows.find((item) => item.bought && db.prepare(`
+        SELECT COUNT(*) AS c FROM payments p JOIN orders o ON o.id = p.order_id
+        WHERE o.item_id = ? AND o.deleted = 0`).get(item.id).c > 0);
+      if (risky) {
+        return reply.status(409).send({
+          message: `「${risky.name}」已勾「已买」且名下订单有付款，恢复后已买实付与订单付款会重复计入实际合计`,
+          needForce: true,
+        });
+      }
+    }
+    const restore = db.transaction(() => {
+      for (const item of rows) {
+        // 所属板块已软删时连带恢复（与单条恢复同语义；同板块第二条跳过，幂等）
+        const sec = db.prepare('SELECT * FROM sections WHERE id = ? AND deleted = 1').get(item.section_id);
+        if (sec) {
+          const originalName = stripDeletedSuffix(sec.name, sec.id);
+          const taken = db.prepare('SELECT COUNT(*) AS c FROM sections WHERE name = ? AND id != ?').get(originalName, sec.id).c > 0;
+          db.prepare('UPDATE sections SET deleted = 0, deleted_at = NULL, name = ? WHERE id = ?')
+            .run(taken ? `${originalName}（恢复）` : originalName, sec.id);
+        }
+        db.prepare('UPDATE items SET deleted = 0, deleted_at = NULL WHERE id = ?').run(item.id);
+      }
+    });
+    restore();
+    return { ok: true, restored: rows.length };
+  });
+
   app.put('/items/:id', async (req, reply) => {
     const id = Number(req.params.id);
     const item = db.prepare('SELECT * FROM items WHERE id = ? AND deleted = 0').get(id);
