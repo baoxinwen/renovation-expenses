@@ -298,7 +298,9 @@ export default function Orders() {
         rowKey="id"
         loading={loading}
         dataSource={rows}
-        scroll={{ x: 980 }}
+        // 798：固定列收到内容下限后，订单列作为唯一不定宽列在常规窗口（视口 ≥1190，
+        // 容器 ~912）能分到百余像素、滚动条不常驻；更窄窗口横向滚动查看
+        scroll={{ x: 798 }}
         onRow={(r) => ({ onClick: () => nav(`/orders/${r.id}`), style: { cursor: 'pointer' } })}
         pagination={rows.length > 20 ? { pageSize: 20, showTotal: (t) => `共 ${t} 笔订单` } : false}
         columns={[
@@ -306,30 +308,30 @@ export default function Orders() {
             title: '订单',
             dataIndex: 'title',
             render: (_, o) => (
-              <div>
-                <div style={{ fontWeight: 500 }}>{o.title}</div>
-                {o.vendor && <div style={{ color: 'var(--ink-2)', fontSize: 12 }}>{o.vendor}</div>}
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.title}</div>
+                {o.vendor && <div style={{ color: 'var(--ink-2)', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.vendor}</div>}
               </div>
             ),
           },
           {
             title: '预算项目',
-            width: 200,
+            width: 150,
             render: (_, o) =>
               o.item_name ? (
                 <Space size={4} wrap>
-                  <span>{o.item_name}</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 110 }}>{o.item_name}</span>
                   {o.section_name && <Tag bordered={false}>{o.section_name}</Tag>}
                 </Space>
               ) : (
                 <span style={{ color: 'var(--ink-3)' }}>未关联</span>
               ),
           },
-          { title: '总额', dataIndex: 'total_amount', width: 110, align: 'right', render: (v) => fmtMoney(v) },
-          { title: '已付', dataIndex: 'paid', width: 110, align: 'right', render: (v) => fmtMoney(v) },
+          { title: '总额', dataIndex: 'total_amount', width: 100, align: 'right', render: (v) => fmtMoney(v) },
+          { title: '已付', dataIndex: 'paid', width: 100, align: 'right', render: (v) => fmtMoney(v) },
           {
             title: '未付',
-            width: 110,
+            width: 100,
             align: 'right',
             render: (_, o) => {
               const over = (o.paid ?? 0) > o.total_amount;
@@ -342,13 +344,13 @@ export default function Orders() {
           },
           {
             title: '付款进度',
-            width: 170,
+            width: 100,
             render: (_, o) => {
               const paid = o.paid ?? 0;
               const pct = o.total_amount > 0 ? Math.min(100, (paid / o.total_amount) * 100) : 0;
               return (
                 <Space size={8}>
-                  <div style={{ flex: 1, minWidth: 80 }}>
+                  <div style={{ flex: 1, minWidth: 56 }}>
                     <WoodProgress value={paid} budget={o.total_amount} size="sm" label="付款进度" />
                   </div>
                   <span className="tabular" style={{ fontSize: 12, color: 'var(--ink-2)' }}>{Math.round(pct)}%</span>
@@ -359,7 +361,7 @@ export default function Orders() {
           {
             title: '状态',
             dataIndex: 'status',
-            width: 100,
+            width: 80,
             render: (v: string, o) =>
               v === 'closed' ? (
                 <Tag color="success">已结清</Tag>
@@ -371,7 +373,7 @@ export default function Orders() {
           },
           {
             title: '操作',
-            width: 195,
+            width: 168,
             render: (_, o) => (
               <Space size={0} onClick={(e) => e.stopPropagation()}>
                 <Button type="link" size="small" onClick={() => nav(`/orders/${o.id}`)}>详情</Button>

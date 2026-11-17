@@ -345,18 +345,19 @@ export default function Plan() {
       render: () => (searching ? null : <DragHandle />),
     },
     {
-      title: '项目名称', dataIndex: 'name', width: 110, fixed: 'left' as const,
+      title: '项目名称', dataIndex: 'name', width: 96, fixed: 'left' as const,
       ellipsis: { showTitle: true },
     },
     {
-      title: '规格 / 品牌', dataIndex: 'spec',
+      // 唯一不定宽列：吃掉容器剩余宽度；内容超宽时省略号（悬停看全名）
+      title: '规格 / 品牌', dataIndex: 'spec', ellipsis: { showTitle: true },
     },
     {
       // 单位/数量实际内容只有 1-2 字符，压缩列宽把空间让给规格/品牌（减少其换行）
       title: '单位', dataIndex: 'unit', width: 44,
     },
     {
-      title: '数量', dataIndex: 'quantity', width: 56, align: 'right' as const,
+      title: '数量', dataIndex: 'quantity', width: 50, align: 'right' as const,
       render: (v: number) => <span className="tabular">{v}</span>,
     },
     {
@@ -386,7 +387,7 @@ export default function Plan() {
       },
     },
     {
-      title: '已买', dataIndex: 'bought', width: 56, align: 'center' as const,
+      title: '已买', dataIndex: 'bought', width: 40, align: 'center' as const,
       render: (_, it: Item) =>
         it.order_count > 0 ? (
           <Tooltip title="该项目通过订单记录付款，无需勾选">
@@ -401,10 +402,12 @@ export default function Plan() {
         ),
     },
     {
-      title: '备注', dataIndex: 'note', width: 150, ellipsis: true,
+      // 96：各列合计压到 ~820，常规桌面窗口（视口 ≥1190）规格列能分到百余像素、
+      // 滚动条不再常驻；更窄窗口按下方 scroll.x 横向滚动
+      title: '备注', dataIndex: 'note', width: 96, ellipsis: true,
     },
     {
-      title: '操作', width: 130, className: 'no-print',
+      title: '操作', width: 138, className: 'no-print',
       onHeaderCell: () => ({ className: 'no-print' }),
       render: (_, it: Item) => (
         <Space size={0}>
@@ -650,7 +653,7 @@ export default function Plan() {
                             dataSource={sec.items ?? []}
                             rowClassName={(it) => (it.bought ? 'row-bought' : '')}
                             pagination={false}
-                            scroll={{ x: 960 }}
+                            scroll={{ x: 820 }}
                             components={{ body: { row: SortableRow } }}
                             locale={{ emptyText: '该板块还没有项目，点右上角「添加项目」开始' }}
                             columns={itemColumns}
