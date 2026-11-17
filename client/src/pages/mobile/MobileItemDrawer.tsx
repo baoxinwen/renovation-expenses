@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Button, Drawer, Modal, Space, Tag, Typography } from 'antd';
+import { Link, useNavigate } from 'react-router-dom';
+import { Button, Drawer, Modal, Space, Tag } from 'antd';
 import { toast } from 'sonner';
 import { api } from '../../api';
 import type { Item, OrderFormValues, Section } from '../../api';
@@ -115,15 +115,25 @@ export default function MobileItemDrawer({ item, open, sections, onClose, onChan
   };
 
   return (
-    <Drawer rootClassName="bottom-sheet-inset" placement="bottom" open={open} onClose={onClose} height="auto" styles={{ body: { paddingTop: 8, maxHeight: '70vh', overflowY: 'auto' } }}>
-      <Typography.Title level={5} style={{ marginTop: 0 }}>{item.name}</Typography.Title>
+    <Drawer
+      rootClassName="bottom-sheet-inset"
+      placement="bottom"
+      open={open}
+      onClose={onClose}
+      height="auto"
+      title={item.name}
+      styles={{ body: { paddingTop: 8, maxHeight: '70vh', overflowY: 'auto' } }}
+    >
       <div style={{ color: 'var(--ink-2)', fontSize: 13, lineHeight: 1.9, marginBottom: 16 }}>
         <div>{item.spec || '—'}{item.unit ? ` · ${item.quantity} ${item.unit}` : ` · ${item.quantity}`}</div>
         <div>预算 {fmtMoney(item.budget_amount)} ｜ 实际 {bought ? fmtMoney(item.paid_amount ?? item.actual_amount) : '—'}</div>
         <div>
           {bought ? <Tag color="success">已买{item.bought_date ? ` · ${item.bought_date}` : ''}</Tag> : <Tag>未买</Tag>}
           {item.order_count > 0 && (
-            <a onClick={() => nav(`/orders?item_id=${item.id}`)}>{item.order_count} 单 · 已付 {fmtMoney(item.order_paid)}</a>
+            /* 真链接（可聚焦/中键新标签），替代 <a onClick> 伪链接 */
+            <Link to={`/orders?item_id=${item.id}`} style={{ color: 'var(--wood-600)' }}>
+              {item.order_count} 单 · 已付 {fmtMoney(item.order_paid)}
+            </Link>
           )}
         </div>
         {item.note && <div style={{ color: 'var(--ink-3)' }}>{item.note}</div>}

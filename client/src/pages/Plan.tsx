@@ -404,14 +404,16 @@ export default function Plan() {
       title: '备注', dataIndex: 'note', width: 150, ellipsis: true,
     },
     {
-      title: '操作', width: 96, className: 'no-print',
+      title: '操作', width: 130, className: 'no-print',
       onHeaderCell: () => ({ className: 'no-print' }),
       render: (_, it: Item) => (
         <Space size={0}>
+          {/* 编辑走按钮：行点击只是快捷方式，键盘用户由此进入整行编辑 */}
+          <Button type="link" size="small" onClick={(e) => { e.stopPropagation(); setEditItem(it); }}>编辑</Button>
           {it.order_count > 0
             ? <Button type="link" size="small" onClick={() => nav(`/orders?item_id=${it.id}`)}>{it.order_count} 订单</Button>
             : <Button type="link" size="small" style={{ color: 'var(--ink-3)' }} onClick={() => nav(`/orders?item_id=${it.id}&new=1`)}>+订单</Button>}
-          <Button type="link" size="small" danger onClick={() => deleteItem(it)}>删</Button>
+          <Button type="link" size="small" danger onClick={(e) => { e.stopPropagation(); deleteItem(it); }}>删</Button>
         </Space>
       ),
     },
@@ -452,7 +454,7 @@ export default function Plan() {
           <Card style={{ height: '100%' }}>
             <div className="label-caption">已落实</div>
             <div className="num-display" style={{ fontSize: 22, marginTop: 8 }}>{bought} <span style={{ fontSize: 14, color: 'var(--ink-3)' }}>/ {allItems.length} 项</span></div>
-            <div style={{ marginTop: 8 }}><WoodProgress value={bought} budget={allItems.length} size="sm" /></div>
+            <div style={{ marginTop: 8 }}><WoodProgress value={bought} budget={allItems.length} size="sm" label="落实进度" /></div>
           </Card>
         </Col>
       </Row>
@@ -486,6 +488,7 @@ export default function Plan() {
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <Input.Search
             style={{ width: 220 }}
+            aria-label="搜索清单项目"
             placeholder="搜项目 / 品牌 / 备注"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -506,21 +509,25 @@ export default function Plan() {
         </div>
       </Card>
 
-      {/* ===== 待付尾款：单行摘要，点开展开 ===== */}
+      {/* ===== 待付尾款：单行摘要，点开展开（摘要行是原生 button，键盘可达） ===== */}
       {unpaid.length > 0 && (
         <Card
           size="small"
           className="no-print"
-          styles={{ body: { padding: '8px 16px', cursor: 'pointer' } }}
-          onClick={() => setUnpaidOpen((v) => !v)}
+          styles={{ body: { padding: '8px 16px' } }}
           title={null}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            className="row-link"
+            aria-expanded={unpaidOpen}
+            onClick={() => setUnpaidOpen((v) => !v)}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}
+          >
             <Tag color="error" style={{ marginRight: 2 }}>待付尾款</Tag>
             <span style={{ fontWeight: 600 }} className="tabular">{fmtMoney(totalUnpaid)}</span>
             <span className="label-caption">{unpaid.length} 笔未结清 · 点击{unpaidOpen ? '收起' : '展开'}</span>
-            <span style={{ marginLeft: 'auto', color: 'var(--ink-3)' }}>{unpaidOpen ? '▲' : '▼'}</span>
-          </div>
+            <span style={{ marginLeft: 'auto', color: 'var(--ink-3)' }} aria-hidden>{unpaidOpen ? '▲' : '▼'}</span>
+          </button>
           {unpaidOpen && (
             <div style={{ marginTop: 10, cursor: 'default' }} onClick={(e) => e.stopPropagation()}>
               <Table<Order>
@@ -572,6 +579,8 @@ export default function Plan() {
                       <Button
                         type="text" size="small"
                         icon={collapsed.has(sec.id) ? <RightOutlined /> : <DownOutlined />}
+                        aria-label={collapsed.has(sec.id) ? `展开板块「${sec.name}」` : `收起板块「${sec.name}」`}
+                        aria-expanded={!collapsed.has(sec.id)}
                         onClick={() => toggleCollapse(sec.id)}
                         style={{ marginLeft: -6 }}
                       />
@@ -617,7 +626,7 @@ export default function Plan() {
                         }}
                         trigger={['click']}
                       >
-                        <Button type="text" size="small" icon={<MoreOutlined />} />
+                        <Button type="text" size="small" icon={<MoreOutlined />} aria-label={`板块「${sec.name}」更多操作`} />
                       </Dropdown>
                     </Space>
                   }
@@ -730,6 +739,7 @@ export default function Plan() {
       >
         <Input
           placeholder="如：封窗、全屋定制"
+          aria-label="板块名称"
           value={sectionName}
           onChange={(e) => setSectionName(e.target.value)}
           onPressEnter={() => document.querySelector<HTMLButtonElement>('.ant-modal .ant-btn-primary')?.click()}

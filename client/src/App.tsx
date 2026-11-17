@@ -1,5 +1,5 @@
-import { createContext, lazy, Suspense, useContext } from 'react';
-import { BrowserRouter, Link, Navigate, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { createContext, lazy, Suspense, useContext, useEffect } from 'react';
+import { BrowserRouter, Navigate, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { Button, ConfigProvider, Layout, Menu, Spin } from 'antd';
 import { BarChartOutlined, FileTextOutlined, OrderedListOutlined, SettingOutlined } from '@ant-design/icons';
 import { Toaster } from 'sonner';
@@ -78,7 +78,23 @@ function SideMenu() {  const nav = useNavigate();
  *  卸载重定向；仅「/」与「/items」按端选组件（首页两端本就是不同页面，/items
  *  桌面无对应页，重定向仅丢搜索词，可接受） */
 function AppRoutes({ isMobile }: { isMobile: boolean }) {
+  const nav = useNavigate();
   const location = useLocation();
+
+  // 路由级标题：微信 webview 顶栏与浏览器历史都按 document.title 区分页面
+  useEffect(() => {
+    const path = location.pathname;
+    const page = path.startsWith('/print/') ? '打印清单'
+      : path === '/record' ? '记一笔'
+      : path.startsWith('/orders/') ? '订单详情'
+      : path.startsWith('/orders') ? '订单'
+      : path.startsWith('/items') ? '清单'
+      : path.startsWith('/settings') ? '设置'
+      : path.startsWith('/analysis') ? '分析'
+      : isMobile ? '首页' : '预算清单';
+    document.title = `${page} · 装修账本`;
+  }, [location.pathname, isMobile]);
+
   if (location.pathname.startsWith('/print/')) {
     return (
       <Suspense fallback={<PageFallback />}>
@@ -120,9 +136,8 @@ function AppRoutes({ isMobile }: { isMobile: boolean }) {
                 }}
               >
                 <span style={{ fontSize: 16, fontWeight: 650, letterSpacing: '0.05em' }}>🏠 装修账本</span>
-                <Link to="/settings" aria-label="设置">
-                  <Button type="text" size="small" icon={<SettingOutlined />} />
-                </Link>
+                {/* 不用 Link 包 Button（嵌套交互元素）：与 TabBar 同款 button+nav 惯例 */}
+                <Button type="text" size="small" icon={<SettingOutlined />} aria-label="设置" onClick={() => nav('/settings')} />
               </header>
               <main style={{ padding: 12, paddingBottom: 'calc(72px + env(safe-area-inset-bottom, 0px))' }}>
                 {routes}

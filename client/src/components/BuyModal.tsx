@@ -4,6 +4,7 @@ import dayjs, { type Dayjs } from 'dayjs';
 import type { Item } from '../api';
 import { budgetDelta, formatDelta } from '../utils/budgetCalc';
 import { paidPrefill } from '../utils/domain';
+import { confirmAsync } from '../utils/confirm';
 
 interface Values {
   price: number;
@@ -78,7 +79,20 @@ export default function BuyModal({ item, open, onClose, onConfirm, onUnmark, con
         </Form.Item>
       </Form>
       {isBought && (
-        <Button type="link" danger style={{ padding: 0 }} onClick={() => onUnmark(item.id)}>
+        <Button
+          type="link"
+          danger
+          style={{ padding: 0 }}
+          onClick={async () => {
+            // 单击即清实付与日期，数据要凭记忆重录——加一道确认（桌面/移动共用本组件，一处拦两端）
+            const ok = await confirmAsync({
+              title: '取消已买？',
+              content: `将清除「${item.name}」的实付金额与购买日期`,
+              okText: '取消已买',
+            });
+            if (ok) onUnmark(item.id);
+          }}
+        >
           取消已买（清除实付金额与日期）
         </Button>
       )}

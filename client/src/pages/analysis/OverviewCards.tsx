@@ -18,7 +18,8 @@ export default function OverviewCards({ summary }: { summary: Summary | null }) 
     { label: '预算目标', node: <AnimatedMoney value={summary?.total_budget ?? 0} style={{ ...moneyStyle, fontSize: moneySize }} /> },
     { label: '清单总计', node: <AnimatedMoney value={summary?.plan_total ?? 0} style={{ ...moneyStyle, fontSize: moneySize }} /> },
     {
-      label: '超支 / 结余',
+      // 标签随状态切换而非只靠颜色区分（读屏与色弱都需要文字本身说明这是超支还是结余）
+      label: diff > 0 ? '超支' : '结余',
       node: (
         <AnimatedMoney
           value={Math.abs(diff)}

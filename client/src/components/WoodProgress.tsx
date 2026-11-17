@@ -3,10 +3,12 @@
  * 浅木色凹槽 + CSS 木纹填充；超支变陶土色并在槽右端出现溢出刻度。
  * 纯 CSS 变量驱动，亮暗模式自动适配。
  */
-export default function WoodProgress({ value, budget, size = 'md' }: {
+export default function WoodProgress({ value, budget, size = 'md', label = '预算使用进度' }: {
   value: number;   // 已花
   budget: number;  // 预算
   size?: 'sm' | 'md' | 'lg';
+  /** 读屏名称：同一组件也表达「已落实项数」等非金额进度，按语境传入 */
+  label?: string;
 }) {
   const hasBudget = budget > 0;
   const over = hasBudget && value > budget;
@@ -27,9 +29,11 @@ export default function WoodProgress({ value, budget, size = 'md' }: {
   return (
     <div
       role="progressbar"
+      aria-label={label}
       aria-valuenow={Math.round(pct)}
       aria-valuemin={0}
       aria-valuemax={100}
+      aria-valuetext={over ? `${label}：${Math.round(pct)}%，已超出` : `${label}：${Math.round(pct)}%`}
       style={{
         position: 'relative',
         height: h,

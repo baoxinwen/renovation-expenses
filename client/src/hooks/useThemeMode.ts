@@ -20,8 +20,13 @@ export function useThemeMode() {
   useEffect(() => {
     const apply = () => {
       const dark = mode === 'dark' || (mode === 'system' && systemDark());
-      document.documentElement.classList.toggle('dark', dark);
+      const root = document.documentElement;
+      // 换肤瞬间抑制全站过渡（tokens.css .theme-switching）：不然所有颜色
+      // transition 同时重定向，观感是整页颜色拖影
+      root.classList.add('theme-switching');
+      root.classList.toggle('dark', dark);
       setIsDark(dark);
+      requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove('theme-switching')));
     };
     apply();
     localStorage.setItem(STORAGE_KEY, mode);

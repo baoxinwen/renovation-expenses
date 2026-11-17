@@ -53,7 +53,7 @@ export default function PrintSection() {
       <div className="print-toolbar">
         <Checkbox checked={withPrice} onChange={(e) => setWithPrice(e.target.checked)}>包含价格</Checkbox>
         <Button type="primary" icon={<PrinterOutlined />} onClick={() => window.print()}>打印 / 另存 PDF</Button>
-        <span style={{ color: '#888', fontSize: 12 }}>
+        <span style={{ color: 'var(--ink-2)', fontSize: 12 }}>
           打印对话框中选择「另存为 PDF」；微信内置浏览器不支持打印，请用系统浏览器打开
         </span>
       </div>

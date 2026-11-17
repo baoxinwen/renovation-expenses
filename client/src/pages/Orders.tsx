@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Alert, Button, Card, Empty, Input, Modal, Popconfirm, Select, Skeleton, Space, Table, Tag } from 'antd';
+import { Alert, Button, Card, Empty, Input, Modal, Select, Skeleton, Space, Table, Tag } from 'antd';
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { api } from '../api';
 import type { Order, OrderFormValues, Section } from '../api';
@@ -186,6 +186,7 @@ export default function Orders() {
           <Select
             style={{ width: 140 }}
             allowClear
+            aria-label="按板块筛选"
             placeholder="全部板块"
             value={filters.section_id}
             onChange={(v) => setFilters((f) => ({ ...f, section_id: v, item_id: undefined }))}
@@ -195,6 +196,7 @@ export default function Orders() {
             style={{ width: 180 }}
             allowClear
             showSearch
+            aria-label="按项目筛选"
             placeholder="全部项目"
             optionFilterProp="label"
             value={filters.item_id}
@@ -205,6 +207,7 @@ export default function Orders() {
           <Select
             style={{ width: 120 }}
             allowClear
+            aria-label="按状态筛选"
             placeholder="全部状态"
             value={filters.status}
             onChange={(v) => setFilters((f) => ({ ...f, status: v }))}
@@ -215,13 +218,14 @@ export default function Orders() {
           />
           <Input.Search
             style={{ width: 220 }}
+            aria-label="搜索订单"
             placeholder="搜订单 / 商家 / 项目"
             allowClear
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             onSearch={(v) => { setSearchInput(v); setFilters((f) => (f.q === v ? f : { ...f, q: v })); }}
           />
-          <Button icon={<ReloadOutlined />} onClick={load} />
+          <Button icon={<ReloadOutlined />} aria-label="刷新订单列表" onClick={load} />
         </Space>
       </Card>
 
@@ -240,39 +244,41 @@ export default function Orders() {
         ) : (
           <Space direction="vertical" size={10} style={{ width: '100%' }}>
             {rows.map((o) => (
-              <Card
-                key={o.id}
-                size="small"
-                styles={{ body: { padding: '12px 14px' } }}
-                onClick={() => nav(`/orders/${o.id}`)}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                      <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.title}</span>
-                      {o.status === 'closed'
-                        ? <Tag color="green" style={{ marginRight: 0 }}>已结清</Tag>
-                        : (o.paid ?? 0) >= o.total_amount && o.total_amount > 0
-                          ? <Tag color="orange" style={{ marginRight: 0 }}>建议结清</Tag>
-                          : <Tag color="blue" style={{ marginRight: 0 }}>进行中</Tag>}
+              <Card key={o.id} size="small" styles={{ body: { padding: '12px 14px' } }}>
+                {/* 卡主体是原生 button：键盘 Enter/Space 同样能进订单详情 */}
+                <button
+                  className="row-link"
+                  onClick={() => nav(`/orders/${o.id}`)}
+                  style={{ display: 'block', width: '100%' }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.title}</span>
+                        {o.status === 'closed'
+                          ? <Tag color="success" style={{ marginRight: 0 }}>已结清</Tag>
+                          : (o.paid ?? 0) >= o.total_amount && o.total_amount > 0
+                            ? <Tag color="warning" style={{ marginRight: 0 }}>建议结清</Tag>
+                            : <Tag color="processing" style={{ marginRight: 0 }}>进行中</Tag>}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--ink-2)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {o.item_name || '未关联项目'}{o.vendor ? ` · ${o.vendor}` : ''}
+                      </div>
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--ink-2)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {o.item_name || '未关联项目'}{o.vendor ? ` · ${o.vendor}` : ''}
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <div className="tabular" style={{ fontWeight: 600 }}>{fmtMoney(o.total_amount)}</div>
+                      <div className="tabular" style={{ fontSize: 12, color: (o.paid ?? 0) > o.total_amount ? 'var(--amber)' : unpaidAmount(o) > 0 ? 'var(--clay)' : 'var(--sage)' }}>
+                        {(o.paid ?? 0) > o.total_amount ? '已付超出' : unpaidAmount(o) === 0 ? '已付清' : `未付 ${fmtMoney(unpaidAmount(o))}`}
+                      </div>
                     </div>
                   </div>
-                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div className="tabular" style={{ fontWeight: 600 }}>{fmtMoney(o.total_amount)}</div>
-                    <div className="tabular" style={{ fontSize: 12, color: (o.paid ?? 0) > o.total_amount ? 'var(--amber)' : unpaidAmount(o) > 0 ? 'var(--clay)' : 'var(--sage)' }}>
-                      {(o.paid ?? 0) > o.total_amount ? '已付超出' : unpaidAmount(o) === 0 ? '已付清' : `未付 ${fmtMoney(unpaidAmount(o))}`}
-                    </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+                    <div style={{ flex: 1 }}><WoodProgress value={o.paid ?? 0} budget={o.total_amount} size="sm" label="付款进度" /></div>
+                    <span className="tabular" style={{ fontSize: 12, color: 'var(--ink-2)' }}>
+                      {o.total_amount > 0 ? Math.round(Math.min(100, ((o.paid ?? 0) / o.total_amount) * 100)) : 0}%
+                    </span>
                   </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
-                  <div style={{ flex: 1 }}><WoodProgress value={o.paid ?? 0} budget={o.total_amount} size="sm" /></div>
-                  <span className="tabular" style={{ fontSize: 12, color: 'var(--ink-2)' }}>
-                    {o.total_amount > 0 ? Math.round(Math.min(100, ((o.paid ?? 0) / o.total_amount) * 100)) : 0}%
-                  </span>
-                </div>
+                </button>
               </Card>
             ))}
           </Space>
@@ -302,7 +308,7 @@ export default function Orders() {
             render: (_, o) => (
               <div>
                 <div style={{ fontWeight: 500 }}>{o.title}</div>
-                {o.vendor && <div style={{ color: '#8c8c8c', fontSize: 12 }}>{o.vendor}</div>}
+                {o.vendor && <div style={{ color: 'var(--ink-2)', fontSize: 12 }}>{o.vendor}</div>}
               </div>
             ),
           },
@@ -316,7 +322,7 @@ export default function Orders() {
                   {o.section_name && <Tag bordered={false}>{o.section_name}</Tag>}
                 </Space>
               ) : (
-                <span style={{ color: '#bfbfbf' }}>未关联</span>
+                <span style={{ color: 'var(--ink-3)' }}>未关联</span>
               ),
           },
           { title: '总额', dataIndex: 'total_amount', width: 110, align: 'right', render: (v) => fmtMoney(v) },
@@ -343,7 +349,7 @@ export default function Orders() {
               return (
                 <Space size={8}>
                   <div style={{ flex: 1, minWidth: 80 }}>
-                    <WoodProgress value={paid} budget={o.total_amount} size="sm" />
+                    <WoodProgress value={paid} budget={o.total_amount} size="sm" label="付款进度" />
                   </div>
                   <span className="tabular" style={{ fontSize: 12, color: 'var(--ink-2)' }}>{Math.round(pct)}%</span>
                 </Space>
@@ -356,11 +362,11 @@ export default function Orders() {
             width: 100,
             render: (v: string, o) =>
               v === 'closed' ? (
-                <Tag color="green">已结清</Tag>
+                <Tag color="success">已结清</Tag>
               ) : (o.paid ?? 0) >= o.total_amount && o.total_amount > 0 ? (
-                <Tag color="orange">建议结清</Tag>
+                <Tag color="warning">建议结清</Tag>
               ) : (
-                <Tag color="blue">进行中</Tag>
+                <Tag color="processing">进行中</Tag>
               ),
           },
           {
@@ -375,15 +381,9 @@ export default function Orders() {
                 {o.status === 'open' && (o.paid ?? 0) >= o.total_amount && o.total_amount > 0 && (
                   <Button type="link" size="small" onClick={() => closeOrder(o)}>结清</Button>
                 )}
-                <Popconfirm
-                  title="删除该订单？"
-                  description="删除后 8 秒内可撤销"
-                  okText="删除"
-                  okType="danger"
-                  onConfirm={() => doDeleteOrder(o)}
-                >
-                  <Button type="link" size="small" danger>删除</Button>
-                </Popconfirm>
+                {/* 只留 Modal.confirm 一层：Popconfirm+Modal 双层确认文案几乎相同，
+                    是两次点击同一个问题；删除本身已有 8 秒撤销 */}
+                <Button type="link" size="small" danger onClick={() => doDeleteOrder(o)}>删除</Button>
               </Space>
             ),
           },

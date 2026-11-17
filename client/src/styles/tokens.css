@@ -9,7 +9,8 @@
   --surface-2: #f0f0ed;
   --ink: #2b2622;
   --ink-2: #6b6259;
-  --ink-3: #a2978a;
+  /* 辅助文字/图形最低档：卡面上实测须 ≥4.5:1（文字）/3:1（图形），#a2978a 仅 2.79:1 */
+  --ink-3: #7c7164;
   --wood-600: #8c5e3c;
   --wood-700: #744a2e;
   --wood-300: #c9ad93;
@@ -17,9 +18,11 @@
   --wood-50: #f7f1ea;
   --clay: #b5542d;
   --clay-100: #f7e6de;
-  --sage: #7a8b6f;
+  /* 语义绿/琥珀同时承担文字角色（结余/已付清/超付），亮色卡面上须 ≥4.5:1，
+     #7a8b6f=3.56、#c08a3e=2.94 均不够 */
+  --sage: #69785f;
   --sage-100: #e9eee5;
-  --amber: #c08a3e;
+  --amber: #946a30;
   --line: #e8e8e6;
   --shadow-card: 0 1px 2px rgba(43, 38, 34, 0.04), 0 2px 8px rgba(43, 38, 34, 0.04);
 
@@ -40,7 +43,8 @@ html.dark {
   --surface-3: #20201e;
   --ink: #ede7df;
   --ink-2: #a79c90;
-  --ink-3: #746a5f;
+  /* 暗色同底线：#746a5f 对暗卡面 3.45:1，文字不过 4.5:1 */
+  --ink-3: #897f74;
   --wood-600: #c89b72;
   --wood-700: #d8b28c;
   --wood-300: #6e523a;
@@ -88,6 +92,17 @@ body {
   font-size: 12px;
   letter-spacing: 0.02em;
   color: var(--ink-2);
+}
+
+/* 可点击行主区：原生 button 复位成行内容观感（键盘可达的行点击路径） */
+.row-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 /* 按压反馈（仅精确指针设备；emil: scale .97, 120ms） */
@@ -182,6 +197,12 @@ html.dark .ant-btn {
 .fold > .fold-inner {
   overflow: hidden;
   min-height: 0;
+}
+/* 折叠区的按钮仍可聚焦会被 Tab 走进看不见的区域——收起后移出可聚焦树；
+   visibility 的过渡延迟到收起动画走完再生效，展开时立即恢复 */
+.fold:not([data-open="true"]) > .fold-inner {
+  visibility: hidden;
+  transition: visibility 0s 240ms;
 }
 
 /* 铁律 9b：对勾微弹——欠阻尼弹簧（380/18）近似，选中瞬间轻微过冲 */
@@ -387,6 +408,19 @@ html.dark .ant-btn {
    为前提,错位表现为锁滚动时背景横向跳动(开抽屉即跳)。清零归位 */
 body {
   margin: 0;
+}
+
+/* 抽屉内滚动到头不带动背景页（滚动穿透） */
+.ant-drawer-body {
+  overscroll-behavior: contain;
+}
+
+/* 主题切换瞬间抑制全部过渡（useThemeMode 挂载后 2 帧移除）：
+   否则全站颜色 transition 在换肤瞬间齐刷过渡，观感发脏 */
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition: none !important;
 }
 
 /* 底部抽屉与主体对齐(移动端 main 左右 padding 12px):两侧留边成弹层样式,

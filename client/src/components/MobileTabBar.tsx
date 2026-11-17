@@ -63,6 +63,7 @@ export default function MobileTabBar() {
           <button
             key={t.key}
             aria-label={t.label}
+            aria-current={isActive ? 'page' : undefined}
             onClick={() => nav(t.key)}
             style={{
               flex: 1, display: 'flex', flexDirection: 'column',

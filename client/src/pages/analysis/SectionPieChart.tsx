@@ -52,6 +52,7 @@ export default function SectionPieChart({ charts }: { charts: Charts | null }) {
       )}
       isEmpty={data.length === 0}
       emptyText={mode === 'budget' ? '预算还没排上——先到清单页填项目' : '还没有实际支出'}
+      ariaLabel={`板块分布环形图（${mode === 'budget' ? '预算' : '实际'}口径）`}
     >
       <ReactECharts option={option} theme={themeName} notMerge style={{ height: 320 }} />
     </ChartCard>

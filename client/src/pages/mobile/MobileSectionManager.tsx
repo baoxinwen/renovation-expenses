@@ -80,6 +80,7 @@ export default function MobileSectionManager({ open, sections, onClose, onChange
                 <>
                   <Input
                     autoFocus
+                    aria-label={`修改「${sec.name}」的名称`}
                     defaultValue={sec.name}
                     onChange={(e) => setRenameValue(e.target.value)}
                     onPressEnter={() => submitRename(sec)}
@@ -97,8 +98,9 @@ export default function MobileSectionManager({ open, sections, onClose, onChange
                       {(sec.items ?? []).length} 项
                     </span>
                   </span>
-                  <Button type="text" size="small" onClick={() => { setRenamingId(sec.id); setRenameValue(sec.name); }}>改名</Button>
-                  <Button type="text" size="small" danger onClick={() => deleteSection(sec)}>删除</Button>
+                  {/* 行内高频操作拉到 44px 触控目标（项目自身 48px 约定的紧凑档） */}
+                  <Button type="text" onClick={() => { setRenamingId(sec.id); setRenameValue(sec.name); }} style={{ minHeight: 44 }}>改名</Button>
+                  <Button type="text" danger onClick={() => deleteSection(sec)} style={{ minHeight: 44 }}>删除</Button>
                 </>
               )}
             </div>
@@ -108,6 +110,7 @@ export default function MobileSectionManager({ open, sections, onClose, onChange
       <Space.Compact block style={{ marginTop: 16 }}>
         <Input
           placeholder="新板块名称"
+          aria-label="新板块名称"
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           onPressEnter={addSection}

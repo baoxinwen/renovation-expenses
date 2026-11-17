@@ -332,7 +332,7 @@ export default function OrderDetail() {
             <Descriptions column={{ xs: 1, sm: 2, md: 3 }} size="small">
               <Descriptions.Item label="商家 / 施工方">{order.vendor || '—'}</Descriptions.Item>
               <Descriptions.Item label="状态">
-                {order.status === 'closed' ? <Tag color="green">已结清</Tag> : <Tag color="blue">进行中</Tag>}
+                {order.status === 'closed' ? <Tag color="success">已结清</Tag> : <Tag color="processing">进行中</Tag>}
               </Descriptions.Item>
               <Descriptions.Item label="关联预算项目" span={3}>
                 {order.item_name ? (
@@ -352,9 +352,9 @@ export default function OrderDetail() {
           </Col>
           <Col xs={24} md={8}>
             <div style={{ textAlign: 'right', padding: 8, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <div style={{ color: '#8c8c8c' }}>已付 / 未付</div>
+              <div style={{ color: 'var(--ink-2)' }}>已付 / 未付</div>
               <div style={{ fontSize: 22, fontWeight: 600, color: 'var(--sage)' }}>{fmtMoney(paid)}</div>
-              <div style={{ fontSize: 16, color: overpaid ? '#faad14' : unpaid > 0 ? '#fa8c16' : '#52c41a' }}>
+              <div style={{ fontSize: 16, color: overpaid ? 'var(--amber)' : unpaid > 0 ? 'var(--clay)' : 'var(--sage)' }}>
                 {overpaid ? '已付超出 ' : '未付 '}
                 {fmtMoney(overpaid ? paid - order.total_amount : unpaid)}
               </div>
@@ -425,7 +425,7 @@ export default function OrderDetail() {
             {
               title: '金额', dataIndex: 'amount', width: 130, align: 'right',
               render: (v: number) => (
-                <span style={{ fontWeight: 600, color: v < 0 ? '#52c41a' : undefined }}>{fmtMoney(v)}</span>
+                <span style={{ fontWeight: 600, color: v < 0 ? 'var(--sage)' : undefined }}>{fmtMoney(v)}</span>
               ),
             },
             { title: '方式', dataIndex: 'method', width: 90, render: (v: string) => v || '—' },

@@ -15,9 +15,10 @@ export const PALETTE = {
   woodDarkDeep: '#6e523a',
   clay: '#b5542d',
   clayDark: '#d97b55',
-  sage: '#7a8b6f',
+  /* 语义绿/琥珀承担文字角色（结余/超付），亮色值按 4.5:1 实测校过（#7a8b6f=3.56、#c08a3e=2.94 不够） */
+  sage: '#69785f',
   sageDark: '#9bac8e',
-  amber: '#c08a3e',
+  amber: '#946a30',
   amberDark: '#d9a55c',
   line: '#e8e8e6',
   darkLine: '#262624',

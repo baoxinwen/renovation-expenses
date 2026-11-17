@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card, Collapse, Empty, Input, Skeleton, Tag } from 'antd';
 import { HolderOutlined, PlusOutlined } from '@ant-design/icons';
 import { toast } from 'sonner';
-import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { api } from '../../api';
@@ -42,9 +42,12 @@ export default function MobileItems() {
 
   useEffect(() => { load(); }, [load]);
 
-  // 触摸拖拽：激活距离比桌面(4)略大，防滚动列表时误起拖
+  // 触摸拖拽：激活距离比桌面(4)略大，防滚动列表时误起拖；
+  // KeyboardSensor 与桌面同款——拖拽的单指针替代路径（把手聚焦后空格拾起、
+  // 方向键移动、空格落下、Esc 取消）
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor),
   );
 
   // 拖拽落点：乐观更新即时反馈，持久化失败 load() 重拉回滚服务端顺序
@@ -88,12 +91,15 @@ export default function MobileItems() {
       }))
       .filter((sec) => (sec.items ?? []).length > 0);
   }, [plan, q]);
-  // 受控折叠：搜索时强制全展开——否则命中项目藏在用户手动折叠的面板里，
-  // 搜索看起来「无结果」；非搜索态保留手动折叠状态
+  // 受控折叠：搜索时默认全展开——否则命中项目藏在用户手动折叠的面板里，
+  // 搜索看起来「无结果」；搜索态的折叠单独记录（否则控件在搜索态像坏了），
+  // 清空搜索后回到非搜索态自己的折叠记忆
   const [collapsedKeys, setCollapsedKeys] = useState<string[] | null>(null);
+  const [searchCollapsedKeys, setSearchCollapsedKeys] = useState<string[] | null>(null);
+  const allKeys = sections.map((s) => String(s.id));
   const activeKeys = searching
-    ? sections.map((s) => String(s.id))
-    : (collapsedKeys === null ? sections.map((s) => String(s.id)) : collapsedKeys);
+    ? (searchCollapsedKeys === null ? allKeys : allKeys.filter((k) => !searchCollapsedKeys.includes(k)))
+    : (collapsedKeys === null ? allKeys : collapsedKeys);
 
   if (!plan) {
     // 加载失败必须给重试入口，不能停在无限骨架屏（桌面端有对应错误卡）
@@ -112,6 +118,7 @@ export default function MobileItems() {
     <div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
         <Input.Search
+          aria-label="搜索清单项目"
           placeholder="搜项目 / 品牌 / 备注"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -129,40 +136,49 @@ export default function MobileItems() {
       ) : (
         <Collapse
           activeKey={activeKeys}
-          onChange={(k) => setCollapsedKeys(k as string[])}
+          onChange={(k) => {
+            const keys = k as string[];
+            if (searching) setSearchCollapsedKeys(allKeys.filter((key) => !keys.includes(key)));
+            else setCollapsedKeys(keys);
+          }}
           items={sections.map((sec) => ({
             key: String(sec.id),
+            // 板块头里不放按钮（button 嵌 button，读屏名称互相吞）——
+            // 「板块内添加」入口移到面板内容顶部
             label: (
               <span style={{ display: 'flex', alignItems: 'center' }}>
                 <span style={{ fontWeight: 600 }}>{sec.name}</span>
                 <span className="tabular" style={{ color: 'var(--ink-2)', fontSize: 12, marginLeft: 8 }}>
                   {fmtMoney(sec.budget_subtotal ?? 0)}
                 </span>
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<PlusOutlined />}
-                  aria-label={`在「${sec.name}」添加项目`}
-                  onClick={(e) => { e.stopPropagation(); setAddSectionId(sec.id); }}
-                  style={{ marginLeft: 'auto' }}
-                />
               </span>
             ),
             children: (
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onItemDragEnd(sec.id)}>
-                <SortableContext items={searching ? [] : (sec.items ?? []).map((i) => i.id)} strategy={verticalListSortingStrategy}>
-                  {(sec.items ?? []).map((it) => (
-                    <SortableItemRow
-                      key={it.id}
-                      item={it}
-                      // 搜索态禁拖（与桌面一致：过滤视图里拖动改真实顺序易误拖）；
-                      // 折叠态无把手——须先展开
-                      handle={!searching && activeKeys.includes(String(sec.id))}
-                      onOpen={() => setDrawerId(it.id)}
-                    />
-                  ))}
-                </SortableContext>
-              </DndContext>
+              <div>
+                <Button
+                  type="text"
+                  icon={<PlusOutlined />}
+                  aria-label={`在「${sec.name}」添加项目`}
+                  onClick={() => setAddSectionId(sec.id)}
+                  style={{ marginBottom: 4 }}
+                >
+                  添加项目
+                </Button>
+                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onItemDragEnd(sec.id)}>
+                  <SortableContext items={searching ? [] : (sec.items ?? []).map((i) => i.id)} strategy={verticalListSortingStrategy}>
+                    {(sec.items ?? []).map((it) => (
+                      <SortableItemRow
+                        key={it.id}
+                        item={it}
+                        // 搜索态禁拖（与桌面一致：过滤视图里拖动改真实顺序易误拖）；
+                        // 折叠态无把手——须先展开
+                        handle={!searching && activeKeys.includes(String(sec.id))}
+                        onOpen={() => setDrawerId(it.id)}
+                      />
+                    ))}
+                  </SortableContext>
+                </DndContext>
+              </div>
             ),
           }))}
         />
@@ -206,48 +222,60 @@ export default function MobileItems() {
   );
 }
 
-/** 可排序项目行：把手区域发起拖拽（touchAction:none 防触摸滚动抢占），
- *  卡片其余区域点击开抽屉；把手 span 上 stopPropagation 防起拖触发 onClick */
+/** 可排序项目行：主区是原生 button（键盘 Enter/Space 开抽屉），把手是兄弟元素
+ *  （attributes+listeners 都挂把手——读屏的拖拽指令与实际焦点在同一元素上），
+ *  两者无嵌套。已买行用降文字色表达（与桌面 .row-bought 同语义），
+ *  不再压整行透明度——12px 副行会被带进对比度不达标区间 */
 function SortableItemRow({ item: it, handle, onOpen }: { item: Item; handle: boolean; onOpen: () => void }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({ id: it.id });
   const style: React.CSSProperties = {
     display: 'flex', alignItems: 'center', gap: 10,
     padding: '11px 4px', minHeight: 48,
     borderBottom: '1px solid var(--line)',
-    opacity: it.bought ? 0.75 : 1,
     transform: CSS.Transform.toString(transform),
     ...(isDragging ? { position: 'relative', zIndex: 10, background: 'var(--bg-linen)' } : {}),
   };
   return (
-    <div ref={setNodeRef} {...attributes} style={style} onClick={onOpen}>
-      <span
-        aria-hidden
-        style={{
-          width: 8, height: 8, borderRadius: 4, flexShrink: 0,
-          background: it.bought ? 'var(--sage)' : it.order_count > 0 ? 'var(--wood-600)' : 'var(--line)',
-        }}
-      />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
-          <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.name}</span>
-          {it.order_count > 0 && <Tag style={{ marginRight: 0, lineHeight: '16px' }}>{it.order_count} 单</Tag>}
-        </div>
-        <div style={{ fontSize: 12, color: 'var(--ink-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {it.spec || '—'} · {it.bought
-            ? `实付 ${fmtMoney(it.paid_amount ?? it.quantity * it.unit_price)}`
-            : `${it.quantity} × ${fmtMoney(it.unit_price)}`}
-          {it.bought_date ? ` · ${it.bought_date} 买` : ''}
-        </div>
-      </div>
-      <span className="tabular" style={{ fontWeight: 650 }}>{fmtMoney(it.budget_amount)}</span>
-      {handle && (
-        // 触控目标 ≥48px（与移动端既有约定一致）；不挂 .drag-handle——
-        // 那个 class 桌面默认隐身 hover 浮现，移动端无 hover 必须常显
+    <div ref={setNodeRef} style={style}>
+      <button
+        className="row-link"
+        onClick={onOpen}
+        style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10 }}
+      >
         <span
+          aria-hidden
+          style={{
+            width: 8, height: 8, borderRadius: 4, flexShrink: 0,
+            background: it.bought ? 'var(--sage)' : it.order_count > 0 ? 'var(--wood-600)' : 'var(--line)',
+          }}
+        />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
+            <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: it.bought ? 'var(--ink-2)' : undefined }}>{it.name}</span>
+            {it.order_count > 0 && <Tag style={{ marginRight: 0, lineHeight: '16px' }}>{it.order_count} 单</Tag>}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--ink-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {it.spec || '—'} · {it.bought
+              ? `实付 ${fmtMoney(it.paid_amount ?? it.quantity * it.unit_price)}`
+              : `${it.quantity} × ${fmtMoney(it.unit_price)}`}
+            {it.bought_date ? ` · ${it.bought_date} 买` : ''}
+          </div>
+        </div>
+        <span className="tabular" style={{ fontWeight: 650, color: it.bought ? 'var(--ink-2)' : undefined }}>{fmtMoney(it.budget_amount)}</span>
+      </button>
+      {handle && (
+        // 触控目标 ≥44px；不挂 .drag-handle——那个 class 桌面默认隐身 hover
+        // 浮现，移动端无 hover 必须常显。attributes+listeners 在此：
+        // 键盘聚焦后空格拾起、方向键移动（KeyboardSensor）
+        <span
+          {...attributes}
+          {...listeners}
+          aria-label="拖动调整顺序"
           onClick={(e) => e.stopPropagation()}
-          style={{ touchAction: 'none', display: 'flex', alignItems: 'center', minHeight: 48, minWidth: 48, justifyContent: 'center', padding: '0 10px', color: 'var(--ink-3)' }}
+          style={{ touchAction: 'none', display: 'flex', alignItems: 'center', minHeight: 44, minWidth: 44, justifyContent: 'center', padding: '0 10px', color: 'var(--ink-3)', cursor: 'grab' }}
         >
-          <HolderOutlined {...listeners} />
+          {/* antd 图标自带 role=img aria-label="holder"，会污染把手名称——隐藏之 */}
+          <span aria-hidden><HolderOutlined /></span>
         </span>
       )}
     </div>

@@ -154,6 +154,7 @@ export default function Settings() {
           <InputNumber
             min={0}
             precision={2}
+            aria-label="预算目标金额"
             value={budgetInput}
             onChange={setBudgetInput}
             formatter={(v) => `¥ ${v ?? 0}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}

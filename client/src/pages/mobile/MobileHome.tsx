@@ -96,13 +96,18 @@ export default function MobileHome() {
               key={o.id}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0', borderBottom: '1px solid var(--line)' }}
             >
-              <div style={{ flex: 1, minWidth: 0 }} onClick={() => nav(`/orders/${o.id}`)}>
-                <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.title}</div>
+              {/* 行主区用原生 button：键盘可达的行点击路径（Enter/Space 即可） */}
+              <button
+                className="row-link"
+                style={{ flex: 1, minWidth: 0, display: 'block' }}
+                onClick={() => nav(`/orders/${o.id}`)}
+              >
+                <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.title}</div>
                 <div style={{ fontSize: 12, color: 'var(--ink-2)' }}>
                   {o.item_name || '未关联项目'} · 未付 <span className="tabular" style={{ color: 'var(--clay)', fontWeight: 600 }}>{fmtMoney(o.total_amount - (o.paid ?? 0))}</span>
                 </div>
-              </div>
-              <Button onClick={() => setPayTarget(o)}>记一笔</Button>
+              </button>
+              <Button onClick={() => setPayTarget(o)} style={{ minHeight: 44 }}>记一笔</Button>
             </div>
           ))
         )}
@@ -111,17 +116,18 @@ export default function MobileHome() {
       {(charts?.recent_payments ?? []).length > 0 && (
         <Card title="最近付款" styles={{ body: { padding: '4px 12px 12px' }, header: { fontSize: 15, minHeight: 40 } }}>
           {charts!.recent_payments.slice(0, 3).map((r) => (
-            <div
+            <button
               key={r.id}
+              className="row-link"
               onClick={() => nav(`/orders/${r.order_id}`)}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', borderBottom: '1px solid var(--line)' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '11px 0', borderBottom: '1px solid var(--line)' }}
             >
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.order_title}</div>
+                <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.order_title}</div>
                 <div style={{ fontSize: 12, color: 'var(--ink-2)' }}>{r.pay_date}{r.item_name ? ` · ${r.item_name}` : ''}</div>
               </div>
               <span className="tabular" style={{ fontWeight: 600 }}>{fmtMoney(r.amount)}</span>
-            </div>
+            </button>
           ))}
         </Card>
       )}
