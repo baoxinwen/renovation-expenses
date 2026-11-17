@@ -435,12 +435,14 @@ export default function Orders() {
         summary={() =>
           rows.length ? (
             <Table.Summary.Row style={{ fontWeight: 600 }}>
-              <Table.Summary.Cell index={0}>合计（{rows.length} 笔）</Table.Summary.Cell>
-              <Table.Summary.Cell index={1} />
-              <Table.Summary.Cell index={2} align="right">{fmtMoney(sum.total)}</Table.Summary.Cell>
-              <Table.Summary.Cell index={3} align="right">{fmtMoney(sum.paid)}</Table.Summary.Cell>
-              <Table.Summary.Cell index={4} align="right">{fmtMoney(Math.max(0, sum.total - sum.paid))}</Table.Summary.Cell>
-              <Table.Summary.Cell index={5} colSpan={3} />
+              {/* 跨选择+订单+预算项目三列：82px 的订单列放不下「合计（N 笔）」，会竖排换行 */}
+              <Table.Summary.Cell index={0} colSpan={3}>
+                <span style={{ whiteSpace: 'nowrap' }}>合计（{rows.length} 笔）</span>
+              </Table.Summary.Cell>
+              <Table.Summary.Cell index={1} align="right">{fmtMoney(sum.total)}</Table.Summary.Cell>
+              <Table.Summary.Cell index={2} align="right">{fmtMoney(sum.paid)}</Table.Summary.Cell>
+              <Table.Summary.Cell index={3} align="right">{fmtMoney(Math.max(0, sum.total - sum.paid))}</Table.Summary.Cell>
+              <Table.Summary.Cell index={4} colSpan={3} />
             </Table.Summary.Row>
           ) : null
         }

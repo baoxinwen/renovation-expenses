@@ -36,7 +36,7 @@ export function SortableRow(props: React.HTMLAttributes<HTMLTableRowElement> & {
   );
 }
 
-export function DragHandle() {
+export function DragHandle({ style }: { style?: React.CSSProperties }) {
   const { attributes, listeners } = useContext(RowListenersContext);
   return (
     <HolderOutlined
@@ -44,6 +44,7 @@ export function DragHandle() {
       {...attributes}
       {...listeners}
       aria-label="拖动调整顺序"
+      style={style}
     />
   );
 }

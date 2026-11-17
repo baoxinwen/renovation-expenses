@@ -357,18 +357,15 @@ export default function Plan() {
 
   const itemColumns: TableColumnsType<Item> = [
     {
-      title: '', key: 'drag', width: 32, align: 'center' as const, fixed: 'left' as const,
-      className: 'no-print',
-      onHeaderCell: () => ({ className: 'no-print' }),
-      onCell: () => ({
-        // 拖拽柄点击不触发行编辑弹窗
-        onClick: (e: React.MouseEvent) => e.stopPropagation(),
-      }),
-      render: () => (searching ? null : <DragHandle />),
-    },
-    {
+      // 拖拽把手不再占独立列：融进名称单元格左缘，hover/focus 时浮现——
+      // 行首常驻控制只剩多选 checkbox，勾选与排序两个语义不再肩并肩
       title: '项目名称', dataIndex: 'name', width: 96, fixed: 'left' as const,
-      ellipsis: { showTitle: true },
+      render: (_, it: Item) => (
+        <div style={{ position: 'relative' }}>
+          {!searching && <DragHandle style={{ position: 'absolute', left: -8, top: '50%', transform: 'translateY(-50%)' }} />}
+          <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={it.name}>{it.name}</span>
+        </div>
+      ),
     },
     {
       // 唯一不定宽列：吃掉容器剩余宽度；内容超宽时省略号（悬停看全名）
@@ -683,7 +680,7 @@ export default function Plan() {
                             dataSource={sec.items ?? []}
                             rowClassName={(it) => (it.bought ? 'row-bought' : '')}
                             pagination={false}
-                            scroll={{ x: 852 }}
+                            scroll={{ x: 820 }}
                             rowSelection={{
                               selectedRowKeys: [...selectedIds].filter((id) => (sec.items ?? []).some((i) => i.id === id)),
                               onChange: (keys) => {
