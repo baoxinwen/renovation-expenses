@@ -183,6 +183,10 @@ export const api = {
   restoreItem: (id: number, body?: { force?: boolean }) =>
     req<Item>(`/api/items/${id}/restore`, 'POST', body),
   reorderItems: (ids: number[]) => req('/api/items/reorder', 'PUT', { ids }),
+  batchDeleteItems: (ids: number[]) =>
+    req<{ ok: boolean; deleted: number }>('/api/items/batch-delete', 'POST', { ids }),
+  batchRestoreItems: (ids: number[], force?: boolean) =>
+    req<{ ok: boolean; restored: number }>('/api/items/batch-restore', 'POST', { ids, ...(force ? { force: true } : {}) }),
   importPlan: (file: File, mode: 'replace' | 'append') => {
     const fd = new FormData();
     fd.append('file', file);
@@ -206,6 +210,10 @@ export const api = {
   deleteOrder: (id: number) => req<{ ok: boolean; deleted: boolean }>(`/api/orders/${id}`, 'DELETE'),
   restoreOrder: (id: number, body?: { force?: boolean }) =>
     req<Order>(`/api/orders/${id}/restore`, 'POST', body),
+  batchDeleteOrders: (ids: number[]) =>
+    req<{ ok: boolean; deleted: number }>('/api/orders/batch-delete', 'POST', { ids }),
+  batchRestoreOrders: (ids: number[], force?: boolean) =>
+    req<{ ok: boolean; restored: number }>('/api/orders/batch-restore', 'POST', { ids, ...(force ? { force: true } : {}) }),
 
   // 付款
   addPayment: (orderId: number, body: { amount: number; pay_date: string; method?: string; note?: string }) =>

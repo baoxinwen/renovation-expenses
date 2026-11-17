@@ -20,7 +20,7 @@ import type { Item, Order, PlanData, Section } from '../api';
 import { fmtMoney } from '../format';
 import { budgetDelta, formatDelta, spendablePool } from '../utils/budgetCalc';
 import { matchSearch } from '../utils/planCalc';
-import { restoreWithGuard, submitWithForceGuard } from '../utils/domain';
+import { restoreWithGuard, submitWithForceGuard, undoableBatchDelete } from '../utils/domain';
 import ItemFormModal from '../components/ItemFormModal';
 import { confirmAsync } from '../utils/confirm';
 import { SortableRow, DragHandle, SectionDragHandle, SortableSectionCard } from '../components/plan/PlanEditing';
@@ -60,6 +60,28 @@ export default function Plan() {
   });
   const [unpaid, setUnpaid] = useState<Order[]>([]);
   const [unpaidOpen, setUnpaidOpen] = useState(false);
+
+  // 多选批量删除：跨板块共享一份选中（每张板块表的 rowSelection 读写同一 Set）
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const batchDeleteSelected = () => {
+    const ids = [...selectedIds];
+    if (!ids.length) return;
+    Modal.confirm({
+      title: `删除 ${ids.length} 个项目？`,
+      content: '挂单项目的订单与付款保留，但不再计入清单统计。删除后 30 秒内可整体撤销。',
+      okType: 'danger',
+      okText: '删除',
+      onOk: async () => {
+        await undoableBatchDelete({
+          count: ids.length,
+          del: () => api.batchDeleteItems(ids),
+          restore: (force) => api.batchRestoreItems(ids, force),
+          onChanged: () => { setSelectedIds(new Set()); load(); },
+        });
+        setSelectedIds(new Set());
+      },
+    });
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -510,6 +532,14 @@ export default function Plan() {
             <Button icon={<DownloadOutlined />} href="/api/export/excel">导出</Button>
           </Space>
         </div>
+        {/* 多选批量条：跨板块共享计数（含折叠/搜索视野外的勾选），先看清 N 再删 */}
+        {selectedIds.size > 0 && (
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--line)' }}>
+            <span className="label-caption tabular">已选 {selectedIds.size} 项</span>
+            <Button danger size="small" onClick={batchDeleteSelected}>批量删除</Button>
+            <Button size="small" type="text" onClick={() => setSelectedIds(new Set())}>取消选择</Button>
+          </div>
+        )}
       </Card>
 
       {/* ===== 待付尾款：单行摘要，点开展开（摘要行是原生 button，键盘可达） ===== */}
@@ -653,7 +683,18 @@ export default function Plan() {
                             dataSource={sec.items ?? []}
                             rowClassName={(it) => (it.bought ? 'row-bought' : '')}
                             pagination={false}
-                            scroll={{ x: 820 }}
+                            scroll={{ x: 852 }}
+                            rowSelection={{
+                              selectedRowKeys: [...selectedIds].filter((id) => (sec.items ?? []).some((i) => i.id === id)),
+                              onChange: (keys) => {
+                                setSelectedIds((prev) => {
+                                  const next = new Set(prev);
+                                  (sec.items ?? []).forEach((i) => next.delete(i.id));
+                                  keys.forEach((k) => next.add(Number(k)));
+                                  return next;
+                                });
+                              },
+                            }}
                             components={{ body: { row: SortableRow } }}
                             locale={{ emptyText: '该板块还没有项目，点右上角「添加项目」开始' }}
                             columns={itemColumns}

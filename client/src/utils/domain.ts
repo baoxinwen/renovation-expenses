@@ -126,3 +126,42 @@ export async function undoableDelete(opts: UndoableOpts): Promise<void> {
   });
   opts.onChanged();
 }
+
+interface BatchUndoableOpts {
+  /** 删除条数（toast 文案） */
+  count: number;
+  /** 批量软删调用（抛错则中断并 toast，不弹撤销） */
+  del: () => Promise<unknown>;
+  /** 批量恢复调用；服务端 409 needForce 时内部确认后带 force 整批重试 */
+  restore: (force?: boolean) => Promise<unknown>;
+  /** 删除与撤销成功后的界面刷新回调 */
+  onChanged: () => void;
+}
+
+/** 批量删除 → 30 秒内可整体撤销。批量清一批后需要时间复查勾选，
+ *  窗口比单条误删的 8 秒宽。撤销遇 needForce（所选含恢复会双算的条目）
+ *  经确认后 force 整批恢复；放弃恢复则保持删除态并静默。 */
+export async function undoableBatchDelete(opts: BatchUndoableOpts): Promise<void> {
+  try {
+    await opts.del();
+  } catch (e) {
+    toast.error((e as Error).message);
+    return;
+  }
+  toast.success(`已删除 ${opts.count} 项`, {
+    duration: 30000,
+    action: {
+      label: '撤销',
+      onClick: () => {
+        submitWithForceGuard((force) => opts.restore(force), () => confirmAsync({
+          title: '恢复会重复计入实际合计',
+          content: '所选内容中存在「已勾已买且名下有订单付款」的条目，恢复后两路支出会重复计入。仍要恢复整批吗？',
+          okText: '仍要恢复',
+        }))
+          .then((result) => { if (result !== null) opts.onChanged(); })
+          .catch((e) => toast.error((e as Error).message));
+      },
+    },
+  });
+  opts.onChanged();
+}

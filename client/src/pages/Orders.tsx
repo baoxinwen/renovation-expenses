@@ -6,7 +6,7 @@ import { api } from '../api';
 import type { Order, OrderFormValues, Section } from '../api';
 import { fmtMoney } from '../format';
 import { confirmAsync } from '../utils/confirm';
-import { confirmOrderOnBoughtItem, undoableDelete, unpaidOf, submitWithForceGuard } from '../utils/domain';
+import { confirmOrderOnBoughtItem, undoableDelete, undoableBatchDelete, unpaidOf, submitWithForceGuard } from '../utils/domain';
 import { useIsMobile } from '../hooks/useIsMobile';
 import WoodProgress from '../components/WoodProgress';
 import { toast } from 'sonner';
@@ -176,6 +176,28 @@ export default function Orders() {
     { total: 0, paid: 0 },
   );
 
+  // 多选批量删除：筛选/翻页后勾选仍保留（preserveSelectedRowKeys）
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const batchDeleteSelected = () => {
+    const ids = [...selectedIds];
+    if (!ids.length) return;
+    Modal.confirm({
+      title: `删除 ${ids.length} 笔订单？`,
+      content: '付款与票据保留。删除后 30 秒内可整体撤销。',
+      okType: 'danger',
+      okText: '删除',
+      onOk: async () => {
+        await undoableBatchDelete({
+          count: ids.length,
+          del: () => api.batchDeleteOrders(ids),
+          restore: (force) => api.batchRestoreOrders(ids, force),
+          onChanged: () => { setSelectedIds(new Set()); load(); },
+        });
+        setSelectedIds(new Set());
+      },
+    });
+  };
+
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
       <Card size="small">
@@ -226,6 +248,13 @@ export default function Orders() {
             onSearch={(v) => { setSearchInput(v); setFilters((f) => (f.q === v ? f : { ...f, q: v })); }}
           />
           <Button icon={<ReloadOutlined />} aria-label="刷新订单列表" onClick={load} />
+          {selectedIds.size > 0 && (
+            <>
+              <span className="label-caption tabular">已选 {selectedIds.size} 笔</span>
+              <Button danger size="small" onClick={batchDeleteSelected}>批量删除</Button>
+              <Button size="small" type="text" onClick={() => setSelectedIds(new Set())}>取消选择</Button>
+            </>
+          )}
         </Space>
       </Card>
 
@@ -298,10 +327,23 @@ export default function Orders() {
         rowKey="id"
         loading={loading}
         dataSource={rows}
-        // 798：固定列收到内容下限后，订单列作为唯一不定宽列在常规窗口（视口 ≥1190，
-        // 容器 ~912）能分到百余像素、滚动条不常驻；更窄窗口横向滚动查看
-        scroll={{ x: 798 }}
-        onRow={(r) => ({ onClick: () => nav(`/orders/${r.id}`), style: { cursor: 'pointer' } })}
+        // 850：固定列 + 新增的选择列收到内容下限后，订单列作为唯一不定宽列在常规
+        // 窗口（视口 ≥1190，容器 ~912）能分到百余像素、滚动条不常驻；更窄窗口横向滚动
+        scroll={{ x: 850 }}
+        rowSelection={{
+          selectedRowKeys: [...selectedIds],
+          preserveSelectedRowKeys: true,
+          onChange: (keys) => setSelectedIds(new Set(keys.map(Number))),
+        }}
+        onRow={(r) => ({
+          // 勾选/行内按钮不触发进详情（selection 列与 checkbox 在守卫名单里）
+          onClick: (e) => {
+            const t = e.target as HTMLElement;
+            if (t.closest('button, a, .ant-checkbox-wrapper, td.ant-table-selection-column')) return;
+            nav(`/orders/${r.id}`);
+          },
+          style: { cursor: 'pointer' },
+        })}
         pagination={rows.length > 20 ? { pageSize: 20, showTotal: (t) => `共 ${t} 笔订单` } : false}
         columns={[
           {
