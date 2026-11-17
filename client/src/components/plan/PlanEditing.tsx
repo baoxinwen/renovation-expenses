@@ -21,11 +21,13 @@ export function SortableRow(props: React.HTMLAttributes<HTMLTableRowElement> & {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({ id: id! });
   const style: React.CSSProperties = {
     ...props.style,
-    // 垂直排序：忽略水平位移，防止拖拽中行体超出容器出现横向滚动条
-    transform: CSS.Transform.toString(transform ? { ...transform, x: 0 } : transform),
+    // 垂直排序只要 y 位移：显式丢弃 dnd-kit 的 scale 分量（某些场景它会输出
+    // scaleY 补偿——tr 被纵向拉伸、字体变形），并忽略水平位移防横滚
+    transform: CSS.Transform.toString(transform ? { x: 0, y: transform.y, scaleX: 1, scaleY: 1 } : transform),
     // 只过渡 transform（落位回弹）；不点名属性会连 hover 底色一起拖 480ms
     transition: isDragging ? undefined : `transform ${DROP_TRANSITION}`,
-    ...(isDragging ? { position: 'relative', zIndex: 2, background: 'var(--surface)', boxShadow: 'var(--shadow-card)' } : {}),
+    // transform 会让 tr 脱离常规表格布局——显式钉住整表宽度，防宽度塌陷/拉伸
+    ...(isDragging ? { position: 'relative', zIndex: 2, width: '100%', background: 'var(--surface)', boxShadow: 'var(--shadow-card)' } : {}),
   };
   return (
     <RowListenersContext.Provider value={{ attributes, listeners }}>
@@ -75,7 +77,7 @@ export function SortableSectionCard({ section, index, children }: {
         className="rise-in"
         style={{
           animationDelay: `${Math.min(index, 6) * 40}ms`,
-          transform: CSS.Transform.toString(transform ? { ...transform, x: 0 } : transform),
+          transform: CSS.Transform.toString(transform ? { x: 0, y: transform.y, scaleX: 1, scaleY: 1 } : transform),
           transition: isDragging ? undefined : `transform ${DROP_TRANSITION}`,
           ...(isDragging ? { position: 'relative', zIndex: 3, opacity: 0.9 } : {}),
         }}

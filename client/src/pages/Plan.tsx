@@ -24,6 +24,7 @@ import { restoreWithGuard, submitWithForceGuard, undoableBatchDelete } from '../
 import ItemFormModal from '../components/ItemFormModal';
 import { confirmAsync } from '../utils/confirm';
 import { SortableRow, DragHandle, SectionDragHandle, SortableSectionCard } from '../components/plan/PlanEditing';
+import { restrictToParentElement, restrictToVerticalAxis } from '../utils/dndModifiers';
 import type { ItemFormResult } from '../components/ItemFormModal';
 import BuyModal from '../components/BuyModal';
 import QuickPayModal from '../components/QuickPayModal';
@@ -597,7 +598,7 @@ export default function Plan() {
       )}
 
       {/* ===== 板块 → 项目清单（可拖拽） ===== */}
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onSectionDragEnd}>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} modifiers={[restrictToVerticalAxis, restrictToParentElement]} onDragEnd={onSectionDragEnd}>
         <SortableContext items={searching ? [] : plan.sections.map((s) => s.id)} strategy={verticalListSortingStrategy}>
           <Space direction="vertical" size={16} style={{ width: '100%' }}>
             {visibleSections.map((sec, idx) => (
@@ -672,7 +673,7 @@ export default function Plan() {
                           预算 {fmtMoney(sec.budget_subtotal ?? 0)} · 实际 {fmtMoney(sec.actual_subtotal ?? 0)}
                         </span>
                       </div>
-                      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onItemDragEnd(sec)}>
+                      <DndContext sensors={sensors} collisionDetection={closestCenter} modifiers={[restrictToVerticalAxis, restrictToParentElement]} onDragEnd={onItemDragEnd(sec)}>
                         <SortableContext items={(sec.items ?? []).map((i) => i.id)} strategy={verticalListSortingStrategy}>
                           <Table<Item>
                             rowKey="id"

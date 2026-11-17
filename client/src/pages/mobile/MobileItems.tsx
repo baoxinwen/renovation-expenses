@@ -3,6 +3,7 @@ import { Button, Card, Collapse, Empty, Input, Skeleton, Tag } from 'antd';
 import { HolderOutlined, PlusOutlined } from '@ant-design/icons';
 import { toast } from 'sonner';
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { restrictToParentElement, restrictToVerticalAxis } from '../../utils/dndModifiers';
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { api } from '../../api';
@@ -164,7 +165,7 @@ export default function MobileItems() {
                 >
                   添加项目
                 </Button>
-                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onItemDragEnd(sec.id)}>
+                <DndContext sensors={sensors} collisionDetection={closestCenter} modifiers={[restrictToVerticalAxis, restrictToParentElement]} onDragEnd={onItemDragEnd(sec.id)}>
                   <SortableContext items={searching ? [] : (sec.items ?? []).map((i) => i.id)} strategy={verticalListSortingStrategy}>
                     {(sec.items ?? []).map((it) => (
                       <SortableItemRow
