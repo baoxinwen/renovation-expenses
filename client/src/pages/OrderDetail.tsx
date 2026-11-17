@@ -328,35 +328,45 @@ export default function OrderDetail() {
         }
       >
         <Row gutter={[16, 16]}>
-          <Col xs={24} md={16}>
+          <Col xs={24} md={15}>
             <Descriptions column={{ xs: 1, sm: 2, md: 3 }} size="small">
-              <Descriptions.Item label="商家 / 施工方">{order.vendor || '—'}</Descriptions.Item>
-              <Descriptions.Item label="状态">
-                {order.status === 'closed' ? <Tag color="success">已结清</Tag> : <Tag color="processing">进行中</Tag>}
-              </Descriptions.Item>
+              {/* Descriptions 的 span 超出剩余列数时只占剩余列、不折行——
+                  整行语义的项必须放在列首，否则值区被压到单列宽度竖排 */}
               <Descriptions.Item label="关联预算项目" span={3}>
                 {order.item_name ? (
-                  <Space size={6}>
+                  <Space size={6} wrap>
                     <span>{order.item_name}</span>
                     {order.section_name && <Tag bordered={false}>{order.section_name}</Tag>}
                   </Space>
                 ) : '未关联（付款不计入清单实际）'}
               </Descriptions.Item>
-              <Descriptions.Item label="订单总额">
-                <span style={{ fontSize: 20, fontWeight: 600 }}>{fmtMoney(order.total_amount)}</span>
+              <Descriptions.Item label="商家 / 施工方">{order.vendor || '—'}</Descriptions.Item>
+              <Descriptions.Item label="状态">
+                {order.status === 'closed' ? <Tag color="success">已结清</Tag> : <Tag color="processing">进行中</Tag>}
               </Descriptions.Item>
               {order.note && (
-                <Descriptions.Item label="备注" span={3}>{order.note}</Descriptions.Item>
+                <Descriptions.Item label="备注">{order.note}</Descriptions.Item>
               )}
             </Descriptions>
           </Col>
-          <Col xs={24} md={8}>
-            <div style={{ textAlign: 'right', padding: 8, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <div style={{ color: 'var(--ink-2)' }}>已付 / 未付</div>
-              <div style={{ fontSize: 22, fontWeight: 600, color: 'var(--sage)' }}>{fmtMoney(paid)}</div>
-              <div style={{ fontSize: 16, color: overpaid ? 'var(--amber)' : unpaid > 0 ? 'var(--clay)' : 'var(--sage)' }}>
-                {overpaid ? '已付超出 ' : '未付 '}
-                {fmtMoney(overpaid ? paid - order.total_amount : unpaid)}
+          {/* 三个金额本是一组（总额 = 已付 + 未付），同行等权呈现，细竖线分隔 */}
+          <Col xs={24} md={9}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-around', height: '100%', padding: '8px 0' }}>
+              <div style={{ textAlign: 'center' }}>
+                <div className="label-caption">订单总额</div>
+                <div className="tabular" style={{ fontSize: 18, fontWeight: 600, marginTop: 2 }}>{fmtMoney(order.total_amount)}</div>
+              </div>
+              <div style={{ width: 1, height: 34, background: 'var(--line)' }} />
+              <div style={{ textAlign: 'center' }}>
+                <div className="label-caption">已付</div>
+                <div className="tabular" style={{ fontSize: 18, fontWeight: 600, color: 'var(--sage)', marginTop: 2 }}>{fmtMoney(paid)}</div>
+              </div>
+              <div style={{ width: 1, height: 34, background: 'var(--line)' }} />
+              <div style={{ textAlign: 'center' }}>
+                <div className="label-caption">未付</div>
+                <div className="tabular" style={{ fontSize: 18, fontWeight: 600, color: overpaid ? 'var(--amber)' : unpaid > 0 ? 'var(--clay)' : 'var(--sage)', marginTop: 2 }}>
+                  {fmtMoney(overpaid ? paid - order.total_amount : unpaid)}
+                </div>
               </div>
             </div>
           </Col>

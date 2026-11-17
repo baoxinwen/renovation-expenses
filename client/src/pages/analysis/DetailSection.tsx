@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Card, Col, Empty, Row, Space, Table, Tag } from 'antd';
+import { Card, Col, Empty, Row, Space, Table } from 'antd';
 import type { Charts } from '../../api';
 import { fmtMoney } from '../../format';
 import { useIsMobile } from '../../hooks/useIsMobile';
@@ -77,7 +77,7 @@ export default function DetailSection({ charts }: { charts: Charts | null }) {
               size="small"
               dataSource={charts?.recent_payments ?? []}
               pagination={false}
-              scroll={isMobile ? { x: 270 } : { x: 760 }}
+              scroll={isMobile ? { x: 270 } : undefined}
               locale={{ emptyText: <Empty description="还没有付款记录——到订单页记第一笔定金" style={{ padding: 24 }} /> }}
               onRow={(r) => ({ onClick: () => nav(`/orders/${r.order_id}`), style: { cursor: 'pointer' } })}
               columns={isMobile ? [
@@ -89,16 +89,27 @@ export default function DetailSection({ charts }: { charts: Charts | null }) {
                   render: (v: number) => <span className="tabular" style={{ fontWeight: 600, color: v < 0 ? 'var(--sage)' : undefined }}>{fmtMoney(v)}</span>,
                 },
               ] : [
-                { title: '日期', dataIndex: 'pay_date', width: 100 },
-                { title: '订单', dataIndex: 'order_title', ellipsis: true },
-                { title: '项目', dataIndex: 'item_name', width: 130, render: (v) => v || '—' },
-                { title: '板块', dataIndex: 'section_name', width: 110, render: (v) => (v ? <Tag bordered={false}>{v}</Tag> : '—') },
+                // 桌面并排布局下此表只有半列宽（~406px），7 列装不下必然横滚——
+                // 列集收敛为日期/订单/金额，方式与备注并入订单副行（信息不损失，
+                // 项目与板块点行进订单详情可查）
+                { title: '日期', dataIndex: 'pay_date', width: 88 },
                 {
-                  title: '金额', dataIndex: 'amount', width: 110, align: 'right',
+                  title: '订单', dataIndex: 'order_title', ellipsis: true,
+                  render: (_, r) => (
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.order_title}</div>
+                      {(r.method || r.note) && (
+                        <div style={{ fontSize: 12, color: 'var(--ink-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {[r.method, r.note].filter(Boolean).join(' · ')}
+                        </div>
+                      )}
+                    </div>
+                  ),
+                },
+                {
+                  title: '金额', dataIndex: 'amount', width: 96, align: 'right',
                   render: (v: number) => <span className="tabular" style={{ fontWeight: 600, color: v < 0 ? 'var(--sage)' : undefined }}>{fmtMoney(v)}</span>,
                 },
-                { title: '方式', dataIndex: 'method', width: 80, render: (v: string) => v || '—' },
-                { title: '备注', dataIndex: 'note', ellipsis: true, render: (v: string) => v || '—' },
               ]}
             />
           </Card>
