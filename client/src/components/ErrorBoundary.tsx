@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from 'react';
+import { HomeOutlined } from '@ant-design/icons';
 
 interface Props {
   children: ReactNode;
@@ -38,7 +39,7 @@ export default class ErrorBoundary extends Component<Props, State> {
             textAlign: 'center',
           }}
         >
-          <div style={{ fontSize: 40 }}>🏠💨</div>
+          <HomeOutlined style={{ fontSize: 40, color: 'var(--wood-600)' }} aria-hidden />
           <div style={{ fontSize: 18, fontWeight: 600 }}>页面出了点问题</div>
           <div style={{ color: '#6b6259', fontSize: 13, maxWidth: 420 }}>
             界面遇到错误停止了，但你的账目数据没有受影响。刷新通常能解决；

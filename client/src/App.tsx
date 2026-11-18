@@ -1,7 +1,7 @@
 import { createContext, lazy, Suspense, useContext, useEffect } from 'react';
 import { BrowserRouter, Navigate, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { Button, ConfigProvider, Layout, Menu, Spin } from 'antd';
-import { BarChartOutlined, FileTextOutlined, OrderedListOutlined, SettingOutlined } from '@ant-design/icons';
+import { BarChartOutlined, FileTextOutlined, HomeOutlined, OrderedListOutlined, SettingOutlined } from '@ant-design/icons';
 import { Toaster } from 'sonner';
 import zhCN from 'antd/locale/zh_CN';
 import dayjs from 'dayjs';
@@ -132,7 +132,10 @@ function AppRoutes({ isMobile }: { isMobile: boolean }) {
                   borderBottom: '1px solid var(--line)',
                 }}
               >
-                <span style={{ fontSize: 16, fontWeight: 650, letterSpacing: '0.05em' }}>🏠 装修账本</span>
+                <span style={{ fontSize: 16, fontWeight: 650, letterSpacing: '0.05em' }}>
+                  <HomeOutlined style={{ color: 'var(--wood-600)', marginRight: 6 }} aria-hidden />
+                  装修账本
+                </span>
                 {/* 不用 Link 包 Button（嵌套交互元素）：与 TabBar 同款 button+nav 惯例 */}
                 <Button
                   type="text"
@@ -175,7 +178,8 @@ function AppRoutes({ isMobile }: { isMobile: boolean }) {
                   color: 'var(--ink)',
                 }}
               >
-                🏠 装修账本
+                <HomeOutlined style={{ color: 'var(--wood-600)', marginRight: 6 }} aria-hidden />
+                装修账本
               </div>
               <SideMenu />
             </Sider>
