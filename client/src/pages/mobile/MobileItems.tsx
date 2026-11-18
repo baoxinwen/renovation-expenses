@@ -295,14 +295,23 @@ function SortableItemRow({ item: it, handle, onOpen, onMarkBought }: { item: Ite
         disabled={hasOrders}
         onClick={(e) => { e.stopPropagation(); onMarkBought(); }}
         style={{
-          width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
-          border: it.bought ? 'none' : `1.5px solid ${hasOrders ? 'var(--line)' : 'var(--ink-3)'}`,
-          background: it.bought ? 'var(--sage)' : 'transparent',
-          color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          width: 44, height: 44, borderRadius: '50%', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
           cursor: hasOrders ? 'default' : 'pointer', padding: 0,
+          background: 'transparent', border: 'none',
         }}
       >
-        {it.bought && <CheckOutlined style={{ fontSize: 14 }} />}
+        {/* 视觉圈 30px 居中，触达区 44px */}
+        <span
+          style={{
+            width: 30, height: 30, borderRadius: '50%', pointerEvents: 'none',
+            border: it.bought ? 'none' : `1.5px solid ${hasOrders ? 'var(--line)' : 'var(--ink-3)'}`,
+            background: it.bought ? 'var(--sage)' : 'transparent',
+            color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          {it.bought && <CheckOutlined style={{ fontSize: 14 }} />}
+        </span>
       </button>
       <button
         className="row-link"

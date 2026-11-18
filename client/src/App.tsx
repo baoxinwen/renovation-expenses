@@ -134,7 +134,13 @@ function AppRoutes({ isMobile }: { isMobile: boolean }) {
               >
                 <span style={{ fontSize: 16, fontWeight: 650, letterSpacing: '0.05em' }}>🏠 装修账本</span>
                 {/* 不用 Link 包 Button（嵌套交互元素）：与 TabBar 同款 button+nav 惯例 */}
-                <Button type="text" size="small" icon={<SettingOutlined />} aria-label="设置" onClick={() => nav('/settings')} />
+                <Button
+                  type="text"
+                  icon={<SettingOutlined />}
+                  aria-label="设置"
+                  onClick={() => nav('/settings')}
+                  style={{ minWidth: 40, minHeight: 40 }}
+                />
               </header>
               <main style={{ padding: 12, paddingBottom: 'calc(72px + env(safe-area-inset-bottom, 0px))' }}>
                 {routes}
