@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Card, Collapse, Empty, Input, Skeleton, Tag } from 'antd';
-import { HolderOutlined, PlusOutlined } from '@ant-design/icons';
+import { CheckOutlined, HolderOutlined, PlusOutlined } from '@ant-design/icons';
 import { toast } from 'sonner';
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { restrictToParentElement, restrictToVerticalAxis } from '../../utils/dndModifiers';
@@ -12,6 +12,8 @@ import { fmtMoney } from '../../format';
 import MobileItemDrawer from './MobileItemDrawer';
 import MobileSectionManager from './MobileSectionManager';
 import ItemFormModal from '../../components/ItemFormModal';
+import BuyModal from '../../components/BuyModal';
+import { confirmDoubleCount, submitWithForceGuard } from '../../utils/domain';
 
 /** 移动清单：搜索 + 板块手风琴 + 项目卡片；点卡片 = 详情抽屉（方案 A，操作收敛在抽屉内） */
 export default function MobileItems() {
@@ -50,6 +52,43 @@ export default function MobileItems() {
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor),
   );
+
+  // 语境记账：卡片行首勾选圈直接登记实付（对齐桌面勾「已买」），
+  // force 只由服务端 409 触发——与抽屉/桌面同一守卫链
+  const [buyTarget, setBuyTarget] = useState<Item | null>(null);
+  const [buySaving, setBuySaving] = useState(false);
+
+  const confirmBuy = async (itemId: number, price: number, date: string) => {
+    const item = buyTarget;
+    if (!item) return;
+    setBuySaving(true);
+    try {
+      const updated = await submitWithForceGuard(
+        (force) => api.updateItem(itemId, { bought: true, paid_amount: price, bought_date: date, ...(force ? { force: true } : {}) }),
+        () => confirmDoubleCount(item),
+      );
+      if (!updated) return;
+      setBuyTarget(null);
+      load();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBuySaving(false);
+    }
+  };
+
+  const unmarkBought = async (itemId: number) => {
+    setBuySaving(true);
+    try {
+      await api.updateItem(itemId, { bought: false });
+      setBuyTarget(null);
+      load();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBuySaving(false);
+    }
+  };
 
   // 拖拽落点：乐观更新即时反馈，持久化失败 load() 重拉回滚服务端顺序
   const onItemDragEnd = (secId: number) => async ({ active, over }: DragEndEvent) => {
@@ -175,6 +214,7 @@ export default function MobileItems() {
                         // 折叠态无把手——须先展开
                         handle={!searching && activeKeys.includes(String(sec.id))}
                         onOpen={() => setDrawerId(it.id)}
+                      onMarkBought={() => setBuyTarget(it)}
                       />
                     ))}
                   </SortableContext>
@@ -191,6 +231,15 @@ export default function MobileItems() {
         sections={plan.sections}
         onClose={() => setDrawerId(null)}
         onChanged={load}
+      />
+
+      <BuyModal
+        item={buyTarget}
+        open={!!buyTarget}
+        onClose={() => setBuyTarget(null)}
+        confirmLoading={buySaving}
+        onConfirm={confirmBuy}
+        onUnmark={unmarkBought}
       />
 
       <MobileSectionManager
@@ -227,7 +276,7 @@ export default function MobileItems() {
  *  （attributes+listeners 都挂把手——读屏的拖拽指令与实际焦点在同一元素上），
  *  两者无嵌套。已买行用降文字色表达（与桌面 .row-bought 同语义），
  *  不再压整行透明度——12px 副行会被带进对比度不达标区间 */
-function SortableItemRow({ item: it, handle, onOpen }: { item: Item; handle: boolean; onOpen: () => void }) {
+function SortableItemRow({ item: it, handle, onOpen, onMarkBought }: { item: Item; handle: boolean; onOpen: () => void; onMarkBought: () => void }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({ id: it.id });
   const style: React.CSSProperties = {
     display: 'flex', alignItems: 'center', gap: 10,
@@ -236,20 +285,30 @@ function SortableItemRow({ item: it, handle, onOpen }: { item: Item; handle: boo
     transform: CSS.Transform.toString(transform),
     ...(isDragging ? { position: 'relative', zIndex: 10, background: 'var(--bg-linen)' } : {}),
   };
+  const hasOrders = it.order_count > 0;
   return (
     <div ref={setNodeRef} style={style}>
+      {/* 勾选圈取代装饰点：未买空心（点=登记实付）、已买实心勾（点=修正/取消）、
+          有订单项目灰置（付款经订单记录，防双算——与桌面勾选框同语义） */}
+      <button
+        aria-label={hasOrders ? '该项目通过订单记录付款，无需勾选' : it.bought ? '修改或取消已买登记' : '记为已买'}
+        disabled={hasOrders}
+        onClick={(e) => { e.stopPropagation(); onMarkBought(); }}
+        style={{
+          width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
+          border: it.bought ? 'none' : `1.5px solid ${hasOrders ? 'var(--line)' : 'var(--ink-3)'}`,
+          background: it.bought ? 'var(--sage)' : 'transparent',
+          color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: hasOrders ? 'default' : 'pointer', padding: 0,
+        }}
+      >
+        {it.bought && <CheckOutlined style={{ fontSize: 14 }} />}
+      </button>
       <button
         className="row-link"
         onClick={onOpen}
         style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10 }}
       >
-        <span
-          aria-hidden
-          style={{
-            width: 8, height: 8, borderRadius: 4, flexShrink: 0,
-            background: it.bought ? 'var(--sage)' : it.order_count > 0 ? 'var(--wood-600)' : 'var(--line)',
-          }}
-        />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
             <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: it.bought ? 'var(--ink-2)' : undefined }}>{it.name}</span>

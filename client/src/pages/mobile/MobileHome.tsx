@@ -132,13 +132,6 @@ export default function MobileHome() {
         </Card>
       )}
 
-      <Card styles={{ body: { padding: 14 } }}>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <Button block size="large" onClick={() => nav('/record')}>＋ 记一笔</Button>
-          <Button block size="large" onClick={() => nav('/items')}>看清单</Button>
-        </div>
-      </Card>
-
       <QuickPayModal order={payTarget} onClose={() => setPayTarget(null)} onDone={load} />
     </Space>
   );

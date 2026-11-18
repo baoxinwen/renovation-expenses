@@ -58,7 +58,7 @@ describe('submitWithForceGuard', () => {
 });
 
 // r3 I7：付款近重复守卫的客户端半边契约（submitPaymentWithGuard——
-// QuickPayModal/OrderDetail/MobileRecord 三入口共用，此前零测试防护）
+// QuickPayModal/OrderDetail 两入口共用，此前零测试防护）
 describe('submitPaymentWithGuard', () => {
   const payForceErr = (msg = '重复提示') => Object.assign(new Error(msg), { needForce: true });
 

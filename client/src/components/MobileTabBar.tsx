@@ -1,13 +1,12 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  BarChartOutlined, FileTextOutlined, HomeOutlined, PlusCircleFilled, ProfileOutlined,
+  BarChartOutlined, FileTextOutlined, HomeOutlined, ProfileOutlined,
 } from '@ant-design/icons';
 
-// 五栏：浏览类两侧排开，「记」恰在正中（P9 底部导航 ≤5 的上限内）
+// 四栏：首页 / 清单 / 订单 / 分析（记账回归语境入口，不再设独立「记」页）
 const TABS = [
   { key: '/', icon: HomeOutlined, label: '首页' },
   { key: '/items', icon: FileTextOutlined, label: '清单' },
-  { key: '/record', icon: PlusCircleFilled, label: '记', central: true },
   { key: '/orders', icon: ProfileOutlined, label: '订单' },
   { key: '/analysis', icon: BarChartOutlined, label: '分析' },
 ];
@@ -20,9 +19,7 @@ export default function MobileTabBar() {
   // 都不匹配（如 /settings 子页）时不高亮任何 tab
   const active = loc.pathname === '/'
     ? '/'
-    : loc.pathname === '/record'
-      ? '/record'
-      : TABS.filter((t) => t.key !== '/').find((t) => loc.pathname.startsWith(t.key))?.key ?? '';
+    : TABS.filter((t) => t.key !== '/').find((t) => loc.pathname.startsWith(t.key))?.key ?? '';
 
   return (
     <nav
@@ -41,24 +38,6 @@ export default function MobileTabBar() {
       {TABS.map((t) => {
         const Icon = t.icon;
         const isActive = active === t.key;
-        if (t.central) {
-          return (
-            <button
-              key={t.key}
-              aria-label="记一笔"
-              onClick={() => nav(t.key)}
-              style={{
-                flex: 1, display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center',
-                gap: 2, minHeight: 56, border: 'none', background: 'transparent',
-                color: 'var(--wood-600)', cursor: 'pointer',
-              }}
-            >
-              <Icon style={{ fontSize: 34, marginTop: -12, filter: 'drop-shadow(0 2px 4px rgba(140,94,60,0.35))' }} />
-              <span style={{ fontSize: 11 }}>{t.label}</span>
-            </button>
-          );
-        }
         return (
           <button
             key={t.key}
