@@ -201,61 +201,142 @@ export default function Orders() {
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
       <Card size="small">
-        <Space wrap size={12}>
-          <Button type="primary" size="large" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
-            新建订单
-          </Button>
-          <Select
-            style={{ width: 140 }}
-            allowClear
-            aria-label="按板块筛选"
-            placeholder="全部板块"
-            value={filters.section_id}
-            onChange={(v) => setFilters((f) => ({ ...f, section_id: v, item_id: undefined }))}
-            options={sections.map((s) => ({ value: s.id, label: s.name }))}
-          />
-          <Select
-            style={{ width: 180 }}
-            allowClear
-            showSearch
-            aria-label="按项目筛选"
-            placeholder="全部项目"
-            optionFilterProp="label"
-            value={filters.item_id}
-            onChange={(v) => setFilters((f) => ({ ...f, item_id: v }))}
-            options={sections.flatMap((s) =>
-              (s.items ?? []).map((it) => ({ value: it.id, label: `${s.name} / ${it.name}${it.spec ? ` · ${it.spec}` : ''}` })))}
-          />
-          <Select
-            style={{ width: 120 }}
-            allowClear
-            aria-label="按状态筛选"
-            placeholder="全部状态"
-            value={filters.status}
-            onChange={(v) => setFilters((f) => ({ ...f, status: v }))}
-            options={[
-              { value: 'open', label: '进行中' },
-              { value: 'closed', label: '已结清' },
-            ]}
-          />
-          <Input.Search
-            style={{ width: 220 }}
-            aria-label="搜索订单"
-            placeholder="搜订单 / 商家 / 项目"
-            allowClear
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            onSearch={(v) => { setSearchInput(v); setFilters((f) => (f.q === v ? f : { ...f, q: v })); }}
-          />
-          <Button icon={<ReloadOutlined />} aria-label="刷新订单列表" onClick={load} />
-          {selectedIds.size > 0 && (
-            <>
-              <span className="label-caption tabular">已选 {selectedIds.size} 笔</span>
-              <Button danger size="small" onClick={batchDeleteSelected}>批量删除</Button>
-              <Button size="small" type="text" onClick={() => setSelectedIds(new Set())}>取消选择</Button>
-            </>
-          )}
-        </Space>
+        {isMobile ? (
+          /* 移动端竖排：主操作全宽，搜索+刷新同行，三筛选等分一行（桌面横排挤不下） */
+          <Space direction="vertical" style={{ width: '100%' }} size={8}>
+            <Button type="primary" size="large" block icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
+              新建订单
+            </Button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Input.Search
+                style={{ flex: 1, minWidth: 0 }}
+                aria-label="搜索订单"
+                placeholder="搜订单 / 商家 / 项目"
+                allowClear
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onSearch={(v) => { setSearchInput(v); setFilters((f) => (f.q === v ? f : { ...f, q: v })); }}
+              />
+              <Button icon={<ReloadOutlined />} aria-label="刷新订单列表" onClick={load} />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Select
+                style={{ flex: 1, minWidth: 0 }}
+                allowClear
+                aria-label="按板块筛选"
+                placeholder="全部板块"
+                value={filters.section_id}
+                onChange={(v) => setFilters((f) => ({ ...f, section_id: v, item_id: undefined }))}
+                options={sections.map((s) => ({ value: s.id, label: s.name }))}
+              />
+              <Select
+                style={{ flex: 1, minWidth: 0 }}
+                allowClear
+                showSearch
+                aria-label="按项目筛选"
+                placeholder="全部项目"
+                optionFilterProp="label"
+                value={filters.item_id}
+                onChange={(v) => {
+                  const secId = v != null ? sections.find((sec) => (sec.items ?? []).some((it) => it.id === v))?.id : undefined;
+                  setFilters((f) => ({ ...f, item_id: v ?? undefined, ...(secId != null && !f.section_id ? { section_id: secId } : {}) }));
+                }}
+                options={(filters.section_id ? sections.filter((s) => s.id === filters.section_id) : sections).flatMap((s) =>
+                  (s.items ?? []).map((it) => ({
+                    value: it.id,
+                    label: filters.section_id
+                      ? `${it.name}${it.spec ? ` · ${it.spec}` : ''}`
+                      : `${s.name} / ${it.name}${it.spec ? ` · ${it.spec}` : ''}`,
+                  })))}
+              />
+              <Select
+                style={{ flex: 1, minWidth: 0 }}
+                allowClear
+                aria-label="按状态筛选"
+                placeholder="全部状态"
+                value={filters.status}
+                onChange={(v) => setFilters((f) => ({ ...f, status: v }))}
+                options={[
+                  { value: 'open', label: '进行中' },
+                  { value: 'closed', label: '已结清' },
+                ]}
+              />
+            </div>
+            {selectedIds.size > 0 && (
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <span className="label-caption tabular">已选 {selectedIds.size} 笔</span>
+                <Button danger size="small" onClick={batchDeleteSelected}>批量删除</Button>
+                <Button size="small" type="text" onClick={() => setSelectedIds(new Set())}>取消选择</Button>
+              </div>
+            )}
+          </Space>
+        ) : (
+          <Space wrap size={12}>
+            <Button type="primary" size="large" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
+              新建订单
+            </Button>
+            <Select
+              style={{ width: 140 }}
+              allowClear
+              aria-label="按板块筛选"
+              placeholder="全部板块"
+              value={filters.section_id}
+              onChange={(v) => setFilters((f) => ({ ...f, section_id: v, item_id: undefined }))}
+              options={sections.map((s) => ({ value: s.id, label: s.name }))}
+            />
+            <Select
+              style={{ width: 180 }}
+              allowClear
+              showSearch
+              aria-label="按项目筛选"
+              placeholder="全部项目"
+              optionFilterProp="label"
+              value={filters.item_id}
+              onChange={(v) => {
+                // 级联筛选：选项目自动回填所属板块（板块选了「全部」时）
+                const secId = v != null ? sections.find((sec) => (sec.items ?? []).some((it) => it.id === v))?.id : undefined;
+                setFilters((f) => ({ ...f, item_id: v ?? undefined, ...(secId != null && !f.section_id ? { section_id: secId } : {}) }));
+              }}
+              options={(filters.section_id ? sections.filter((s) => s.id === filters.section_id) : sections).flatMap((s) =>
+                (s.items ?? []).map((it) => ({
+                  value: it.id,
+                  // 已选板块（级联）时上下文明确，只显示项目名；全量时带板块前缀区分同名项目
+                  label: filters.section_id
+                    ? `${it.name}${it.spec ? ` · ${it.spec}` : ''}`
+                    : `${s.name} / ${it.name}${it.spec ? ` · ${it.spec}` : ''}`,
+                })))}
+            />
+            <Select
+              style={{ width: 120 }}
+              allowClear
+              aria-label="按状态筛选"
+              placeholder="全部状态"
+              value={filters.status}
+              onChange={(v) => setFilters((f) => ({ ...f, status: v }))}
+              options={[
+                { value: 'open', label: '进行中' },
+                { value: 'closed', label: '已结清' },
+              ]}
+            />
+            <Input.Search
+              style={{ width: 220 }}
+              aria-label="搜索订单"
+              placeholder="搜订单 / 商家 / 项目"
+              allowClear
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onSearch={(v) => { setSearchInput(v); setFilters((f) => (f.q === v ? f : { ...f, q: v })); }}
+            />
+            <Button icon={<ReloadOutlined />} aria-label="刷新订单列表" onClick={load} />
+            {selectedIds.size > 0 && (
+              <>
+                <span className="label-caption tabular">已选 {selectedIds.size} 笔</span>
+                <Button danger size="small" onClick={batchDeleteSelected}>批量删除</Button>
+                <Button size="small" type="text" onClick={() => setSelectedIds(new Set())}>取消选择</Button>
+              </>
+            )}
+          </Space>
+        )}
       </Card>
 
       {isMobile ? (
