@@ -3,6 +3,7 @@ import type { Summary } from '../../api';
 import { fmtMoney } from '../../format';
 import { spendablePool } from '../../utils/budgetCalc';
 import WoodProgress from '../../components/WoodProgress';
+import TypeReveal from '../../components/TypeReveal';
 
 // 剩余预算缺口分析卡（spec 功能 H，现金流口径）：公式收敛至 budgetCalc.spendablePool
 // （与清单页可花池提示条同一出处，消除双实现漂移）；推导细节见该文件注释。
@@ -18,7 +19,7 @@ export default function GapCard({ summary }: { summary: Summary | null }) {
 
   if (budget === 0) {
     return (
-      <Card title="剩余预算缺口" size="small" style={CARD_FILL} styles={{ body: CARD_BODY_EVENLY }}>
+      <Card title={<TypeReveal text="剩余预算缺口" />} size="small" style={CARD_FILL} styles={{ body: CARD_BODY_EVENLY }}>
         <Empty description="先设置预算目标后查看缺口分析" style={{ padding: 24 }} />
       </Card>
     );
@@ -27,7 +28,7 @@ export default function GapCard({ summary }: { summary: Summary | null }) {
   const gapColor = gap > 0 ? 'var(--clay)' : 'var(--sage)';
 
   return (
-    <Card title="剩余预算缺口" size="small" style={CARD_FILL} styles={{ body: CARD_BODY_EVENLY }}>
+    <Card title={<TypeReveal text="剩余预算缺口" />} size="small" style={CARD_FILL} styles={{ body: CARD_BODY_EVENLY }}>
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 12, color: 'var(--ink-3)', marginBottom: 6 }}>
           <span>累计支出 {fmtMoney(cashSpent)} / 目标 {fmtMoney(budget)}（含未挂项目付款）</span>
