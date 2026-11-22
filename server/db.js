@@ -194,6 +194,10 @@ export const LIMITS = {
   BACKUP_MAX_MB: 300,     // 恢复上传的备份 zip 上限（票据多时体积大）
 };
 
+// 票据图片扩展名白名单（上传与恢复备份共用同一口径，勿在路由各写一份）。
+// HEIC 不在支持列表：Windows Chrome/Edge 无法解码会裂图。iPhone 请改拍 JPG（设置-相机-格式-兼容性最佳）
+export const ALLOWED_UPLOAD_EXT = ['jpg', 'jpeg', 'png', 'webp'];
+
 // ===== 共享查询片段（口径唯一出处，勿在各路由复制） =====
 export function getSetting(key) {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);

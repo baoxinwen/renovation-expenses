@@ -76,15 +76,24 @@ app.addHook('onResponse', async (req, reply) => {
 });
 
 await app.register(fastifyMultipart, {
-  // 全局关闭框架级 413 抛错，改由各端点自判 truncated 给中文提示
-  limits: { fileSize: 10 * 1024 * 1024, throwFileSizeLimit: false },
+  // 全局关闭框架级 413 抛错，改由各端点自判 truncated 给中文提示。
+  // throwFileSizeLimit 是顶层选项（嵌进 limits 会被 busboy 忽略、缺省回 true，
+  // 超限请求拿到的是英文 413 而不是端点设计的中文提示）
+  throwFileSizeLimit: false,
+  limits: { fileSize: 10 * 1024 * 1024 },
 });
 
-// 票据照片静态服务：/uploads/<filename>
+// 票据照片静态服务：/uploads/<filename>。nosniff + 禁子资源是恢复链内容
+// 白名单（import.js）之外的纵深——万一有 HTML 混入票据目录也不被嗅探执行。
+// setHeaders 首参是 fastify reply（不是原生 res），须走 reply.header()
 await app.register(fastifyStatic, {
   root: UPLOAD_DIR,
   prefix: '/uploads/',
   decorateReply: false,
+  setHeaders: (reply) => {
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('Content-Security-Policy', "default-src 'none'");
+  },
 });
 
 app.register(settingsRoutes, { prefix: '/api' });
@@ -96,11 +105,26 @@ app.register(importRoutes, { prefix: '/api' });
 
 // 托管前端构建产物（npm start / 启动.bat 场景）
 if (fs.existsSync(DIST_DIR)) {
-  await app.register(fastifyStatic, { root: DIST_DIR, prefix: '/' });
-  // SPA 回退：非 API / 非 uploads 的路径一律返回 index.html
+  await app.register(fastifyStatic, {
+    root: DIST_DIR,
+    prefix: '/',
+    // assets/ 是内容 hash 命名的不可变产物，长缓存省去每次冷启动的协商请求；
+    // index.html 与 manifest 保持默认协商缓存，发版即时生效
+    setHeaders: (reply, filePath) => {
+      if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+        reply.header('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+    },
+  });
+  // SPA 回退：无扩展名的路由回 index.html；带静态扩展名的未知路径回真 404——
+  // 图标等资源引用写坏时不能以 200+HTML 软 404 静默（安装诊断会误判成功）
   app.setNotFoundHandler((req, reply) => {
-    if (req.raw.url?.startsWith('/api/') || req.raw.url?.startsWith('/uploads/')) {
+    const url = (req.raw.url || '').split('?')[0];
+    if (url.startsWith('/api/') || url.startsWith('/uploads/')) {
       return reply.status(404).send({ message: '接口不存在' });
+    }
+    if (/\.[a-zA-Z0-9]+$/.test(url)) {
+      return reply.status(404).send({ message: '文件不存在' });
     }
     return reply.sendFile('index.html');
   });

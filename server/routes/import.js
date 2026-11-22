@@ -1,8 +1,9 @@
 import Database from 'better-sqlite3';
-import db, { reopenDatabase, LIMITS, DATA_DIR, UPLOAD_DIR } from '../db.js';
+import db, { reopenDatabase, LIMITS, ALLOWED_UPLOAD_EXT, DATA_DIR, UPLOAD_DIR } from '../db.js';
 import ExcelJS from 'exceljs';
 import path from 'node:path';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import { parseZip } from '../zipParse.js';
 import { withLock } from '../lock.js';
 
@@ -186,7 +187,8 @@ export default async function (app) {
       return reply.status(400).send({ message: '只支持 .xlsx / .xlsm 文件' });
     }
     const buf = await file.toBuffer();
-    if (file.truncated) {
+    // truncated 标志在 busboy 文件流上（part 包装对象不带）
+    if (file.file.truncated) {
       await drainRest();
       return reply.status(400).send({ message: `文件超过 ${LIMITS.IMPORT_FILE_MB}MB 限制，请检查是否传对了文件` });
     }
@@ -198,12 +200,14 @@ export default async function (app) {
     }
 
     if (wb.worksheets[0] && wb.worksheets[0].rowCount > LIMITS.IMPORT_MAX_ROWS) {
+      await drainRest();
       return reply.status(400).send({ message: `工作表行数超过 ${LIMITS.IMPORT_MAX_ROWS}，请检查是否传对了文件` });
     }
     let parsed;
     try {
       parsed = parseWorkbook(wb);
     } catch (e) {
+      await drainRest();
       return reply.status(400).send({ message: e.message });
     }
 
@@ -240,6 +244,7 @@ export default async function (app) {
       })();
     } catch (e) {
       if (String(e?.message || '').includes('UNIQUE constraint failed')) {
+        await drainRest();
         return reply.status(400).send({ message: '文件中存在重复的板块名，请检查后重试' });
       }
       throw e;
@@ -268,7 +273,8 @@ export default async function (app) {
       await drainRest();
       return reply.status(400).send({ message: '请上传备份文件（字段名 file）' });
     }
-    if (file.truncated) {
+    // truncated 标志在 busboy 文件流上（part 包装对象不带）
+    if (file.file.truncated) {
       await drainRest();
       return reply.status(400).send({ message: `备份文件超过 ${LIMITS.BACKUP_MAX_MB}MB 上限` });
     }
@@ -289,10 +295,19 @@ export default async function (app) {
       return reply.status(400).send({ message: '备份缺少 database.db，请确认是本系统导出的备份' });
     }
     const uploadEntries = entries.filter((e) => e.name.startsWith('uploads/') && !e.name.endsWith('/'));
+    // 票据条目与上传同一扩展名白名单（ALLOWED_UPLOAD_EXT）：系统自产备份内票据
+    // 只会是图片，「恶意备份」是在册威胁模型（db.js 路径穿越防御同源）——放行
+    // 非图片条目会被 /uploads 以 text/html 同源原样返回，构成存储型 XSS
+    const badUpload = uploadEntries.find((e) => !ALLOWED_UPLOAD_EXT.includes(path.extname(e.name).toLowerCase().slice(1)));
+    if (badUpload) {
+      await drainRest();
+      return reply.status(400).send({ message: `备份包含非图片票据文件（${badUpload.name}），已拒绝` });
+    }
 
     // 第 2 步：校验库完整性（临时文件打开 quick_check + 关键表存在）；校验文件
-    // 写出纳入 try——磁盘满等写失败也走统一分支（M16），不留 .restore-check 残骸
-    const checkPath = path.join(DATA_DIR, `.restore-check-${Date.now()}.db`);
+    // 写出纳入 try——磁盘满等写失败也走统一分支（M16），不留 .restore-check 残骸。
+    // 文件名带随机后缀：并发恢复同毫秒时不再共享同名校验文件（后者 rename 落空回滚）
+    const checkPath = path.join(DATA_DIR, `.restore-check-${Date.now()}-${crypto.randomUUID().slice(0, 8)}.db`);
     let checkDb;
     try {
       fs.writeFileSync(checkPath, dbEntry.data);
@@ -308,7 +323,6 @@ export default async function (app) {
       fs.rmSync(checkPath, { force: true });
       return reply.status(400).send({ message: `备份校验失败：${e.message}` });
     }
-    checkDb.close();
     checkDb.close();
 
     // 第 3/4 步：可回滚替换链，全程与 /export/backup 的异步快照互斥（I7，见

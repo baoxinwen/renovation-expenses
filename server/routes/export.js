@@ -324,6 +324,9 @@ export default async function (app) {
       fs.unlink(snapshot, () => {});
     });
     archive.on('end', () => fs.unlink(snapshot, () => {}));
+    // 客户端中断下载时流以 close 收场（error/end 未必触发）；unlink 对已清理的
+    // 快照幂等（ENOENT 静默），不给 tmp 目录留同库大小的残骸
+    archive.on('close', () => fs.unlink(snapshot, () => {}));
     archive.file(snapshot, { name: 'database.db' });
     archive.directory(UPLOAD_DIR, 'uploads');
     finalizeArchive(archive, req.log);

@@ -144,10 +144,16 @@ export default async function (app) {
       }
     }
     const originalName = stripDeletedSuffix(sec.name, id);
-    const nameTaken = db.prepare('SELECT COUNT(*) AS c FROM sections WHERE name = ? AND id != ?').get(originalName, id).c > 0;
+    // 撞名加序号重试（对照 import.js 同名票据加序号先例）：只补一层「（恢复）」时，
+    // 「原名（恢复）」恰好也被占用会让 UNIQUE 撞库退化成 500，而不是这里的中文改名
+    let restoreName = originalName;
+    let dedup = 2;
+    while (db.prepare('SELECT COUNT(*) AS c FROM sections WHERE name = ? AND id != ?').get(restoreName, id).c > 0) {
+      restoreName = `${originalName}（恢复${dedup++}）`;
+    }
     const restore = db.transaction(() => {
       db.prepare('UPDATE sections SET deleted = 0, deleted_at = NULL, name = ? WHERE id = ?')
-        .run(nameTaken ? `${originalName}（恢复）` : originalName, id);
+        .run(restoreName, id);
       // 只复活与板块同刻连带软删的项目；IS NULL 分支兼容旧版本删除的存量数据
       //（旧版不写 deleted_at，板块与其连带项都为 NULL，行为与旧版一致）
       db.prepare(`UPDATE items SET deleted = 0, deleted_at = NULL

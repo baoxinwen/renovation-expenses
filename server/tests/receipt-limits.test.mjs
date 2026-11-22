@@ -78,6 +78,17 @@ try {
       && (disks[0][2] === 0xaa || disks[0][2] === 0xbb);
     check('内容为上传的两份之一', inputsDiffer);
   }
+  console.log('== 单张超限（truncated 分支） ==');
+  // 门禁 I-2：单张 >10MB（全局默认 fileSize 上限）必须走 truncated 分支回中文
+  // 提示——这是此前唯一没有任何用例打到的上传失败路径
+  const beforeBig = diskFiles().length;
+  const bigBlob = new Blob([Buffer.alloc(10 * 1024 * 1024 + 1, 0x50)], { type: 'image/png' });
+  r = await upload(paymentId, [['big.png', bigBlob]]);
+  check('单张 10MB+1 被拒（truncated 中文提示）',
+    r.status === 400 && (r.json?.message ?? '').includes('单张照片不能超过 10MB'),
+    `status=${r.status} msg=${r.json?.message}`);
+  check('超限请求零落盘', diskFiles().length === beforeBig, `落盘 ${beforeBig}→${diskFiles().length}`);
+
   console.log('== 早退路径不悬挂（I1） ==');
   // 早退（格式/张数/字段名不符）时必须先消费当前 part 的流再回包：
   // 修复前 busboy 因默认 fileHwm(16KB) 反压暂停解析，请求悬挂到 requestTimeout(~300s)

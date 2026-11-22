@@ -1,10 +1,8 @@
-import db, { UPLOAD_DIR, LIMITS, escapeLike, resolveUploadPath } from '../db.js';
+import db, { UPLOAD_DIR, LIMITS, ALLOWED_UPLOAD_EXT, escapeLike, resolveUploadPath } from '../db.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-// HEIC 不在支持列表：Windows Chrome/Edge 无法解码会裂图。iPhone 请改拍 JPG（设置-相机-格式-兼容性最佳）
-const ALLOWED_EXT = ['jpg', 'jpeg', 'png', 'webp'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 // 查询参数 id：非有限正数回 null（调用方转 400），避免 NaN 绑定成 NULL 静默失效
@@ -371,8 +369,9 @@ export default async function (app) {
       limits: {
         fileSize: LIMITS.RECEIPT_FILE_MB * 1024 * 1024,
         files: LIMITS.RECEIPT_MAX_FILES + 1, // 多放 1 个用于探测超限；再多的部分 busboy 直接丢弃
-        throwFileSizeLimit: false,
       },
+      // throwFileSizeLimit 是顶层选项：超限不抛英文 413，交给下方 truncated 分支出中文提示
+      throwFileSizeLimit: false,
     });
     // 早退后必须排干剩余部分再回包，否则连接悬挂在未读完的 multipart 流上
     const drainRest = async () => {
@@ -392,12 +391,14 @@ export default async function (app) {
         break;
       }
       const ext = path.extname(file.filename).toLowerCase().slice(1);
-      if (!ALLOWED_EXT.includes(ext)) {
+      if (!ALLOWED_UPLOAD_EXT.includes(ext)) {
         badRequest = `不支持的图片格式：${file.filename}（支持 jpg/png/webp；HEIC 请转 JPG）`;
         break;
       }
       const buf = await file.toBuffer();
-      if (file.truncated) {
+      // truncated 标志在 busboy 文件流上（part 包装对象不带），超限时 toBuffer
+      // 已按上限截断——此处回中文提示而非框架英文 413
+      if (file.file.truncated) {
         badRequest = `单张照片不能超过 10MB：${file.filename}`;
         break;
       }

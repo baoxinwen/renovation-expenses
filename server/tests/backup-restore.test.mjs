@@ -2,6 +2,7 @@
 // 隔离运行：自带临时数据库 + 票据 fixture，绝不触碰生产库。
 // 依赖 server/zipParse.js（生产解析器，恢复端点共用同一实现——测试即契约校验）。
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
@@ -281,6 +282,33 @@ try {
   const reservedRes = await fetch(`${BASE}/restore/backup`, { method: 'POST', body: reservedFd });
   check('Windows 保留名条目恢复 200（清洗后写回）', reservedRes.status === 200, `status=${reservedRes.status}`);
 
+  // 门禁 I-1：恢复链不校验 uploads 条目类型——恶意备份（合法库 + uploads/evil.html）
+  // 恢复后会被静态服务以 text/html 同源原样返回，构成存储型 XSS。系统自产备份内
+  // 票据只会是图片（与 orders.js 上传同一白名单口径），恢复侧按同一白名单拒绝非图片条目
+  const xssArchive = new ZipArchive({ store: true });
+  xssArchive.append(realDb.data, { name: 'database.db' });
+  xssArchive.append('<script>alert(1)</script>', { name: 'uploads/evil.html' });
+  const xssBuf = await collectZip(xssArchive);
+  const xssFd = new FormData();
+  xssFd.append('file', new Blob([xssBuf]), 'backup.zip');
+  const xssRes = await fetch(`${BASE}/restore/backup`, { method: 'POST', body: xssFd });
+  check('I-1 夹带非图片条目（evil.html）被拒绝', xssRes.status === 400 && (await xssRes.json().catch(() => null))?.message?.includes('非图片'), `status=${xssRes.status}`);
+  check('I-1 evil.html 未落盘', !fs.existsSync(path.join(tmpDir, 'uploads', 'evil.html')));
+
+  // I-1 防线纵深：/uploads 静态服务带 nosniff + CSP（图片响应无害，万一有
+  // HTML 混入也不被嗅探执行、不加载子资源）。走独立新连接：前序早退 400 截断的
+  // socket 残留在 fetch 连接池，复用会误报 ECONNRESET（receipt-limits 同款先例）
+  const anyUpload = fs.readdirSync(path.join(tmpDir, 'uploads'))[0];
+  const upStaticRes = await new Promise((resolve) => {
+    const rq = http.get(`http://127.0.0.1:${PORT}/uploads/${encodeURIComponent(anyUpload)}`, (res) => {
+      res.resume();
+      resolve(res);
+    });
+    rq.on('error', () => resolve(null));
+  });
+  check('I-1 /uploads 带 nosniff', upStaticRes?.headers['x-content-type-options'] === 'nosniff', String(upStaticRes?.headers['x-content-type-options']));
+  check('I-1 /uploads 禁子资源（CSP default-src none）', (upStaticRes?.headers['content-security-policy'] ?? '').includes("default-src 'none'"), String(upStaticRes?.headers['content-security-policy']));
+
   // C4+C5：恢复中途失败时库与票据都必须可还原（Windows：句柄锁住 uploads 内文件，
   // 使目录 rename/删除失败——单用户 Windows 裸机是主要部署形态，其余平台跳过注入）
   if (process.platform === 'win32') {
@@ -346,6 +374,20 @@ try {
   } else {
     console.log('  (C4/C5 失败注入依赖 Windows 句柄锁语义，本平台跳过)');
   }
+
+  // 门禁 I-2：>10MB（全局 multipart fileSize）但 <300MB 的备份必须恢复成功——
+  // 恢复端点的「每请求 limits 覆盖全局」是 300MB 上限的承重墙，上游若改变
+  // deepmerge 合并语义在此现形（票据多时真实备份远超 10MB）
+  console.log('== I-2 大备份恢复 ==');
+  const bigArchive = new ZipArchive({ store: true });
+  bigArchive.append(realDb.data, { name: 'database.db' });
+  bigArchive.append(Buffer.alloc(11 * 1024 * 1024, 0x50), { name: 'uploads/pad.jpg' });
+  const bigBuf = await collectZip(bigArchive);
+  check('造数：大备份 zip 超过全局 10MB 上限', bigBuf.length > 10 * 1024 * 1024, `size=${bigBuf.length}`);
+  const bigFd = new FormData();
+  bigFd.append('file', new Blob([bigBuf]), 'backup.zip');
+  const bigRes = await fetch(`${BASE}/restore/backup`, { method: 'POST', body: bigFd });
+  check('11MB 备份恢复成功（每请求 limits 覆盖全局生效）', bigRes.status === 200, `status=${bigRes.status} msg=${JSON.stringify(await bigRes.json().catch(() => null)).slice(0, 80)}`);
 } catch (e) {
   failed++;
   console.error('测试执行异常:', e);
