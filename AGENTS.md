@@ -49,6 +49,9 @@ React 18 + TypeScript + Vite + Ant Design 5 + ECharts（`client/`）。Windows �
 - worktree 开发（`.worktrees/`，gitignored）+ TDD + 约定式原子提交；失败 3 次停，
   转系统化调试定位根因，不盲目重试。
 - 提交 body 只写为什么（不写实现清单/诊断数字/报障叙事）；推送走发版流程。
+- **发版前置（v1.5.0 教训）**：先推 main 等 CI 绿，**再**打 tag——tag 与 main 同时推
+  等于自拆预警线；打 tag 前本地先过 `bash scripts/ci-smoke.sh`（node:22 容器内
+  npm ci + npm test，即 CI 测试步的 Linux 等价物），Windows 全绿不代表 Linux 成立。
 - CHANGELOG 随发版定版，平时改动记 `[未发布]` 节；`docs/`（PRD/spec/评审）在
   .gitignore 内，属本地文档不进提交。
 
