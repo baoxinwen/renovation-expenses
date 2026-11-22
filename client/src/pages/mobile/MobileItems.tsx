@@ -174,9 +174,6 @@ export default function MobileItems() {
         />
         <Button size="large" onClick={() => setManagerOpen(true)}>管理板块</Button>
       </div>
-      <div className="label-caption" style={{ marginBottom: 10 }}>
-        点项目卡片查看详情与操作
-      </div>
 
       {sections.length === 0 ? (
         <Card><Empty description={`没有找到与「${search}」匹配的项目`} /></Card>

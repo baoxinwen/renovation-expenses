@@ -513,9 +513,6 @@ export default function Plan() {
             onChange={(e) => setSearch(e.target.value)}
             allowClear
           />
-          <span className="label-caption" style={{ flex: 1, minWidth: 200 }}>
-            点击行即可编辑；悬停行首 ⠿ 可拖动排序
-          </span>
           <Space wrap style={{ marginLeft: 'auto' }}>
             <Button type="primary" ghost icon={<PlusOutlined />} onClick={() => setSectionModalOpen(true)}>
               新增板块
@@ -552,7 +549,7 @@ export default function Plan() {
           >
             <Tag color="error" style={{ marginRight: 2 }}>待付尾款</Tag>
             <span style={{ fontWeight: 600 }} className="tabular">{fmtMoney(totalUnpaid)}</span>
-            <span className="label-caption">{unpaid.length} 笔未结清 · 点击{unpaidOpen ? '收起' : '展开'}</span>
+            <span className="label-caption">{unpaid.length} 笔未结清</span>
             <span style={{ marginLeft: 'auto', color: 'var(--ink-3)' }} aria-hidden>{unpaidOpen ? '▲' : '▼'}</span>
           </button>
           {unpaidOpen && (
@@ -740,10 +737,6 @@ export default function Plan() {
           action={<Button size="small" onClick={() => nav('/orders')}>去订单</Button>}
         />
       )}
-
-      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        点击行即可修改项目信息（名称 / 规格 / 数量 / 单价 / 备注）；点「已买」登记实际支付；分定金/尾款的大件用「订单」挂在项目下，退货退款记负数自动冲抵。统计图表见「分析」页。
-      </Typography.Text>
 
       {/* 目标编辑弹窗 */}
       <Modal title="设置预算目标" open={targetOpen} onCancel={() => setTargetOpen(false)} onOk={() => targetForm.submit()} destroyOnClose>

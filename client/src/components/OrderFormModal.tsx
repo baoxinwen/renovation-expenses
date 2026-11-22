@@ -91,7 +91,7 @@ export default function OrderFormModal({ open, initial, sections, confirmLoading
         <Form.Item
           name="item_id"
           label="关联预算项目"
-          extra="挂到清单里的某个项目，付款会计入该项目实际支出"
+          extra="付款会计入该项目实际支出"
         >
           <Select
             allowClear

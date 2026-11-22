@@ -94,7 +94,7 @@ export default function QuickPayModal({ order, onClose, onDone }: {
           <Form.Item
             name="amount" label="金额（元）"
             rules={[{ required: true, message: '请输入金额' }]}
-            extra={`未付 ${fmtMoney(order.total_amount - (order.paid ?? 0))}（已预填，可改）`}
+            extra={`未付 ${fmtMoney(order.total_amount - (order.paid ?? 0))}`}
           >
             <InputNumber precision={2} style={{ width: '100%' }} inputMode="decimal" />
           </Form.Item>
