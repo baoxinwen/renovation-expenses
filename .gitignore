@@ -7,3 +7,8 @@ backups/
 .env
 docs/
 .worktrees/
+
+# 图标草稿与预览工具页（开发期文件，勿入库）
+/_icon*
+/client/public/_*
+/client/public/icons/_draft*

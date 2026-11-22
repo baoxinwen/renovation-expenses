@@ -15,13 +15,16 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="装修账本" />
     <script>
-      // 首帧前应用暗色（与 useThemeMode 同规则），避免深色用户闪白屏
+      // 首帧前应用暗色（与 useThemeMode 同规则），避免深色用户闪白屏；
+      // 状态栏色同步（两个色值与 useThemeMode 的 THEME_COLOR 同源，测试钉住三方一致）
       (function () {
         try {
           var mode = localStorage.getItem('renovation-expenses.theme-mode');
           var dark = mode === 'dark'
             || ((!mode || mode === 'system') && window.matchMedia('(prefers-color-scheme: dark)').matches);
           if (dark) document.documentElement.classList.add('dark');
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', dark ? '#0b0b0a' : '#8c5e3c');
         } catch (e) { /* 无 localStorage 时按浅色 */ }
       })();
     </script>
