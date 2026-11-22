@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Modal, Form, Input, InputNumber } from 'antd';
 import type { Item, ItemFormValues } from '../api';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 /** 编辑模式额外可改：实际支付金额（仅已买项目展示） */
 export interface ItemFormResult extends ItemFormValues {
@@ -19,8 +20,7 @@ interface Props {
 export default function ItemFormModal({ open, initial, confirmLoading, onOk, onCancel }: Props) {
   const [form] = Form.useForm();
   const isEdit = !!initial;
-  // 参考值：数量 × 预算单价（实付未登记时的回出口径）
-  const budgetTotal = initial ? Number((initial.quantity * initial.unit_price).toFixed(2)) : 0;
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     if (!open) return;
@@ -32,12 +32,14 @@ export default function ItemFormModal({ open, initial, confirmLoading, onOk, onC
         quantity: initial.quantity,
         unit_price: initial.unit_price,
         note: initial.note || undefined,
-        paid_amount: initial.bought ? (initial.paid_amount ?? budgetTotal) : undefined,
+        // 实付只回填已登记值：未登记（null）保持空（placeholder「未登记」）——
+        // 预填数量×单价的回退值会让「不改直接保存」把动态回退口径固化成显式数值
+        paid_amount: initial.bought ? initial.paid_amount : undefined,
       });
     } else {
       form.resetFields();
     }
-  }, [open, initial, form, budgetTotal]);
+  }, [open, initial, form]);
 
   return (
     <Modal
@@ -46,8 +48,11 @@ export default function ItemFormModal({ open, initial, confirmLoading, onOk, onC
       onCancel={onCancel}
       onOk={() => form.submit()}
       confirmLoading={confirmLoading}
-      destroyOnClose
+      destroyOnHidden
       okText={isEdit ? '保存' : '添加'}
+      /* 移动端弹层主按钮 40px 触区（antd large）：32px 高拇指易误触邻位 */
+      okButtonProps={isMobile ? { size: 'large' } : undefined}
+      cancelButtonProps={isMobile ? { size: 'large' } : undefined}
     >
       {/* onOk 由 Form.onFinish 驱动：form.submit() 校验通过后才会触发，校验失败由表单内红字提示 */}
       <Form

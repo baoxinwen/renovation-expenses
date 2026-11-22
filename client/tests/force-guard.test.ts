@@ -80,10 +80,10 @@ describe('submitPaymentWithGuard', () => {
     expect(confirm).toHaveBeenCalledExactlyOnceWith(expect.any(Error));
   });
 
-  it('确认被拒绝 → 抛「已取消」中止，不重试', async () => {
+  it('确认被拒绝 → 静默返回 null 取消（不走红色错误 toast），不重试', async () => {
     const submit = vi.fn().mockRejectedValue(payForceErr());
     const confirm = vi.fn().mockResolvedValue(false);
-    await expect(submitPaymentWithGuard(submit, confirm)).rejects.toThrow('已取消');
+    await expect(submitPaymentWithGuard(submit, confirm)).resolves.toBeNull();
     expect(submit).toHaveBeenCalledExactlyOnceWith(false);
   });
 

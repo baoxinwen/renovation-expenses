@@ -5,6 +5,7 @@ import type { Item } from '../api';
 import { budgetDelta, formatDelta } from '../utils/budgetCalc';
 import { paidPrefill } from '../utils/domain';
 import { confirmAsync } from '../utils/confirm';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 interface Values {
   price: number;
@@ -26,6 +27,7 @@ export default function BuyModal({ item, open, onClose, onConfirm, onUnmark, con
 }) {
   const [form] = Form.useForm();
   const isBought = !!item?.bought;
+  const isMobile = useIsMobile();
   // 参考值：数量 × 预算单价（抹零/打包价在此基础上直接改）
   const budgetTotal = item ? Number((item.quantity * item.unit_price).toFixed(2)) : 0;
   // 实时差额：填实付时立即反馈较预算超/省多少
@@ -50,8 +52,11 @@ export default function BuyModal({ item, open, onClose, onConfirm, onUnmark, con
       onCancel={onClose}
       onOk={() => form.submit()}
       confirmLoading={confirmLoading}
-      destroyOnClose
+      destroyOnHidden
       okText={isBought ? '保存' : '记为已买'}
+      /* 移动端弹层主按钮 40px 触区（antd large）：金额确认键 32px 高拇指易误触邻位 */
+      okButtonProps={isMobile ? { size: 'large' } : undefined}
+      cancelButtonProps={isMobile ? { size: 'large' } : undefined}
     >
       <Form form={form} layout="vertical" onFinish={(v: Values) => onConfirm(item.id, v.price, v.date.format('YYYY-MM-DD'))}>
         <Form.Item
@@ -82,7 +87,7 @@ export default function BuyModal({ item, open, onClose, onConfirm, onUnmark, con
         <Button
           type="link"
           danger
-          style={{ padding: 0 }}
+          style={{ padding: 0, minHeight: 44 }}
           onClick={async () => {
             // 单击即清实付与日期，数据要凭记忆重录——加一道确认（桌面/移动共用本组件，一处拦两端）
             const ok = await confirmAsync({

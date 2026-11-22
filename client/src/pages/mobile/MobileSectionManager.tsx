@@ -51,7 +51,7 @@ export default function MobileSectionManager({ open, sections, onClose, onChange
 
   const addSection = async () => {
     const name = newName.trim();
-    if (!name) return;
+    if (!name || saving) return; // saving 守卫：连按回车不发并发请求（第二次会撞 UNIQUE 报无关的重名错）
     setSaving(true);
     try {
       await api.addSection(name);

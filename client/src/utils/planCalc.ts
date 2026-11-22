@@ -4,8 +4,13 @@
 import type { Item } from '../api';
 import { paletteFor } from '../styles/palette';
 
-/** 万元缩写：echarts 轴标签用（>=10000 显示 X万） */
-export const fmtAxisWan = (v: number) => (v >= 10000 ? v / 10000 + '万' : String(v));
+/** 万元缩写：echarts 轴标签用（>=10000 显示 X万；非整万收一位小数，
+ *  不然轴自动刻度落在 33333 这类值时标签拖出长尾小数） */
+export const fmtAxisWan = (v: number) => {
+  if (v < 10000) return String(v);
+  const w = v / 10000;
+  return `${Number.isInteger(w) ? w : w.toFixed(1)}万`;
+};
 
 /** HTML 转义：echarts tooltip formatter 的返回值按 HTML 渲染，项目名等来自
  *  Excel 导入的用户输入必须先转义——`<img onerror=…>` 之类标签会在应用

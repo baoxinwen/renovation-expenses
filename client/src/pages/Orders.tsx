@@ -209,6 +209,7 @@ export default function Orders() {
             </Button>
             <div style={{ display: 'flex', gap: 8 }}>
               <Input.Search
+                size="large"
                 style={{ flex: 1, minWidth: 0 }}
                 aria-label="搜索订单"
                 placeholder="搜订单 / 商家 / 项目"
@@ -217,10 +218,12 @@ export default function Orders() {
                 onChange={(e) => setSearchInput(e.target.value)}
                 onSearch={(v) => { setSearchInput(v); setFilters((f) => (f.q === v ? f : { ...f, q: v })); }}
               />
-              <Button icon={<ReloadOutlined />} aria-label="刷新订单列表" onClick={load} />
+              <Button size="large" icon={<ReloadOutlined />} aria-label="刷新订单列表" onClick={load} />
             </div>
+            {/* 移动高频筛选 40px 触区（antd large）：32px 默认高度拇指易误触邻位 */}
             <div style={{ display: 'flex', gap: 8 }}>
               <Select
+                size="large"
                 style={{ flex: 1, minWidth: 0 }}
                 allowClear
                 aria-label="按板块筛选"
@@ -230,6 +233,7 @@ export default function Orders() {
                 options={sections.map((s) => ({ value: s.id, label: s.name }))}
               />
               <Select
+                size="large"
                 style={{ flex: 1, minWidth: 0 }}
                 allowClear
                 showSearch
@@ -250,6 +254,7 @@ export default function Orders() {
                   })))}
               />
               <Select
+                size="large"
                 style={{ flex: 1, minWidth: 0 }}
                 allowClear
                 aria-label="按状态筛选"

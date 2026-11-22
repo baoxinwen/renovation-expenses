@@ -99,7 +99,7 @@ export default function MobileHome() {
               {/* 行主区用原生 button：键盘可达的行点击路径（Enter/Space 即可） */}
               <button
                 className="row-link"
-                style={{ flex: 1, minWidth: 0, display: 'block' }}
+                style={{ flex: 1, minWidth: 0, minHeight: 44, display: 'block' }}
                 onClick={() => nav(`/orders/${o.id}`)}
               >
                 <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.title}</div>
@@ -120,7 +120,7 @@ export default function MobileHome() {
               key={r.id}
               className="row-link"
               onClick={() => nav(`/orders/${r.order_id}`)}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '11px 0', borderBottom: '1px solid var(--line)' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 44, padding: '11px 0', borderBottom: '1px solid var(--line)' }}
             >
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.order_title}</div>

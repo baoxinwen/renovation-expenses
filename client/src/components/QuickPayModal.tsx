@@ -7,6 +7,7 @@ import type { Order } from '../api';
 import { fmtMoney, PAY_METHODS } from '../format';
 import { confirmAsync } from '../utils/confirm';
 import { submitPaymentWithGuard } from '../utils/domain';
+import { useIsMobile } from '../hooks/useIsMobile';
 import ReceiptUploader from './ReceiptUploader';
 
 /** 待付尾款行内记付款（桌面清单页 / 移动首页共用），可附票据照片 */
@@ -18,6 +19,7 @@ export default function QuickPayModal({ order, onClose, onDone }: {
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     if (order) {
@@ -59,6 +61,8 @@ export default function QuickPayModal({ order, onClose, onDone }: {
           okText: '仍要记录',
         }),
       );
+      // 用户在重复确认里点取消：静默留在弹窗可改金额，不走红色错误 toast（取消不是错误）
+      if (payment === null) return;
       let fail = 0;
       for (const f of files) {
         try { await api.uploadReceipt(payment.id, f); } catch { fail++; }
@@ -81,7 +85,9 @@ export default function QuickPayModal({ order, onClose, onDone }: {
       onCancel={onClose}
       onOk={() => form.submit()}
       confirmLoading={saving}
-      destroyOnClose
+      destroyOnHidden
+      okButtonProps={isMobile ? { size: 'large' } : undefined}
+      cancelButtonProps={isMobile ? { size: 'large' } : undefined}
     >
       {order && (
         <Form form={form} layout="vertical" onFinish={submit}>

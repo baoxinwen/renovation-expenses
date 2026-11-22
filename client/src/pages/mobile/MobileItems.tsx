@@ -117,6 +117,11 @@ export default function MobileItems() {
     () => drawerId == null ? null : (plan?.sections.flatMap((s) => s.items ?? []).find((i) => i.id === drawerId) ?? null),
     [plan, drawerId],
   );
+  // 防御复位：抽屉开着时项目被另一端删除（多端并发），load 后 drawerItem 落空
+  // 而 drawerId 未复位——之后项目若被恢复，抽屉会未经操作「诈尸」弹出
+  useEffect(() => {
+    if (drawerId != null && drawerItem == null) setDrawerId(null);
+  }, [drawerId, drawerItem]);
 
   const q = search.trim().toLowerCase();
   const searching = q.length > 0;
@@ -157,7 +162,9 @@ export default function MobileItems() {
   return (
     <div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        {/* 移动高频控件 40px 触区（antd large）：32px 默认高度拇指易误触邻位 */}
         <Input.Search
+          size="large"
           aria-label="搜索清单项目"
           placeholder="搜项目 / 品牌 / 备注"
           value={search}
@@ -165,7 +172,7 @@ export default function MobileItems() {
           allowClear
           style={{ flex: 1 }}
         />
-        <Button onClick={() => setManagerOpen(true)}>管理板块</Button>
+        <Button size="large" onClick={() => setManagerOpen(true)}>管理板块</Button>
       </div>
       <div className="label-caption" style={{ marginBottom: 10 }}>
         点项目卡片查看详情与操作
@@ -316,7 +323,7 @@ function SortableItemRow({ item: it, handle, onOpen, onMarkBought }: { item: Ite
       <button
         className="row-link"
         onClick={onOpen}
-        style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10 }}
+        style={{ flex: 1, minWidth: 0, minHeight: 44, display: 'flex', alignItems: 'center', gap: 10 }}
       >
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>

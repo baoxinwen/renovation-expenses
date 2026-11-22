@@ -20,9 +20,8 @@ import type { Item, Order, PlanData, Section } from '../api';
 import { fmtMoney } from '../format';
 import { budgetDelta, formatDelta, spendablePool } from '../utils/budgetCalc';
 import { matchSearch } from '../utils/planCalc';
-import { restoreWithGuard, submitWithForceGuard, undoableBatchDelete } from '../utils/domain';
+import { confirmDoubleCount, restoreWithGuard, submitWithForceGuard, undoableBatchDelete } from '../utils/domain';
 import ItemFormModal from '../components/ItemFormModal';
-import { confirmAsync } from '../utils/confirm';
 import { SortableRow, DragHandle, SectionDragHandle, SortableSectionCard } from '../components/plan/PlanEditing';
 import { restrictToParentElement, restrictToVerticalAxis } from '../utils/dndModifiers';
 import type { ItemFormResult } from '../components/ItemFormModal';
@@ -180,15 +179,12 @@ export default function Plan() {
     setBuySaving(true);
     try {
       // force 只由服务端 409 触发（submitWithForceGuard 统一链路）；
-      // 登记的是「实际支付金额」，预算单价/总预算不动
+      // 登记的是「实际支付金额」，预算单价/总预算不动。
+      // 双算确认文案共用 domain.confirmDoubleCount（与移动端同一出处，防双份漂移）
       const submit = (force: boolean) =>
         api.updateItem(itemId, { bought: true, paid_amount: price, bought_date: date, ...(force ? { force } : {}) });
       const item = buyTarget;
-      const updated = await submitWithForceGuard(submit, () => confirmAsync({
-        title: '该项目已有订单付款，可能重复计入',
-        content: item ? `「${item.name}」下订单已付 ${fmtMoney(item.order_paid)}，再记为已买会把总价也计入实际。通常二选一即可，仍要记吗？` : '',
-        okText: '仍要记',
-      }));
+      const updated = await submitWithForceGuard(submit, () => (item ? confirmDoubleCount(item) : Promise.resolve(false)));
       if (!updated) return;
       patchItem(updated);
       setBuyTarget(null);

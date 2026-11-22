@@ -6,6 +6,7 @@ import { paidPrefill } from '../src/utils/domain';
 describe('fmtAxisWan（万元缩写）', () => {
   it('万级缩写', () => expect(fmtAxisWan(20000)).toBe('2万'));
   it('小数万保留小数', () => expect(fmtAxisWan(25000)).toBe('2.5万'));
+  it('非整万刻度收一位小数（防轴标签长尾）', () => expect(fmtAxisWan(33333)).toBe('3.3万'));
   it('千级原样', () => expect(fmtAxisWan(9999)).toBe('9999'));
   it('零与负数原样', () => {
     expect(fmtAxisWan(0)).toBe('0');

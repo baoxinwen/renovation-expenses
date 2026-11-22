@@ -142,7 +142,7 @@ function AppRoutes({ isMobile }: { isMobile: boolean }) {
                   icon={<SettingOutlined />}
                   aria-label="设置"
                   onClick={() => nav('/settings')}
-                  style={{ minWidth: 40, minHeight: 40 }}
+                  style={{ minWidth: 44, minHeight: 44 }}
                 />
               </header>
               <main style={{ padding: 12, paddingBottom: 'calc(72px + env(safe-area-inset-bottom, 0px))' }}>

@@ -3,6 +3,7 @@ import { DatePicker, Modal, Form, Input, InputNumber, Select, Switch } from 'ant
 import dayjs from 'dayjs';
 import type { Order, OrderFormValues, Section } from '../api';
 import { PAY_METHODS } from '../format';
+import { useIsMobile } from '../hooks/useIsMobile';
 import ReceiptUploader from './ReceiptUploader';
 
 interface Props {
@@ -20,6 +21,7 @@ interface Props {
 export default function OrderFormModal({ open, initial, sections, confirmLoading, defaultItemId, onOk, onCancel }: Props) {
   const [form] = Form.useForm();
   const isNew = !initial;
+  const isMobile = useIsMobile();
   // 一次付清默认开启：多数从清单行进来的都是一口价小件；分期大件关掉即可
   const [payFull, setPayFull] = useState(true);
   const [files, setFiles] = useState<File[]>([]);
@@ -70,8 +72,10 @@ export default function OrderFormModal({ open, initial, sections, confirmLoading
       onCancel={onCancel}
       onOk={submit}
       confirmLoading={confirmLoading}
-      destroyOnClose
+      destroyOnHidden
       width={520}
+      okButtonProps={isMobile ? { size: 'large' } : undefined}
+      cancelButtonProps={isMobile ? { size: 'large' } : undefined}
     >
       <Form
         form={form}

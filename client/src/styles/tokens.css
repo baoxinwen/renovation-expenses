@@ -279,8 +279,8 @@ html.dark .ant-btn {
 .row-bought .ant-input-number-input {
   color: var(--ink-2);
 }
-.row-bought > td:nth-child(7) { /* 总价列保持对比 */
-  color: var(--ink-2);
+.row-bought > td:nth-child(7) { /* 实付列保持对比：已买行整体降饱和，但扫视时要能读出花了多少 */
+  color: var(--ink);
 }
 
 /* ============ 打印样式：干净的全宽黑白清单 ============ */
@@ -433,4 +433,9 @@ body {
 }
 .bottom-sheet-inset > .ant-drawer-content {
   border-radius: 16px 16px 0 0;
+}
+/* 抽屉 body 叠加 Home 指示条高度（standalone 下 env 非零）：antd 默认 24px 底
+   padding 会贴着指示条，贴底滑动易触发系统边缘手势 */
+.bottom-sheet-inset > .ant-drawer-body {
+  padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
 }

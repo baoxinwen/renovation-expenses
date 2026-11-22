@@ -243,8 +243,9 @@ export default function OrderDetail() {
         await api.updatePayment(editingPayment.id, body);
         toast.success('付款已更新');
       } else {
-        // 近重复守卫（r2 I4）：同订单同金额同日期已存在时服务端 409，确认后放行
-        await submitPaymentWithGuard(
+        // 近重复守卫（r2 I4）：同订单同金额同日期已存在时服务端 409，确认后放行；
+        // 点取消静默返回 null——留在编辑态可改金额，不报错
+        const recorded = await submitPaymentWithGuard(
           (force) => api.addPayment(order.id, { ...body, ...(force ? { force: true } : {}) }),
           (err) => confirmAsync({
             title: '这笔付款可能是重复提交',
@@ -252,6 +253,7 @@ export default function OrderDetail() {
             okText: '仍要记录',
           }),
         );
+        if (recorded === null) return;
         toast.success('付款已记录');
       }
       setPayModalOpen(false);

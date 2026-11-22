@@ -2,17 +2,14 @@ import { useMemo } from 'react';
 import { Card, Empty } from 'antd';
 import type { ReactNode } from 'react';
 import { chartThemeName, chartColors } from '../../utils/echartsTheme';
-import { executionColor, executionPalette } from '../../utils/planCalc';
+import { executionColor, executionPalette, fmtAxisWan } from '../../utils/planCalc';
 import { useThemeModeCtx } from '../../App';
 import { useIsMobile } from '../../hooks/useIsMobile';
 import TypeReveal from '../../components/TypeReveal';
 
-// 图表 Y 轴万元缩写（原 Analysis 内联函数迁入，多图共用）
-export const fmtAxisWan = (v: number) => (v >= 10000 ? v / 10000 + '万' : String(v));
-
-// 执行率语义色与着色阈值的定义已收敛至 utils/planCalc（可测纯逻辑），
+// 执行率语义色、着色阈值与图表 Y 轴万元缩写已收敛至 utils/planCalc（可测纯逻辑），
 // 此处 re-export 保持既有 import 路径不变
-export { executionPalette, executionColor };
+export { executionPalette, executionColor, fmtAxisWan };
 
 // 图表主题一次取齐：主题名 + 语义色对（预算/实际）+ 执行率色板（memo 过）+ 断点，
 // 各图表组件共用——isMobile 供 grid 边距/日历范围做窄屏响应（canvas 内无法用 CSS）

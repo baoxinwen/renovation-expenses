@@ -57,7 +57,7 @@ export async function restoreWithGuard(
  *  首跳一律不带 force；收到 needForce 时经 confirm 确认，用户坚持才带 force 重试。
  *  force 只能由服务端 409 触发——本地快照的 bought 判定不是仲裁（多端场景会过期）。
  *  返回 null = 用户放弃；其余错误原样抛出由调用方 toast。
- *  「重复计入」文案匹配仅作契约漂移兜底（与 Plan.confirmBuy 既有做法一致）。 */
+ *  「重复计入」文案匹配仅作契约漂移兜底。 */
 export async function submitWithForceGuard<T>(
   submit: (force: boolean) => Promise<T>,
   confirm: () => Promise<boolean>,
@@ -73,18 +73,19 @@ export async function submitWithForceGuard<T>(
 }
 
 /** 付款提交的服务端 409 统一出路（近重复/双算两类守卫共用，r2 I4/C1）：
- *  needForce → confirm 确认 → 带 force 重发；拒绝按「已取消」提示并抛出中止。
+ *  needForce → confirm 确认 → 带 force 重发；拒绝静默返回 null（取消不是错误，
+ *  不走红色错误 toast），调用方据 null 跳过后续流程、留在编辑态。
  *  submit 接收 force 参数由调用方闭包决定重发内容。 */
 export async function submitPaymentWithGuard<T>(
   submit: (force: boolean) => Promise<T>,
   confirm: (err: Error) => Promise<boolean>,
-): Promise<T> {
+): Promise<T | null> {
   try {
     return await submit(false);
   } catch (e) {
     const err = e as Error & { needForce?: boolean };
     if (!err.needForce) throw e;
-    if (!(await confirm(err))) throw new Error('已取消');
+    if (!(await confirm(err))) return null;
     return submit(true);
   }
 }
