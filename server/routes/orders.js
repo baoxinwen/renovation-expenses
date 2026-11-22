@@ -63,16 +63,19 @@ function receiptFilesOfPayment(paymentId) {
 
 function removeFiles(filenames) {
   // 纵深防御判定收敛至 db.js resolveUploadPath（与导出侧同一出处）；越界名跳过并告警，
-  // 不让单条脏数据挂掉删除接口
+  // 不让单条脏数据挂掉删除接口。同步清理：删除接口返回 200 时文件必须已经不在——
+  // 异步 unlink 曾让「删除后即断言」的回归用例在 CI 上赛跑失败
   filenames.forEach((f) => {
     const target = resolveUploadPath(f);
     if (target === null) {
       console.warn('跳过越界票据文件名（不在上传目录内）:', JSON.stringify(f));
       return;
     }
-    fs.unlink(target, (err) => {
-      if (err) console.warn('清理文件失败（可能已不存在）:', f, err.message);
-    });
+    try {
+      fs.unlinkSync(target);
+    } catch (err) {
+      console.warn('清理文件失败（可能已不存在）:', f, err.message);
+    }
   });
 }
 
